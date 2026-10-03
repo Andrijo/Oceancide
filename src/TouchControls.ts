@@ -18,7 +18,7 @@ const DEPTH_RANGE = 50
  * Controles táctiles de doble stick flotante:
  * - Mitad izquierda: joystick de movimiento (adelante/atrás/giro).
  * - Mitad derecha: stick vertical de profundidad (arrastrar arriba = subir, abajo = bajar).
- * - Botón ⚡ fijo para el impulso.
+ * - Botón de impulso fijo (icono de velocímetro) para el impulso.
  * Los sticks nacen donde pongas el dedo. Aparecen al detectar el primer toque
  * y escriben directamente sobre el objeto `input` del juego.
  */
@@ -54,7 +54,15 @@ export class TouchControls {
       <div id="depth-zone"></div>
       <div id="depth-base"><div id="depth-knob"></div></div>
 
-      <button id="boost-btn" class="touch-btn">⚡</button>
+      <button id="boost-btn" class="touch-btn" aria-label="Impulso">
+        <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3.5 17a9 9 0 1 1 17 0" />
+          <path d="M12 15l4.5-6" />
+          <circle cx="12" cy="15" r="1.4" fill="currentColor" />
+          <path d="M5.2 12.2l1.2.7M8 8.4l.7 1.2M12 6.5v1.4M16 8.4l-.7 1.2M18.8 12.2l-1.2.7" />
+        </svg>
+      </button>
     `
     container.appendChild(this.root)
 
