@@ -25,7 +25,7 @@ export class BiomeGenerator {
 
   constructor(scene: THREE.Scene) {
     this.scene = scene
-    this.currentBiome = BIOMES.coralReef
+    this.currentBiome = BIOMES.epipelagic_upper
     this.debrisGroup = new THREE.Group()
     scene.add(this.debrisGroup)
   }
@@ -51,7 +51,7 @@ export class BiomeGenerator {
         bounds.minY + Math.random() * (bounds.maxY - bounds.minY),
         (Math.random() * 2 - 1) * HALF_SIZE,
       )
-      const debris = new Debris(position)
+      const debris = new Debris(position, Debris.pickDefinition(biomeKey))
       this.debrisGroup.add(debris.mesh)
       this.debrisList.push(debris)
     }
@@ -76,7 +76,7 @@ export class BiomeGenerator {
     geometry.computeVertexNormals()
 
     const material = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(0.1, 0.3, 0.2),
+      color: new THREE.Color(...this.currentBiome.floorColor),
       roughness: 0.9,
       flatShading: true,
     })

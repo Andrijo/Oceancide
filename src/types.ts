@@ -38,39 +38,134 @@ export interface BiomeConfig {
   debrisDensity: number
   toxicityRate: number
   depth: number
+  floorColor: [number, number, number]
+  accentColor: number // color de las luces puntuales (bioluminiscencia)
 }
 
-export type BiomeKey = "coralReef" | "plasticZone" | "abyssalPit"
+export type BiomeKey =
+  | "epipelagic_upper"
+  | "pelagic_mid"
+  | "subphotic"
+  | "mesopelagic_upper"
+  | "mesopelagic_deep"
+  | "bathypelagic_upper"
+  | "bathypelagic_deep"
+  | "abyssopelagic"
+  | "hadopelagic"
+  | "deepSea"
 
 export const BIOME_ORDER: BiomeKey[] = [
-  "coralReef",
-  "plasticZone",
-  "abyssalPit",
+  "epipelagic_upper",
+  "pelagic_mid",
+  "subphotic",
+  "mesopelagic_upper",
+  "mesopelagic_deep",
+  "bathypelagic_upper",
+  "bathypelagic_deep",
+  "abyssopelagic",
+  "hadopelagic",
+  "deepSea",
 ]
 
 export const BIOMES: Record<BiomeKey, BiomeConfig> = {
-  coralReef: {
-    name: "Arrecife de Coral",
-    waterColor: [0.0, 0.6, 0.9],
-    fogDensity: 0.02,
-    debrisDensity: 0.5,
-    toxicityRate: 0.1,
+  epipelagic_upper: {
+    name: "Epipelágico Superior",
+    waterColor: [0.1, 0.75, 0.85],
+    fogDensity: 0.015,
+    debrisDensity: 0.1,
+    toxicityRate: 0.0,
     depth: 20,
+    floorColor: [0.8, 0.72, 0.5],
+    accentColor: 0xaaffee,
   },
-  plasticZone: {
-    name: "Zona de Plástico",
-    waterColor: [0.1, 0.5, 0.7],
-    fogDensity: 0.04,
-    debrisDensity: 1.2,
-    toxicityRate: 0.3,
-    depth: 40,
+  pelagic_mid: {
+    name: "Pelágico Medio",
+    waterColor: [0.0, 0.5, 0.85],
+    fogDensity: 0.02,
+    debrisDensity: 0.2,
+    toxicityRate: 0.0,
+    depth: 100,
+    floorColor: [0.55, 0.55, 0.45],
+    accentColor: 0x66ccff,
   },
-  abyssalPit: {
-    name: "Fosa Abisal",
-    waterColor: [0.05, 0.2, 0.4],
-    fogDensity: 0.06,
+  subphotic: {
+    name: "Subfótico",
+    waterColor: [0.05, 0.3, 0.7],
+    fogDensity: 0.026,
+    debrisDensity: 0.3,
+    toxicityRate: 0.05,
+    depth: 200,
+    floorColor: [0.35, 0.4, 0.45],
+    accentColor: 0x66aaff,
+  },
+  mesopelagic_upper: {
+    name: "Mesopelágico Superior",
+    waterColor: [0.2, 0.18, 0.6],
+    fogDensity: 0.032,
+    debrisDensity: 0.45,
+    toxicityRate: 0.1,
+    depth: 500,
+    floorColor: [0.25, 0.25, 0.4],
+    accentColor: 0x9988ff,
+  },
+  mesopelagic_deep: {
+    name: "Mesopelágico Profundo",
+    waterColor: [0.35, 0.12, 0.55],
+    fogDensity: 0.038,
+    debrisDensity: 0.6,
+    toxicityRate: 0.2,
+    depth: 1000,
+    floorColor: [0.3, 0.2, 0.4],
+    accentColor: 0xcc77ff,
+  },
+  bathypelagic_upper: {
+    name: "Batipelágico Superior",
+    waterColor: [0.3, 0.1, 0.45],
+    fogDensity: 0.044,
+    debrisDensity: 0.7,
+    toxicityRate: 0.35,
+    depth: 2000,
+    floorColor: [0.3, 0.18, 0.28],
+    accentColor: 0xff77dd,
+  },
+  bathypelagic_deep: {
+    name: "Batipelágico Profundo",
+    waterColor: [0.4, 0.08, 0.3],
+    fogDensity: 0.05,
     debrisDensity: 0.8,
     toxicityRate: 0.5,
-    depth: 100,
+    depth: 4000,
+    floorColor: [0.35, 0.18, 0.2],
+    accentColor: 0xff6688,
+  },
+  abyssopelagic: {
+    name: "Abisopelágico",
+    waterColor: [0.08, 0.22, 0.32],
+    fogDensity: 0.055,
+    debrisDensity: 0.9,
+    toxicityRate: 0.7,
+    depth: 6000,
+    floorColor: [0.15, 0.3, 0.3],
+    accentColor: 0x44ffdd,
+  },
+  hadopelagic: {
+    name: "Hadopelágico",
+    waterColor: [0.28, 0.22, 0.06],
+    fogDensity: 0.06,
+    debrisDensity: 0.95,
+    toxicityRate: 0.85,
+    depth: 8000,
+    floorColor: [0.4, 0.35, 0.15],
+    accentColor: 0xffdd44,
+  },
+  deepSea: {
+    name: "Mar Profundo",
+    waterColor: [0.35, 0.08, 0.06],
+    fogDensity: 0.065,
+    debrisDensity: 1.0,
+    toxicityRate: 1.0,
+    depth: 11000,
+    floorColor: [0.3, 0.15, 0.12],
+    accentColor: 0xff6633,
   },
 }

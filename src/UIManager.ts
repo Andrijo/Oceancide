@@ -43,14 +43,14 @@ export class UIManager {
     msgEl.textContent = message
     msgEl.style.cssText = `
       position: absolute;
-      top: 50%;
+      top: 20%;
       left: 50%;
       transform: translate(-50%, -50%);
       color: white;
       font-size: 32px;
       font-weight: bold;
       text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-      background: rgba(0, 100, 150, 0.8);
+      background: none;
       padding: 20px 40px;
       border-radius: 10px;
       pointer-events: none;

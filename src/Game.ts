@@ -5,6 +5,8 @@ import { Turtle } from "./Turtle"
 import { BiomeGenerator } from "./BiomeGenerator"
 import { UIManager } from "./UIManager"
 import { TouchControls } from "./TouchControls"
+import { DevMenu } from "./DevMenu"
+import { BubbleTrail } from "./BubbleTrail"
 import { BIOME_ORDER, type GameState, type InputState } from "./types"
 
 const MAX_DELTA = 0.1 // evita saltos enormes si la pestaña pierde el foco
@@ -30,6 +32,9 @@ export class Game {
   private biomeIndex = 0
   private collectedInZone = 0
   private restartTimeout?: number
+  private godMode = false
+  private devMenu?: DevMenu
+  private bubbles: BubbleTrail
 
   constructor() {
     this.scene = new THREE.Scene()
@@ -50,6 +55,7 @@ export class Game {
 
     this.turtle = new Turtle()
     this.scene.add(this.turtle.mesh)
+    this.bubbles = new BubbleTrail(this.scene)
 
     this.biomeGenerator = new BiomeGenerator(this.scene)
     this.uiManager = new UIManager()
@@ -81,6 +87,30 @@ export class Game {
     this.setupEventListeners()
     this.loadBiome(0)
 
+    /*
+
+    // Menú de desarrollador: solo con `vite dev` o con ?dev en la URL
+    if (
+      import.meta.env.DEV ||
+      new URLSearchParams(location.search).has("dev")
+    ) {
+      this.devMenu = new DevMenu({
+        getBiomeIndex: () => this.biomeIndex,
+        goToBiome: (i) => this.goToBiome(i),
+        isGodMode: () => this.godMode,
+        setGodMode: (v) => {
+          this.godMode = v
+        },
+        clearToxicity: () => {
+          this.state.toxicity = 0
+        },
+        completeZone: () => {
+          this.collectedInZone = Number.MAX_SAFE_INTEGER
+        },
+        restartRun: () => this.restartRun(),
+      })
+    }
+    */
     this.animate()
   }
 
@@ -165,6 +195,7 @@ export class Game {
     this.turtle.reset(new THREE.Vector3(0, (bounds.minY + bounds.maxY) / 2, 0))
 
     for (const light of this.pointLights) {
+      light.color.setHex(this.biomeGenerator.getBiome().accentColor)
       light.position.set(
         (Math.random() - 0.5) * bounds.halfSize * 2,
         bounds.minY + Math.random() * (bounds.maxY - bounds.minY),
@@ -172,8 +203,20 @@ export class Game {
       )
     }
 
+    this.bubbles.clear()
     this.snapCamera()
+    this.devMenu?.refresh()
   }
+  /*
+   Salta directamente a un bioma (herramienta de desarrollo).
+  private goToBiome(index: number): void {
+    window.clearTimeout(this.restartTimeout)
+    this.state.isRunning = true
+    this.state.toxicity = 0
+    this.loadBiome(index)
+    this.uiManager.showMessage(`Zona: ${this.biomeGenerator.getBiomeName()}`)
+  }
+  */
 
   private getCameraTarget(): THREE.Vector3 {
     return CAMERA_OFFSET.clone()
@@ -195,12 +238,15 @@ export class Game {
     this.state.isRunning = true
 
     this.loadBiome(0)
-    this.uiManager.showMessage("¡Nueva run!")
+    this.uiManager.showMessage("¡Nueva run iniciada!")
   }
 
   private gameOver(): void {
     this.state.isRunning = false
-    this.uiManager.showMessage("!Fin de la partida! ", 3000)
+    this.uiManager.showMessage(
+      "¡Se acabó! Lo lograron, finalmente lo rompieron.",
+      3000,
+    )
     this.restartTimeout = window.setTimeout(() => this.restartRun(), 3000)
   }
 
@@ -215,7 +261,7 @@ export class Game {
 
     this.state.toxicity *= 0.5
     this.loadBiome(next)
-    this.uiManager.showMessage(`Zona: ${this.biomeGenerator.getBiomeName()}`)
+    this.uiManager.showMessage(`${this.biomeGenerator.getBiomeName()}`)
   }
 
   private update(deltaTime: number, time: number): void {
@@ -258,13 +304,15 @@ export class Game {
 
     // Toxicidad pasiva según bioma y resistencia de la tortuga
     const biome = this.biomeGenerator.getBiome()
-    this.state.toxicity +=
-      biome.toxicityRate *
-      TOXICITY_SCALE *
-      (1 - this.turtle.stats.toxicityResistance) *
-      deltaTime
+    if (!this.godMode) {
+      this.state.toxicity +=
+        biome.toxicityRate *
+        TOXICITY_SCALE *
+        (1 - this.turtle.stats.toxicityResistance) *
+        deltaTime
+    }
 
-    if (this.state.toxicity >= 100) {
+    if (!this.godMode && this.state.toxicity >= 100) {
       this.gameOver()
     } else if (this.state.zoneProgress >= 100) {
       this.advanceBiome()
@@ -281,6 +329,16 @@ export class Game {
     const time = this.timer.getElapsed()
 
     this.update(deltaTime, time)
+
+    // Estela de burbujas mientras se usa el impulso y la tortuga avanza de verdad
+    const boosting =
+      this.state.isRunning && this.input.boost && this.turtle.getSpeed() > 1
+    this.bubbles.update(
+      deltaTime,
+      this.turtle.getPosition(),
+      this.turtle.mesh.rotation.y,
+      boosting,
+    )
 
     this.pointLights.forEach((light, i) => {
       light.intensity = 0.3 + Math.sin(time + i) * 0.2
