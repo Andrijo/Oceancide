@@ -1,33 +1,44 @@
 # Oceancide
 
-Juego 3D en el navegador donde controlas una tortuga marina que limpia los océanos de desechos. Desarrollado con **Three.js**, **TypeScript** y **Vite**.
+Juego 3D donde controlas una tortuga marina que limpia los océanos de desechos. Desarrollado con **Three.js**, **TypeScript** y **Vite**.
 
 ## Descripción
 
-Toma el control de una tortuga y recorre biomas oceánicos recolectando basura y desechos tóxicos. Cada zona tiene mayor contaminación y menor visibilidad. Tienes que recoger un porcentaje de los desechos de cada bioma para avanzar, mientras controlas el nivel de toxicidad: si llega al 100%, se acaba la partida.
+Toma el control de una tortuga y desciende por las capas del océano recolectando basura y desechos tóxicos. Cada zona tiene mayor contaminación, menor visibilidad y más densidad de desechos. Tienes que recoger un porcentaje de los desechos de cada bioma para avanzar, mientras controlas el nivel de toxicidad: si llega al 100%, se acaba la partida.
 
 ## Zonas
 
-| Zona              | Densidad de desechos | Tasa de toxicidad | Profundidad |
-| ----------------- | -------------------- | ----------------- | ----------- |
-| Arrecife de Coral | 0.5                  | 0.1               | 20          |
-| Zona de Plástico  | 1.2                  | 0.3               | 40          |
-| Fosa Abisal       | 0.8                  | 0.5               | 100         |
+El juego recorre 10 biomas, desde la superficie hasta las fosas más profundas:
+
+| Zona                  | Desechos | Tasa de toxicidad | Profundidad |
+| --------------------- | -------- | ----------------- | ----------- |
+| Epipelágico Superior  | 0.1      | 0.00              | 20 m        |
+| Pelágico Medio        | 0.2      | 0.00              | 100 m       |
+| Subfótico             | 0.3      | 0.05              | 200 m       |
+| Mesopelágico Superior | 0.45     | 0.10              | 500 m       |
+| Mesopelágico Profundo | 0.6      | 0.20              | 1000 m      |
+| Batipelágico Superior | 0.7      | 0.35              | 2000 m      |
+| Batipelágico Profundo | 0.8      | 0.50              | 4000 m      |
+| Abisopelágico         | 0.9      | 0.70              | 6000 m      |
+| Hadopelágico          | 0.95     | 0.85              | 8000 m      |
+| Mar Profundo          | 1.0      | 1.00              | 11000 m     |
+
+Cada bioma tiene su propio catálogo de desechos (botellas, redes fantasma, microplásticos, vertidos de petróleo...) con aspecto y toxicidad propios.
 
 ## Controles
 
 ### Teclado
 
-| Tecla     | Acción            |
-| --------- | ----------------- |
-| `W` / `↑` | Avanzar           |
-| `S` / `↓` | Retroceder        |
-| `A` / `←` | Girar izquierda   |
-| `D` / `→` | Girar derecha     |
-| `U`       | Subir             |
-| `J`       | Bajar             |
-| `I`       | Impulso           |
-| `R`       | Reiniciar partida |
+| Tecla | Acción            |
+| ----- | ----------------- |
+| `W`   | Avanzar           |
+| `S`   | Retroceder        |
+| `A`   | Girar izquierda   |
+| `D`   | Girar derecha     |
+| `U`   | Subir             |
+| `J`   | Bajar             |
+| `I`   | Impulso           |
+| `R`   | Reiniciar partida |
 
 ### Táctil (móvil)
 
@@ -57,18 +68,22 @@ bun run preview
 
 ```
 oceancidio/
-├── index.html          # Entry point, estilos y UI
+├── index.html           # Entry point, estilos y UI
 ├── package.json
 ├── tsconfig.json
 └── src/
-    ├── main.ts          # Bootstrap del juego
-    ├── Game.ts          # Lógica principal, loop y cámara
-    ├── Turtle.ts        # Modelo y movimiento de la tortuga
-    ├── BiomeGenerator.ts# Generación de biomas y desechos
-    ├── Debris.ts        # Desechos recolectables
-    ├── TouchControls.ts # Controles táctiles (joysticks)
-    ├── UIManager.ts     # HUD y mensajes
-    └── types.ts         # Tipos y configuración de biomas
+    ├── main.ts           # Bootstrap del juego
+    ├── Game.ts           # Lógica principal, loop y cámara
+    ├── Turtle.ts         # Modelo y movimiento de la tortuga
+    ├── BiomeGenerator.ts # Generación de biomas y desechos
+    ├── Debris.ts         # Desechos recolectables
+    ├── DebrisVisuals.ts  # Aspecto visual de cada tipo de desecho
+    ├── debrisCatalog.ts  # Catálogo de desechos por bioma
+    ├── BubbleTrail.ts    # Estela de burbujas (instancing)
+    ├── DevMenu.ts        # Menú de desarrollo
+    ├── TouchControls.ts  # Controles táctiles (joysticks)
+    ├── UIManager.ts      # HUD y mensajes
+    └── types.ts          # Tipos y configuración de biomas
 ```
 
 ## Tecnologías utilizadas
