@@ -1,4 +1,5 @@
 // src/UIManager.ts
+// Clase encargada de actualizar los elementos de la interfaz de usuario (HUD) y mostrar mensajes en pantalla.
 
 import type { GameState } from "./types"
 
@@ -17,6 +18,7 @@ export class UIManager {
     this.toxicityFillEl = document.getElementById("toxicity-fill")!
   }
 
+  // Método para actualizar la interfaz de usuario con el estado actual del juego.
   public updateUI(state: GameState): void {
     this.debrisCountEl.textContent = state.debrisCollected.toString()
     this.ecoAwarenessEl.textContent = state.ecoAwareness.toString()
@@ -34,6 +36,7 @@ export class UIManager {
     }
   }
 
+  // Método para mostrar un mensaje en pantalla durante un tiempo determinado.
   public showMessage(message: string, duration: number = 2000): void {
     // Evita que se apilen mensajes
     this.currentMessage?.remove()
@@ -46,10 +49,11 @@ export class UIManager {
       top: 20%;
       left: 50%;
       transform: translate(-50%, -50%);
-      color: white;
-      font-size: 32px;
+      color: #f7f7ff;
+      font-family: "Pogonia", sans-serif;
+      font-size: 36px;
       font-weight: bold;
-      text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.6);
       background: none;
       padding: 20px 40px;
       border-radius: 10px;

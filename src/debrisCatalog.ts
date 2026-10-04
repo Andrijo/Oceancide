@@ -6,7 +6,7 @@ export type OceanDebrisType = {
   id: string
   name: string
   description: string
-  toxicityImpact: number // 0..1: qué tan contaminante es el desecho
+  toxicityImpact: number // 0..1: contaminación que aporta al agua mientras siga ahí; recogerlo la elimina
 }
 
 export const BIOME_DEBRIS: Record<BiomeKey, OceanDebrisType[]> = {

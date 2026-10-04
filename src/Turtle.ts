@@ -1,4 +1,5 @@
 // src/Turtle.ts
+// Clase que representa a la tortuga controlada por el jugador, con su modelo 3D y lógica de movimiento.
 
 import * as THREE from "three"
 import type { InputState, TurtleStats, WorldBounds } from "./types"

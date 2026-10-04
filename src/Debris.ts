@@ -9,11 +9,12 @@ import {
   type DebrisVisual,
 } from "./DebrisVisuals"
 import type { BiomeKey } from "./types"
+import type { Rng } from "./rng"
 
-// Conversión de toxicityImpact (0..1) a los valores que usa el juego
+// toxicityImpact (0..1) = contaminación que el desecho aporta al agua hasta que se recoge.
+// Conversión de Conciencia Ecológica:
 const ECO_BASE = 5
 const ECO_PER_TOXICITY = 25 // más tóxico = más Conciencia Ecológica
-const TOXICITY_SCALE = 20 // 1.0 => 20 (equivale al antiguo "chemical")
 
 const SHAPE_FACTORIES: Record<DebrisShape, () => THREE.BufferGeometry> = {
   bottle: () => new THREE.CylinderGeometry(0.12, 0.12, 0.5, 8),
@@ -77,19 +78,19 @@ export class Debris {
   public readonly name: string
   public readonly description: string
   public readonly ecoValue: number
-  public readonly toxicity: number
+  public readonly pollution: number // aportación a la contaminación de la zona (0..1)
 
   private baseY: number
-  private phase = Math.random() * Math.PI * 2
+  private phase: number
 
-  constructor(position: THREE.Vector3, definition: OceanDebrisType) {
+  constructor(position: THREE.Vector3, definition: OceanDebrisType, rng: Rng) {
     this.id = definition.id
     this.name = definition.name
     this.description = definition.description
     this.ecoValue = Math.round(
       ECO_BASE + definition.toxicityImpact * ECO_PER_TOXICITY,
     )
-    this.toxicity = definition.toxicityImpact * TOXICITY_SCALE
+    this.pollution = definition.toxicityImpact
 
     const visual = getVisual(definition.id)
     this.mesh = new THREE.Mesh(
@@ -97,22 +98,20 @@ export class Debris {
       getMaterial(definition.id, visual),
     )
     this.mesh.position.copy(position)
-    this.mesh.scale.setScalar(
-      (visual.scale ?? 1) * (0.85 + Math.random() * 0.3),
-    )
+    this.mesh.scale.setScalar((visual.scale ?? 1) * rng.range(0.85, 1.15))
     this.baseY = position.y
+    this.phase = rng.range(0, Math.PI * 2)
 
     this.mesh.rotation.set(
-      Math.random() * Math.PI,
-      Math.random() * Math.PI,
-      Math.random() * Math.PI,
+      rng.range(0, Math.PI),
+      rng.range(0, Math.PI),
+      rng.range(0, Math.PI),
     )
   }
 
   /** Elige un desecho al azar de los definidos para el bioma. */
-  public static pickDefinition(biome: BiomeKey): OceanDebrisType {
-    const list = BIOME_DEBRIS[biome]
-    return list[Math.floor(Math.random() * list.length)]
+  public static pickDefinition(biome: BiomeKey, rng: Rng): OceanDebrisType {
+    return rng.pick(BIOME_DEBRIS[biome])
   }
 
   /** @param time segundos totales, @param deltaTime segundos del frame */

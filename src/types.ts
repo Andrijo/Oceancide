@@ -1,4 +1,5 @@
 // src/types.ts
+// Clases y tipos de datos compartidos entre los distintos módulos del juego.
 
 export interface GameState {
   debrisCollected: number
@@ -6,6 +7,19 @@ export interface GameState {
   toxicity: number
   zoneProgress: number
   isRunning: boolean
+}
+
+export type RunOutcome = "died" | "completed" | "abandoned"
+
+export interface RunSummary {
+  outcome: RunOutcome
+  biomeIndex: number // índice en BIOME_ORDER del último bioma alcanzado
+  biomeName: string
+  debrisCollected: number
+  ecoBase: number // Conciencia Ecológica recolectada
+  ecoBonus: number // bono por completar la run
+  durationSeconds: number
+  seed: number
 }
 
 export interface TurtleStats {

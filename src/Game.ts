@@ -1,4 +1,6 @@
 // src/Game.ts
+// Clase principal del juego:
+// Incia la escena, la cámara, la tortuga, el generador de biomas y la UI.
 
 import * as THREE from "three"
 import { Turtle } from "./Turtle"
@@ -7,13 +9,39 @@ import { UIManager } from "./UIManager"
 import { TouchControls } from "./TouchControls"
 import { DevMenu } from "./DevMenu"
 import { BubbleTrail } from "./BubbleTrail"
-import { BIOME_ORDER, type GameState, type InputState } from "./types"
+import { BiomeTransition } from "./BiomeTransition"
+import { ScreenManager } from "./ScreenManager"
+import {
+  SaveManager,
+  applyRunToMeta,
+  computeEco,
+  type MetaState,
+} from "./MetaState"
+import { Rng, deriveSeed, randomSeed } from "./rng"
+import {
+  BIOME_ORDER,
+  type GameState,
+  type InputState,
+  type RunOutcome,
+  type RunSummary,
+} from "./types"
 
-const MAX_DELTA = 0.1 // evita saltos enormes si la pestaña pierde el foco
-const TOXICITY_SCALE = 6 // toxicityRate 0.1 => ~0.6 de toxicidad por segundo
+const MAX_DELTA = 0.1 // Restringe el deltaTime para que no se rompa la física si hay un lagazo o se cambia de pestaña.
+const TOXICITY_SCALE = 6 // toxicityRate 0.1 => ~0.6 de toxicidad por segundo.
+const CLEAN_THRESHOLD = 0.3 // Tasa de contaminación por debajo de la cual la toxicidad empieza a bajar sola.
 const ZONE_COMPLETION_RATIO = 0.8 // % de desechos que hay que recoger para pasar de zona
-const CAMERA_OFFSET = new THREE.Vector3(0, 5, -12) // detrás de la tortuga
+const CAMERA_OFFSET = new THREE.Vector3(0, 5, -12) // Posición de la cámara respecto a la tortuga.
 const UP = new THREE.Vector3(0, 1, 0)
+
+type Screen = "hub" | "run" | "summary"
+
+/** Permite reproducir una run con ?seed=123 en la URL. */
+function seedFromUrl(): number | null {
+  const raw = new URLSearchParams(location.search).get("seed")
+  if (raw === null) return null
+  const n = Number(raw)
+  return Number.isFinite(n) ? n >>> 0 : null
+}
 
 export class Game {
   private scene: THREE.Scene
@@ -31,10 +59,17 @@ export class Game {
 
   private biomeIndex = 0
   private collectedInZone = 0
-  private restartTimeout?: number
   private godMode = false
   private devMenu?: DevMenu
   private bubbles: BubbleTrail
+  private transition: BiomeTransition
+
+  private saveManager = new SaveManager()
+  private meta: MetaState
+  private screens: ScreenManager
+  private screen: Screen = "hub"
+  private runSeed = randomSeed()
+  private runTime = 0
 
   constructor() {
     this.scene = new THREE.Scene()
@@ -59,6 +94,17 @@ export class Game {
 
     this.biomeGenerator = new BiomeGenerator(this.scene)
     this.uiManager = new UIManager()
+    this.transition = new BiomeTransition()
+
+    this.meta = this.saveManager.load()
+    this.screens = new ScreenManager({
+      onStartRun: () => this.startRun(),
+      onReturnToHub: () => this.showHub(),
+      onResetProgress: () => {
+        this.meta = this.saveManager.reset()
+        this.showHub()
+      },
+    })
 
     this.state = {
       debrisCollected: 0,
@@ -85,7 +131,7 @@ export class Game {
 
     this.setupLighting()
     this.setupEventListeners()
-    this.loadBiome(0)
+    this.showHub()
 
     /*
 
@@ -167,7 +213,7 @@ export class Game {
 
   private handleKeyDown(e: KeyboardEvent): void {
     if (e.code === "KeyR") {
-      if (!e.repeat) this.restartRun()
+      if (!e.repeat && this.screen === "run") this.endRun("abandoned")
       return
     }
     this.setKey(e.code, true)
@@ -189,7 +235,9 @@ export class Game {
     this.collectedInZone = 0
     this.state.zoneProgress = 0
 
-    this.biomeGenerator.generateBiome(BIOME_ORDER[index])
+    // Cada bioma de una run usa su propia semilla derivada de la semilla de la run
+    const rng = new Rng(deriveSeed(this.runSeed, index))
+    this.biomeGenerator.generateBiome(BIOME_ORDER[index], rng)
 
     const bounds = this.biomeGenerator.getBounds()
     this.turtle.reset(new THREE.Vector3(0, (bounds.minY + bounds.maxY) / 2, 0))
@@ -229,43 +277,99 @@ export class Game {
     this.camera.lookAt(this.turtle.getPosition())
   }
 
-  private restartRun(): void {
-    window.clearTimeout(this.restartTimeout)
+  private clearInput(): void {
+    this.input.forward = false
+    this.input.backward = false
+    this.input.left = false
+    this.input.right = false
+    this.input.up = false
+    this.input.down = false
+    this.input.boost = false
+  }
+
+  /** Refugio: escena de fondo con la cámara orbitando y menú encima. */
+  private showHub(): void {
+    this.transition.cancel()
+    this.screen = "hub"
+    this.state.isRunning = false
+    this.clearInput()
+    this.runSeed = randomSeed()
+    this.loadBiome(0)
+    this.screens.showHub(this.meta)
+  }
+
+  private startRun(): void {
+    this.transition.cancel()
+    this.runSeed = seedFromUrl() ?? randomSeed()
+    this.runTime = 0
 
     this.state.debrisCollected = 0
     this.state.ecoAwareness = 0
     this.state.toxicity = 0
     this.state.isRunning = true
+    this.screen = "run"
+    this.clearInput()
 
+    this.screens.hide()
     this.loadBiome(0)
-    this.uiManager.showMessage("¡Nueva run iniciada!")
+    this.uiManager.showMessage(this.biomeGenerator.getBiomeName())
   }
 
-  private gameOver(): void {
+  /** Cierra la run, guarda el progreso y enseña el resumen. */
+  private endRun(outcome: RunOutcome): void {
+    if (this.screen !== "run") return
+
+    this.transition.cancel()
+    this.screen = "summary"
     this.state.isRunning = false
-    this.uiManager.showMessage(
-      "¡Se acabó! Lo lograron, finalmente lo rompieron.",
-      3000,
+    this.clearInput()
+
+    const { base, bonus } = computeEco(this.state.ecoAwareness, outcome)
+    const summary: RunSummary = {
+      outcome,
+      biomeIndex: this.biomeIndex,
+      biomeName: this.biomeGenerator.getBiomeName(),
+      debrisCollected: this.state.debrisCollected,
+      ecoBase: base,
+      ecoBonus: bonus,
+      durationSeconds: this.runTime,
+      seed: this.runSeed,
+    }
+
+    applyRunToMeta(this.meta, summary)
+    this.saveManager.save(this.meta)
+    this.screens.showSummary(summary, this.meta)
+  }
+
+  private orbitCamera(time: number): void {
+    const center = this.turtle.getPosition()
+    const angle = time * 0.15
+    this.camera.position.set(
+      center.x + Math.sin(angle) * 14,
+      center.y + 4,
+      center.z + Math.cos(angle) * 14,
     )
-    this.restartTimeout = window.setTimeout(() => this.restartRun(), 3000)
+    this.camera.lookAt(center)
   }
 
   private advanceBiome(): void {
     const next = this.biomeIndex + 1
     if (next >= BIOME_ORDER.length) {
-      this.uiManager.showMessage("¡Has limpiado el océano!", 3000)
-      this.state.isRunning = false
-      this.restartTimeout = window.setTimeout(() => this.restartRun(), 3000)
+      this.endRun("completed")
       return
     }
 
-    this.state.toxicity *= 0.5
-    this.loadBiome(next)
-    this.uiManager.showMessage(`${this.biomeGenerator.getBiomeName()}`)
+    this.transition.play(() => {
+      this.state.toxicity *= 0.5
+      this.loadBiome(next)
+      this.uiManager.showMessage(this.biomeGenerator.getBiomeName())
+    })
   }
 
   private update(deltaTime: number, time: number): void {
     if (!this.state.isRunning) return
+    if (this.transition.blocksGameplay) return
+    this.runTime += deltaTime
 
     const bounds = this.biomeGenerator.getBounds()
     this.turtle.update(deltaTime, this.input, bounds)
@@ -290,11 +394,6 @@ export class Game {
     for (const debris of collected) {
       this.state.debrisCollected++
       this.state.ecoAwareness += debris.ecoValue
-      // Retirar desechos tóxicos limpia el agua (más cuanto más tóxicos)
-      this.state.toxicity = Math.max(
-        0,
-        this.state.toxicity - debris.toxicity * 0.5,
-      )
       this.collectedInZone++
     }
     this.state.zoneProgress = Math.min(
@@ -302,18 +401,22 @@ export class Game {
       (this.collectedInZone / required) * 100,
     )
 
-    // Toxicidad pasiva según bioma y resistencia de la tortuga
-    const biome = this.biomeGenerator.getBiome()
+    // Toxicidad según la contaminación que queda en la zona:
+    // sube mientras quede mucha y baja sola cuando está casi limpia.
+    this.biomeGenerator.updateVisuals(deltaTime)
+    const pollution = this.biomeGenerator.getPollutionRatio()
+    const drift = (pollution - CLEAN_THRESHOLD) / (1 - CLEAN_THRESHOLD) // 1 sucia .. <0 casi limpia
+    const base = this.biomeGenerator.getBiome().toxicityRate * TOXICITY_SCALE
+    const rate =
+      drift > 0
+        ? base * drift * (1 - this.turtle.stats.toxicityResistance)
+        : base * drift // la recuperación no depende de la resistencia
     if (!this.godMode) {
-      this.state.toxicity +=
-        biome.toxicityRate *
-        TOXICITY_SCALE *
-        (1 - this.turtle.stats.toxicityResistance) *
-        deltaTime
+      this.state.toxicity = Math.max(0, this.state.toxicity + rate * deltaTime)
     }
 
     if (!this.godMode && this.state.toxicity >= 100) {
-      this.gameOver()
+      this.endRun("died")
     } else if (this.state.zoneProgress >= 100) {
       this.advanceBiome()
     }
@@ -329,10 +432,15 @@ export class Game {
     const time = this.timer.getElapsed()
 
     this.update(deltaTime, time)
+    if (this.screen !== "run") this.orbitCamera(time)
+    this.transition.update(deltaTime)
 
     // Estela de burbujas mientras se usa el impulso y la tortuga avanza de verdad
     const boosting =
-      this.state.isRunning && this.input.boost && this.turtle.getSpeed() > 1
+      this.state.isRunning &&
+      !this.transition.blocksGameplay &&
+      this.input.boost &&
+      this.turtle.getSpeed() > 1
     this.bubbles.update(
       deltaTime,
       this.turtle.getPosition(),

@@ -1,5 +1,5 @@
 // src/debrisVisuals.ts
-// Aspecto visual de cada desecho del catálogo (clave = id del catálogo).
+// Clase encargada de definir los aspectos visuales de los desechos y de generar geometría/materiales compartidos.
 
 export type DebrisShape =
   | "bottle" // cilindro delgado
