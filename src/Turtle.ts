@@ -150,6 +150,11 @@ export class Turtle {
     this.model.rotation.z = Math.sin(this.time * 5) * 0.1
   }
 
+  /** Velocidad de avance actual (unidades/s, negativa al retroceder). */
+  public getSpeed(): number {
+    return this.speed
+  }
+
   public getPosition(): THREE.Vector3 {
     return this.mesh.position.clone()
   }
