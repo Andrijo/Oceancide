@@ -80,7 +80,7 @@ export class Turtle {
     // Cola
     const tail = new THREE.Mesh(
       new THREE.ConeGeometry(0.3, 0.8, 8),
-      new THREE.MeshStandardMaterial({ color: 0x2d5016, roughness: 0.8 }),
+      new THREE.MeshStandardMaterial({ color: 0x9acd32, roughness: 0.8 }),
     )
     tail.position.set(0, 0, -1.5)
     tail.rotation.x = -Math.PI / 2 // la punta apunta hacia atrás

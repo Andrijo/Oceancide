@@ -195,15 +195,12 @@ export class Game {
     this.state.isRunning = true
 
     this.loadBiome(0)
-    this.uiManager.showMessage("¡Nueva Run Iniciada!")
+    this.uiManager.showMessage("¡Nueva run!")
   }
 
   private gameOver(): void {
     this.state.isRunning = false
-    this.uiManager.showMessage(
-      "!Game Over! Has alcanzado el límite de toxicidad",
-      3000,
-    )
+    this.uiManager.showMessage("!Fin de la partida! ", 3000)
     this.restartTimeout = window.setTimeout(() => this.restartRun(), 3000)
   }
 
