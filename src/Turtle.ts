@@ -139,7 +139,8 @@ export class Turtle {
     // Avance con aceleración suave
     const maxSpeed = this.stats.speed * (input.boost ? 2 : 1)
     let target = 0
-    if (input.forward) target = maxSpeed
+    // El impulso por sí solo ya empuja hacia delante (salvo que se esté retrocediendo)
+    if (input.forward || (input.boost && !input.backward)) target = maxSpeed
     else if (input.backward) target = -maxSpeed * 0.5
     this.speed += (target - this.speed) * (1 - Math.exp(-4 * deltaTime))
 
