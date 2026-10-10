@@ -17,6 +17,7 @@ const DEPTH_RANGE = 50
 /** Acciones puntuales (no mantenidas) que dispara la interfaz táctil. */
 export interface TouchActions {
   onBuild(): void
+  onLookBack(active: boolean): void // true mientras se mantiene pulsado
 }
 
 /**
@@ -78,6 +79,15 @@ export class TouchControls {
           <path d="M4 5h16l-6 7.5V19l-4 1.5v-8z" />
         </svg>
       </button>
+
+      <button id="lookback-btn" class="touch-btn" aria-label="Ver hacia atrás"
+        style="position: absolute; right: calc(112px + env(safe-area-inset-right, 0px)); bottom: calc(var(--touch-bottom, 50px) + 180px);">
+        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 14L4 9l5-5" />
+          <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+        </svg>
+      </button>
     `
     container.appendChild(this.root)
 
@@ -92,6 +102,7 @@ export class TouchControls {
     this.setupDepthStick()
     this.setupBoostButton()
     this.setupBuildButton()
+    this.setupLookBackButton()
 
     this.root.addEventListener("contextmenu", (e) => e.preventDefault())
     window.addEventListener("touchstart", () => this.show(), {
@@ -259,6 +270,24 @@ export class TouchControls {
       this.actions.onBuild()
     })
     const release = () => btn.classList.remove("active")
+    btn.addEventListener("pointerup", release)
+    btn.addEventListener("pointercancel", release)
+  }
+
+  // ---------- Botón de ver hacia atrás (mantener pulsado) ----------
+
+  private setupLookBackButton(): void {
+    const btn = this.root.querySelector<HTMLButtonElement>("#lookback-btn")!
+
+    btn.addEventListener("pointerdown", (e) => {
+      btn.setPointerCapture(e.pointerId)
+      btn.classList.add("active")
+      this.actions.onLookBack(true)
+    })
+    const release = () => {
+      btn.classList.remove("active")
+      this.actions.onLookBack(false)
+    }
     btn.addEventListener("pointerup", release)
     btn.addEventListener("pointercancel", release)
   }

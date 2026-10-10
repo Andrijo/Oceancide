@@ -66,6 +66,8 @@ export class Game {
   private devMenu?: DevMenu
   private bubbles: BubbleTrail
   private structures: StructureManager
+  private lookBack = false // C mantenida: cámara mirando hacia atrás
+  private lookBackApplied = false // valor de lookBack con el que está colocada la cámara
   private transition: BiomeTransition
 
   private saveManager = new SaveManager()
@@ -131,7 +133,12 @@ export class Game {
       boost: false,
     }
 
-    new TouchControls(this.input, { onBuild: () => this.tryBuild("filter") })
+    new TouchControls(this.input, {
+      onBuild: () => this.tryBuild("filter"),
+      onLookBack: (active) => {
+        this.lookBack = active
+      },
+    })
 
     this.timer = new THREE.Timer()
     this.timer.connect(document) // ignora el tiempo con la pestaña oculta
@@ -231,6 +238,11 @@ export class Game {
       if (!e.repeat) this.tryBuild("filter")
       return
     }
+    // C (mantener): ver hacia atrás
+    if (e.code === "KeyC") {
+      this.lookBack = true
+      return
+    }
     // Q / E: giro de 360° (solo al pulsar, no se repite al mantener la tecla)
     if (e.code === "KeyQ" || e.code === "KeyE") {
       if (
@@ -246,6 +258,7 @@ export class Game {
   }
 
   private handleKeyUp(e: KeyboardEvent): void {
+    if (e.code === "KeyC") this.lookBack = false
     this.setKey(e.code, false)
   }
 
@@ -279,6 +292,7 @@ export class Game {
 
     this.bubbles.clear()
     this.structures.clear()
+    this.lookBackApplied = this.lookBack
     this.snapCamera()
     this.devMenu?.refresh()
   }
@@ -295,7 +309,10 @@ export class Game {
 
   private getCameraTarget(): THREE.Vector3 {
     return CAMERA_OFFSET.clone()
-      .applyAxisAngle(UP, this.turtle.mesh.rotation.y)
+      .applyAxisAngle(
+        UP,
+        this.turtle.mesh.rotation.y + (this.lookBack ? Math.PI : 0),
+      )
       .add(this.turtle.getPosition())
   }
 
@@ -354,6 +371,7 @@ export class Game {
   }
 
   private clearInput(): void {
+    this.lookBack = false
     this.input.forward = false
     this.input.backward = false
     this.input.left = false
@@ -449,6 +467,12 @@ export class Game {
 
     const bounds = this.biomeGenerator.getBounds()
     this.turtle.update(deltaTime, this.input, bounds)
+
+    // Cambiar entre ver delante/atrás recoloca la cámara al instante (sin animación)
+    if (this.lookBack !== this.lookBackApplied) {
+      this.lookBackApplied = this.lookBack
+      this.snapCamera()
+    }
 
     // Cámara suave, independiente de los FPS
     const smoothing = 1 - Math.exp(-6 * deltaTime)
