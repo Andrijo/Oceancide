@@ -10,6 +10,8 @@ import { TouchControls } from "./TouchControls"
 import { DevMenu } from "./DevMenu"
 import { BubbleTrail } from "./BubbleTrail"
 import { BiomeTransition } from "./BiomeTransition"
+import { StructureManager } from "./StructureManager"
+import { STRUCTURES, type StructureKey } from "./StructureConfig"
 import { ScreenManager } from "./ScreenManager"
 import {
   SaveManager,
@@ -32,6 +34,7 @@ const CLEAN_THRESHOLD = 0.3 // Tasa de contaminación por debajo de la cual la t
 const ZONE_COMPLETION_RATIO = 0.8 // % de desechos que hay que recoger para pasar de zona
 const CAMERA_OFFSET = new THREE.Vector3(0, 5, -12) // Posición de la cámara respecto a la tortuga.
 const UP = new THREE.Vector3(0, 1, 0)
+const BUILD_DISTANCE = 4 // las estructuras se colocan delante de la tortuga
 
 type Screen = "hub" | "run" | "summary"
 
@@ -62,6 +65,7 @@ export class Game {
   private godMode = false
   private devMenu?: DevMenu
   private bubbles: BubbleTrail
+  private structures: StructureManager
   private transition: BiomeTransition
 
   private saveManager = new SaveManager()
@@ -91,6 +95,7 @@ export class Game {
     this.turtle = new Turtle()
     this.scene.add(this.turtle.mesh)
     this.bubbles = new BubbleTrail(this.scene)
+    this.structures = new StructureManager(this.scene)
 
     this.biomeGenerator = new BiomeGenerator(this.scene)
     this.uiManager = new UIManager()
@@ -117,6 +122,8 @@ export class Game {
     this.input = {
       forward: false,
       backward: false,
+      turnAroundLeft: false,
+      turnAroundRight: false,
       left: false,
       right: false,
       up: false,
@@ -124,7 +131,7 @@ export class Game {
       boost: false,
     }
 
-    new TouchControls(this.input)
+    new TouchControls(this.input, { onBuild: () => this.tryBuild("filter") })
 
     this.timer = new THREE.Timer()
     this.timer.connect(document) // ignora el tiempo con la pestaña oculta
@@ -133,9 +140,7 @@ export class Game {
     this.setupEventListeners()
     this.showHub()
 
-    /*
-
-    // Menú de desarrollador: solo con `vite dev` o con ?dev en la URL
+    /* Menú de desarrollador: solo con `vite dev` o con ?dev en la URL
     if (
       import.meta.env.DEV ||
       new URLSearchParams(location.search).has("dev")
@@ -156,7 +161,7 @@ export class Game {
         restartRun: () => this.restartRun(),
       })
     }
-    */
+      */
     this.animate()
   }
 
@@ -183,9 +188,15 @@ export class Game {
 
   private setKey(code: string, pressed: boolean): void {
     switch (code) {
+      case "KeyQ":
+        this.input.turnAroundLeft = pressed
+        break
       case "KeyW":
       case "ArrowUp":
         this.input.forward = pressed
+        break
+      case "KeyE":
+        this.input.turnAroundRight = pressed
         break
       case "KeyS":
       case "ArrowDown":
@@ -214,6 +225,21 @@ export class Game {
   private handleKeyDown(e: KeyboardEvent): void {
     if (e.code === "KeyR") {
       if (!e.repeat && this.screen === "run") this.endRun("abandoned")
+      return
+    }
+    if (e.code === "KeyB") {
+      if (!e.repeat) this.tryBuild("filter")
+      return
+    }
+    // Q / E: giro de 360° (solo al pulsar, no se repite al mantener la tecla)
+    if (e.code === "KeyQ" || e.code === "KeyE") {
+      if (
+        !e.repeat &&
+        this.screen === "run" &&
+        !this.transition.blocksGameplay
+      ) {
+        this.turtle.trigger360Spin(e.code === "KeyQ" ? "left" : "right")
+      }
       return
     }
     this.setKey(e.code, true)
@@ -252,11 +278,12 @@ export class Game {
     }
 
     this.bubbles.clear()
+    this.structures.clear()
     this.snapCamera()
     this.devMenu?.refresh()
   }
-  /*
-   Salta directamente a un bioma (herramienta de desarrollo).
+
+  /* Salta directamente a un bioma (herramienta de desarrollo).
   private goToBiome(index: number): void {
     window.clearTimeout(this.restartTimeout)
     this.state.isRunning = true
@@ -275,6 +302,55 @@ export class Game {
   private snapCamera(): void {
     this.camera.position.copy(this.getCameraTarget())
     this.camera.lookAt(this.turtle.getPosition())
+  }
+
+  /** Construye una estructura delante de la tortuga, pagando con Conciencia Ecológica. */
+  private tryBuild(key: StructureKey): void {
+    if (this.screen !== "run" || this.transition.blocksGameplay) return
+
+    const config = STRUCTURES[key]
+    if (this.structures.getActiveCount() >= this.turtle.stats.filterCapacity) {
+      this.uiManager.showMessage("Máximo de filtros activos", 1200)
+      return
+    }
+    if (this.state.ecoAwareness < config.cost) {
+      this.uiManager.showMessage(
+        `Necesitas ${config.cost} de Conciencia Ecológica`,
+        1200,
+      )
+      return
+    }
+
+    const bounds = this.biomeGenerator.getBounds()
+    const yaw = this.turtle.mesh.rotation.y
+    const position = this.turtle.getPosition()
+    position.x += Math.sin(yaw) * BUILD_DISTANCE
+    position.z += Math.cos(yaw) * BUILD_DISTANCE
+    position.x = THREE.MathUtils.clamp(
+      position.x,
+      -bounds.halfSize,
+      bounds.halfSize,
+    )
+    position.z = THREE.MathUtils.clamp(
+      position.z,
+      -bounds.halfSize,
+      bounds.halfSize,
+    )
+    position.y = THREE.MathUtils.clamp(position.y, bounds.minY, bounds.maxY)
+
+    this.state.ecoAwareness -= config.cost
+    this.structures.build(key, position)
+  }
+
+  private updateBuildHud(): void {
+    const config = STRUCTURES.filter
+    const active = this.structures.getActiveCount()
+    const max = this.turtle.stats.filterCapacity
+    const available = this.state.ecoAwareness >= config.cost && active < max
+    this.uiManager.updateBuildHud(
+      `${config.name} (B) · cuesta ${config.cost} · activos ${active}/${max}`,
+      available,
+    )
   }
 
   private clearInput(): void {
@@ -396,6 +472,12 @@ export class Game {
       this.state.ecoAwareness += debris.ecoValue
       this.collectedInZone++
     }
+    // Los filtros absorben desechos por su cuenta (cuentan para la zona y dan Conciencia Ecológica)
+    const credit = this.structures.update(deltaTime, time, this.biomeGenerator)
+    this.state.debrisCollected += credit.count
+    this.state.ecoAwareness += credit.eco
+    this.collectedInZone += credit.count
+
     this.state.zoneProgress = Math.min(
       100,
       (this.collectedInZone / required) * 100,
@@ -422,6 +504,7 @@ export class Game {
     }
 
     this.uiManager.updateUI(this.state)
+    this.updateBuildHud()
   }
 
   private animate(timestamp: number = 0): void {

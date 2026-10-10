@@ -139,6 +139,7 @@ export class BiomeGenerator {
 
       if (debris.mesh.position.distanceTo(turtlePosition) < collectionRadius) {
         collected.push(debris)
+        debris.removed = true
         this.debrisGroup.remove(debris.mesh)
         this.debrisList.splice(i, 1)
         this.pollutionRemaining = Math.max(
@@ -150,6 +151,20 @@ export class BiomeGenerator {
     if (this.debrisList.length === 0) this.pollutionRemaining = 0
 
     return collected
+  }
+
+  /** Retira un desecho por una vía distinta a la tortuga (p. ej. un filtro). */
+  public removeDebris(debris: Debris): void {
+    if (debris.removed) return
+    debris.removed = true
+    this.debrisGroup.remove(debris.mesh)
+    const i = this.debrisList.indexOf(debris)
+    if (i >= 0) this.debrisList.splice(i, 1)
+    this.pollutionRemaining = Math.max(
+      0,
+      this.pollutionRemaining - debris.pollution,
+    )
+    if (this.debrisList.length === 0) this.pollutionRemaining = 0
   }
 
   /** Contaminación restante de la zona: 1 = sin limpiar, 0 = totalmente limpia. */

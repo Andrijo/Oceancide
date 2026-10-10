@@ -43,6 +43,12 @@ export const BIOME_DEBRIS: Record<BiomeKey, OceanDebrisType[]> = {
       description: "Película fina de hidrocarburos ligeros en la superficie.",
       toxicityImpact: 0.2,
     },
+    {
+      id: "straw",
+      name: "Popote",
+      description: "Envase de plástico descartable usado para beber líquidos.",
+      toxicityImpact: 0.05,
+    },
   ],
 
   pelagic_mid: [

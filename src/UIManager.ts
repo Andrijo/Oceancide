@@ -8,6 +8,8 @@ export class UIManager {
   private ecoAwarenessEl: HTMLElement
   private zoneProgressEl: HTMLElement
   private toxicityFillEl: HTMLElement
+  private buildHudEl: HTMLElement
+  private lastBuildHud = ""
   private currentMessage?: HTMLElement
   private messageTimeout?: number
 
@@ -16,6 +18,34 @@ export class UIManager {
     this.ecoAwarenessEl = document.getElementById("eco-awareness")!
     this.zoneProgressEl = document.getElementById("zone-progress")!
     this.toxicityFillEl = document.getElementById("toxicity-fill")!
+
+    this.buildHudEl = document.createElement("div")
+    this.buildHudEl.id = "build-hud"
+    this.buildHudEl.style.cssText = `
+      position: absolute;
+      bottom: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 6px 14px;
+      font-family: "Geist-Semibold", sans-serif;
+      font-size: 14px;
+      white-space: nowrap;
+      color: #f7f7ff;
+      background: rgba(0, 0, 0, 0.45);
+      border-radius: 8px;
+      pointer-events: none;
+      z-index: 100;
+    `
+    document.getElementById("game-container")!.appendChild(this.buildHudEl)
+  }
+
+  // Indicador de la estructura que se puede construir (rojo si no es posible ahora).
+  public updateBuildHud(text: string, available: boolean): void {
+    const key = `${available}|${text}`
+    if (key === this.lastBuildHud) return
+    this.lastBuildHud = key
+    this.buildHudEl.textContent = text
+    this.buildHudEl.style.color = available ? "#f7f7ff" : "#ff9a9a"
   }
 
   // Método para actualizar la interfaz de usuario con el estado actual del juego.

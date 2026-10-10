@@ -26,7 +26,7 @@ export interface TurtleStats {
   speed: number // unidades por segundo
   collectionRadius: number
   toxicityResistance: number // 0..1, reduce la toxicidad pasiva
-  filterCapacity: number // (reservado para futuras mecánicas)
+  filterCapacity: number // máximo de filtros activos a la vez
 }
 
 export interface InputState {
@@ -37,6 +37,8 @@ export interface InputState {
   up: boolean
   down: boolean
   boost: boolean
+  turnAroundLeft: boolean
+  turnAroundRight: boolean
 }
 
 export interface WorldBounds {

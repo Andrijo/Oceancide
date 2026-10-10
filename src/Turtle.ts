@@ -15,6 +15,12 @@ export class Turtle {
   private time = 0
   private readonly turnSpeed = 3 // rad/s
 
+  /** Control de la animación de giro 360° (barrel roll) */
+  private isSpinning = false
+  private spinProgress = 0
+  private spinDirection = 1 // 1 para izquierda, -1 para derecha
+  private readonly spinDuration = 0.8 // Duración del giro completo en segundos
+
   constructor() {
     this.model = this.createTurtleModel()
     this.mesh = new THREE.Group()
@@ -104,10 +110,23 @@ export class Turtle {
     return group
   }
 
+  /**
+   * Dispara un giro completo de 360° en el eje Z (Roll).
+   * @param direction 'left' para giro antihorario o 'right' para giro horario.
+   */
+  public trigger360Spin(direction: "left" | "right" = "left"): void {
+    if (this.isSpinning) return
+    this.isSpinning = true
+    this.spinProgress = 0
+    this.spinDirection = direction === "left" ? 1 : -1
+  }
+
   public reset(position: THREE.Vector3): void {
     this.mesh.position.copy(position)
     this.mesh.rotation.set(0, 0, 0)
     this.speed = 0
+    this.isSpinning = false
+    this.spinProgress = 0
   }
 
   public update(
@@ -124,9 +143,26 @@ export class Turtle {
     else if (input.backward) target = -maxSpeed * 0.5
     this.speed += (target - this.speed) * (1 - Math.exp(-4 * deltaTime))
 
-    // Giro (izquierda = +Y, mirando hacia +Z)
+    // Giro estándar en Y (izquierda = +Y, mirando hacia +Z)
     const turn = (input.left ? 1 : 0) - (input.right ? 1 : 0)
     this.mesh.rotation.y += turn * this.turnSpeed * deltaTime
+
+    // Cálculo del giro suave de 360° sobre el eje Z (roll)
+    let extraRollAngle = 0
+    if (this.isSpinning) {
+      this.spinProgress += deltaTime / this.spinDuration
+
+      if (this.spinProgress >= 1) {
+        this.spinProgress = 1
+        this.isSpinning = false
+      }
+
+      // Smoothstep para aceleración y desaceleración orgánica
+      const t = this.spinProgress
+      const easedProgress = t * t * (3 - 2 * t)
+
+      extraRollAngle = easedProgress * Math.PI * 2 * this.spinDirection
+    }
 
     // Movimiento horizontal en la dirección del rumbo
     const yaw = this.mesh.rotation.y
@@ -143,12 +179,14 @@ export class Turtle {
     p.z = THREE.MathUtils.clamp(p.z, -bounds.halfSize, bounds.halfSize)
     p.y = THREE.MathUtils.clamp(p.y, bounds.minY, bounds.maxY)
 
-    // Animación de nado (solo en el modelo, no afecta al rumbo)
+    // Animación de nado + adición del roll de 360°
     const pitchTarget = -vertical * 0.4
     this.model.rotation.x +=
       (pitchTarget + Math.sin(this.time * 3) * 0.05 - this.model.rotation.x) *
       (1 - Math.exp(-6 * deltaTime))
-    this.model.rotation.z = Math.sin(this.time * 5) * 0.1
+
+    const baseRoll = Math.sin(this.time * 5) * 0.1
+    this.model.rotation.z = baseRoll + extraRollAngle
   }
 
   /** Velocidad de avance actual (unidades/s, negativa al retroceder). */

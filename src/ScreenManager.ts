@@ -19,6 +19,7 @@ const HUD_IDS = [
   "toxicity-bar",
   "controls-hint",
   "touch-controls",
+  "build-hud",
 ]
 
 const OUTCOME_TITLES: Record<RunOutcome, string> = {
@@ -93,7 +94,7 @@ export class ScreenManager {
     card.append(
       el(
         "div",
-        `font-size: 54px; font-weight: bold; letter-spacing: 5px; text-align: center; font-family: ${titleFONT};`,
+        `font-size: 54px; letter-spacing: 1.2px; text-align: center; font-family: ${titleFONT}; z-index: 2000;`,
         "OCEANCIDE",
       ),
       this.statList([
