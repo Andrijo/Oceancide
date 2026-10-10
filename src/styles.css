@@ -1,0 +1,27 @@
+@font-face {
+  font-family: "Pogonia";
+  src: url("/public/fonts/pogonia-bold.woff") format("woff");
+  font-weight: bold;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "PogoniaRegular";
+  src: url("/public/fonts/pogonia-regular.woff") format("woff");
+  font-weight: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Montserrat";
+  src: url("/public/fonts/montserrat-regular.woff") format("woff");
+  font-weight: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist-Semibold";
+  src: url("/public/fonts/Geist-Semibold.woff") format("woff");
+  font-weight: bold;
+  font-display: swap;
+}

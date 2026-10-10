@@ -2,13 +2,9 @@
 
 import * as THREE from "three"
 
-const POOL_SIZE = 80 // burbujas máximas a la vez
-const EMIT_RATE = 30 // burbujas por segundo mientras se emite
+const POOL_SIZE = 80 // Burbujas máximas a la vez
+const EMIT_RATE = 30 // Cantidad de burbujas por segundo
 
-/**
- * Estela de burbujas con un solo InstancedMesh (1 draw call).
- * Las burbujas viven en el mundo (no siguen a la tortuga), suben y se encogen al morir.
- */
 export class BubbleTrail {
   private mesh: THREE.InstancedMesh
   private dummy = new THREE.Object3D()
@@ -35,7 +31,6 @@ export class BubbleTrail {
     })
 
     this.mesh = new THREE.InstancedMesh(geometry, material, POOL_SIZE)
-    // Las instancias están lejos del origen: sin esto el culling las ocultaría
     this.mesh.frustumCulled = false
     scene.add(this.mesh)
 
@@ -46,7 +41,7 @@ export class BubbleTrail {
     this.clear()
   }
 
-  /** Elimina todas las burbujas (p. ej. al teletransportar a la tortuga). */
+  // Limpiar todas las burbujas
   public clear(): void {
     for (let i = 0; i < POOL_SIZE; i++) {
       this.age[i] = 1
@@ -67,7 +62,7 @@ export class BubbleTrail {
     const i = this.cursor
     this.cursor = (this.cursor + 1) % POOL_SIZE
 
-    // Salen de detrás de la tortuga, con algo de dispersión
+    // Posición inicial: un poco detrás del emisor, con algo de dispersión
     const p = this.positions[i]
     p.copy(emitter).addScaledVector(this.forward, -1.7)
     p.x += (Math.random() - 0.5) * 0.8

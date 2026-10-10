@@ -14,6 +14,11 @@ const DEPTH_W = 70 // debe coincidir con #depth-base en el CSS
 const DEPTH_H = 160
 const DEPTH_RANGE = 50
 
+/** Acciones puntuales (no mantenidas) que dispara la interfaz táctil. */
+export interface TouchActions {
+  onBuild(): void
+}
+
 /**
  * Controles táctiles de doble stick flotante:
  * - Mitad izquierda: joystick de movimiento (adelante/atrás/giro).
@@ -25,6 +30,7 @@ const DEPTH_RANGE = 50
 export class TouchControls {
   private root: HTMLElement
   private input: InputState
+  private actions: TouchActions
   private visible = false
 
   // Joystick izquierdo
@@ -41,8 +47,9 @@ export class TouchControls {
   private depthPointer: number | null = null
   private depthCenterY = 0
 
-  constructor(input: InputState) {
+  constructor(input: InputState, actions: TouchActions) {
     this.input = input
+    this.actions = actions
     const container = document.getElementById("game-container")!
 
     this.root = document.createElement("div")
@@ -63,6 +70,14 @@ export class TouchControls {
           <path d="M5.2 12.2l1.2.7M8 8.4l.7 1.2M12 6.5v1.4M16 8.4l-.7 1.2M18.8 12.2l-1.2.7" />
         </svg>
       </button>
+
+      <button id="build-btn" class="touch-btn" aria-label="Construir filtro"
+        style="position: absolute; right: calc(36px + env(safe-area-inset-right, 0px)); bottom: calc(var(--touch-bottom, 50px) + 256px);">
+        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 5h16l-6 7.5V19l-4 1.5v-8z" />
+        </svg>
+      </button>
     `
     container.appendChild(this.root)
 
@@ -76,6 +91,7 @@ export class TouchControls {
     this.setupMoveStick()
     this.setupDepthStick()
     this.setupBoostButton()
+    this.setupBuildButton()
 
     this.root.addEventListener("contextmenu", (e) => e.preventDefault())
     window.addEventListener("touchstart", () => this.show(), {
@@ -230,6 +246,21 @@ export class TouchControls {
     const y = -dy / DEPTH_RANGE // arriba = subir
     this.input.up = y > DEADZONE
     this.input.down = y < -DEADZONE
+  }
+
+  // ---------- Botón de construir ----------
+
+  private setupBuildButton(): void {
+    const btn = this.root.querySelector<HTMLButtonElement>("#build-btn")!
+
+    btn.addEventListener("pointerdown", (e) => {
+      btn.setPointerCapture(e.pointerId)
+      btn.classList.add("active")
+      this.actions.onBuild()
+    })
+    const release = () => btn.classList.remove("active")
+    btn.addEventListener("pointerup", release)
+    btn.addEventListener("pointercancel", release)
   }
 
   // ---------- Botón de impulso ----------

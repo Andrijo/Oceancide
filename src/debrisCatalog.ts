@@ -6,7 +6,7 @@ export type OceanDebrisType = {
   id: string
   name: string
   description: string
-  toxicityImpact: number // 0..1: qué tan contaminante es el desecho
+  toxicityImpact: number // 0..1: contaminación que aporta al agua mientras siga ahí; recogerlo la elimina
 }
 
 export const BIOME_DEBRIS: Record<BiomeKey, OceanDebrisType[]> = {
@@ -42,6 +42,12 @@ export const BIOME_DEBRIS: Record<BiomeKey, OceanDebrisType[]> = {
       name: "Mancha de Petróleo Superficial",
       description: "Película fina de hidrocarburos ligeros en la superficie.",
       toxicityImpact: 0.2,
+    },
+    {
+      id: "straw",
+      name: "Popote",
+      description: "Envase de plástico descartable usado para beber líquidos.",
+      toxicityImpact: 0.05,
     },
   ],
 
