@@ -15,7 +15,7 @@ export interface StructureConfig {
 
 export const STRUCTURES: Record<StructureKey, StructureConfig> = {
   filter: {
-    name: "Filtro",
+    name: "Esfera filtradora",
     cost: 40,
     radius: 12,
     interval: 1,
