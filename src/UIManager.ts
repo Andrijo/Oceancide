@@ -39,6 +39,41 @@ export class UIManager {
     document.getElementById("game-container")!.appendChild(this.buildHudEl)
   }
 
+  /** Botón de pausa del HUD (círculo con dos barras, arriba a la derecha). */
+  public createPauseButton(onClick: () => void): void {
+    const btn = document.createElement("button")
+    btn.id = "pause-btn"
+    btn.setAttribute("aria-label", "Pausa")
+    btn.style.cssText = `
+      position: absolute;
+      top: calc(12px + env(safe-area-inset-top, 0px));
+      right: calc(12px + env(safe-area-inset-right, 0px));
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #f7f7ff;
+      background: none;
+      border: 2px solid #f7f7ff;
+      border-radius: 50%;
+      cursor: pointer;
+      z-index: 300;
+      -webkit-tap-highlight-color: transparent;
+    `
+    btn.innerHTML = `
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+        <rect x="6" y="5" width="4" height="14" rx="1" />
+        <rect x="14" y="5" width="4" height="14" rx="1" />
+      </svg>
+    `
+    btn.addEventListener("click", () => {
+      btn.blur() // que Enter/Espacio no vuelvan a activarlo
+      onClick()
+    })
+    document.getElementById("game-container")!.appendChild(btn)
+  }
+
   // Indicador de la estructura que se puede construir (rojo si no es posible ahora).
   public updateBuildHud(text: string, available: boolean): void {
     const key = `${available}|${text}`

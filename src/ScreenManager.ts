@@ -20,6 +20,7 @@ const HUD_IDS = [
   "controls-hint",
   "touch-controls",
   "build-hud",
+  "pause-btn",
 ]
 
 const OUTCOME_TITLES: Record<RunOutcome, string> = {
@@ -153,12 +154,27 @@ export class ScreenManager {
       ),
       this.makeButton("Nueva run", again),
       this.makeButton(
-        "Volver al Refugio",
+        "Volver al inicio",
         () => this.callbacks.onReturnToHub(),
         false,
       ),
     )
     this.open(card, again)
+  }
+
+  /** Menú de pausa: Continuar (Enter) o abandonar la run. */
+  public showPause(onResume: () => void, onAbandon: () => void): void {
+    const card = this.makeCard()
+    card.append(
+      el(
+        "div",
+        `font-size: 54px; letter-spacing: 1.2px; text-align: center; font-family: ${titleFONT};`,
+        "PAUSA",
+      ),
+      this.makeButton("Continuar", onResume),
+      this.makeButton("Abandonar", onAbandon, false),
+    )
+    this.open(card, onResume)
   }
 
   // ---------- Helpers ----------
