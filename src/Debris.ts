@@ -9,7 +9,7 @@ import {
   type DebrisVisual,
 } from "./DebrisVisuals"
 import type { BiomeKey } from "./types"
-import type { Rng } from "./rng"
+import { Rng } from "./rng"
 
 const ECO_BASE = 5
 const ECO_PER_TOXICITY = 25
@@ -17,9 +17,7 @@ const PULL_SPEED = 6
 
 const pullDelta = new THREE.Vector3()
 
-/* ---------------------------------------------
-   Utilidades de deformación
---------------------------------------------- */
+// Utilidades de deformación
 
 function deformGeometry(
   geometry: THREE.BufferGeometry,
@@ -49,9 +47,7 @@ function deformGeometry(
   return geometry
 }
 
-/* ---------------------------------------------
-   Geometrías
---------------------------------------------- */
+// Geometrías
 
 function createBottleGeometry(): THREE.BufferGeometry {
   const body = new THREE.CylinderGeometry(0.12, 0.13, 0.34, 16, 1)
@@ -113,7 +109,7 @@ function createBlobGeometry(): THREE.BufferGeometry {
   return deformGeometry(new THREE.IcosahedronGeometry(0.3, 3), 0.85, 5)
 }
 
-function createShardGeometry(): THREE.BufferGeometry {
+function createShardGeometry(rng: Rng): THREE.BufferGeometry {
   const geometry = new THREE.ConeGeometry(0.18, 0.62, 7, 1)
   const position = geometry.attributes.position
 
@@ -121,7 +117,7 @@ function createShardGeometry(): THREE.BufferGeometry {
     const x = position.getX(i)
     const z = position.getZ(i)
 
-    const irregularity = 0.78 + Math.random() * 0.45
+    const irregularity = 0.78 + rng.next() * 0.45
     position.setX(i, x * irregularity)
     position.setZ(i, z * irregularity)
   }
@@ -135,34 +131,27 @@ function createBarGeometry(): THREE.BufferGeometry {
   return deformGeometry(geometry, 0.18, 6)
 }
 
-function createCloudObject(): THREE.Object3D {
+function createCloudObject(rng: Rng): THREE.Object3D {
   const group = new THREE.Group()
   const count = 26
 
   const geometry = new THREE.IcosahedronGeometry(0.045, 1)
-  const material = new THREE.MeshStandardMaterial({
-    transparent: true,
-    opacity: 0.75,
-    roughness: 0.9,
-    metalness: 0,
-  })
 
   for (let i = 0; i < count; i++) {
-    const particle = new THREE.Mesh(geometry, material)
-
+    const particle = new THREE.Mesh(geometry)
     particle.position.set(
-      (Math.random() - 0.5) * 0.55,
-      (Math.random() - 0.5) * 0.45,
-      (Math.random() - 0.5) * 0.55,
+      rng.range(-0.275, 0.275),
+      rng.range(-0.225, 0.225),
+      rng.range(-0.275, 0.275),
     )
 
-    const particleScale = 0.45 + Math.random() * 1.1
+    const particleScale = 0.45 + rng.next() * 1.1
     particle.scale.setScalar(particleScale)
 
     particle.rotation.set(
-      Math.random() * Math.PI,
-      Math.random() * Math.PI,
-      Math.random() * Math.PI,
+      rng.range(0, Math.PI),
+      rng.range(0, Math.PI),
+      rng.range(0, Math.PI),
     )
 
     group.add(particle)
@@ -171,24 +160,28 @@ function createCloudObject(): THREE.Object3D {
   return group
 }
 
-const SHAPE_FACTORIES: Record<DebrisShape, () => THREE.BufferGeometry> = {
-  bottle: createBottleGeometry,
-  drum: createDrumGeometry,
-  sheet: createSheetGeometry,
-  blob: createBlobGeometry,
+type ShapeFactory = (rng: Rng) => THREE.BufferGeometry
+
+const SHAPE_FACTORIES: Record<DebrisShape, ShapeFactory> = {
+  bottle: () => createBottleGeometry(),
+  drum: () => createDrumGeometry(),
+  sheet: () => createSheetGeometry(),
+  blob: () => createBlobGeometry(),
   ring: () => new THREE.TorusGeometry(0.28, 0.085, 14, 32),
-  shard: createShardGeometry,
+  shard: (rng) => createShardGeometry(rng),
   cloud: () => new THREE.IcosahedronGeometry(0.35, 1),
-  bar: createBarGeometry,
+  bar: () => createBarGeometry(),
 }
 
 const geometries = new Map<DebrisShape, THREE.BufferGeometry>()
 const materials = new Map<string, THREE.Material>()
 const warned = new Set<string>()
 
-/* ---------------------------------------------
-   Visual / material
---------------------------------------------- */
+// Rng fijo para geometrías que lo requieren (shard). La forma base es
+// siempre la misma; cada instancia varía por escala/rotación/posición.
+const FIXED_RNG = new Rng(0x9e3779b1)
+
+// Visual / material
 
 function getVisual(id: string): DebrisVisual {
   const visual = DEBRIS_VISUALS[id]
@@ -207,7 +200,7 @@ function getGeometry(visual: DebrisVisual): THREE.BufferGeometry {
   let geometry = geometries.get(visual.shape)
 
   if (!geometry) {
-    geometry = SHAPE_FACTORIES[visual.shape]()
+    geometry = SHAPE_FACTORIES[visual.shape](FIXED_RNG)
     geometries.set(visual.shape, geometry)
   }
 
@@ -259,9 +252,7 @@ function getMaterial(id: string, visual: DebrisVisual): THREE.Material {
   return material
 }
 
-/* ---------------------------------------------
-   Clase principal
---------------------------------------------- */
+// Principal
 
 export class Debris {
   public object: THREE.Object3D
@@ -279,6 +270,7 @@ export class Debris {
   private phase: number
   private baseScale: number
   private pullTarget: THREE.Vector3 | null = null
+  private cloudMaterial: THREE.Material | null = null
 
   constructor(position: THREE.Vector3, definition: OceanDebrisType, rng: Rng) {
     this.id = definition.id
@@ -292,8 +284,8 @@ export class Debris {
     const visual = getVisual(definition.id)
 
     if (visual.shape === "cloud") {
-      this.object = createCloudObject()
-      this.applyCloudMaterial(this.object, visual)
+      this.object = createCloudObject(rng)
+      this.cloudMaterial = this.applyCloudMaterial(this.object, visual)
     } else {
       const geometry = getGeometry(visual)
       const material = getMaterial(definition.id, visual)
@@ -317,24 +309,29 @@ export class Debris {
     )
   }
 
+  /** Asigna un material compartido a todos los hijos de la nube. */
   private applyCloudMaterial(
     group: THREE.Object3D,
     visual: DebrisVisual,
-  ): void {
-    group.traverse((child) => {
-      if (!(child instanceof THREE.Mesh)) return
-
-      child.material = new THREE.MeshStandardMaterial({
-        color: visual.color,
-        transparent: true,
-        opacity: visual.opacity ?? 0.6,
-        roughness: 0.9,
-        metalness: visual.metalness ?? 0,
-        emissive: visual.emissive ?? 0x000000,
-        emissiveIntensity:
-          visual.emissive !== undefined ? (visual.glow ?? 0.3) : 0,
-      })
+  ): THREE.Material {
+    const material = new THREE.MeshStandardMaterial({
+      color: visual.color,
+      transparent: true,
+      opacity: visual.opacity ?? 0.6,
+      roughness: 0.9,
+      metalness: visual.metalness ?? 0,
+      emissive: visual.emissive ?? 0x000000,
+      emissiveIntensity:
+        visual.emissive !== undefined ? (visual.glow ?? 0.3) : 0,
     })
+
+    group.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.material = material
+      }
+    })
+
+    return material
   }
 
   public get mesh(): THREE.Object3D {
@@ -380,5 +377,20 @@ export class Debris {
       this.baseY +
       Math.sin(time * 1.4 + this.phase) * 0.28 +
       Math.cos(time * 0.6 + this.phase) * 0.05
+  }
+
+  /** Libera el material de nube (si lo hay). Las geometrías y materiales normales son compartidos. */
+  public dispose(): void {
+    if (this.cloudMaterial) {
+      this.cloudMaterial.dispose()
+      this.cloudMaterial = null
+    }
+  }
+
+  /** Deshace una reclamación (p. ej. si la estructura que lo reclamó desaparece). */
+  public release(): void {
+    this.claimed = false
+    this.pullTarget = null
+    this.pullArrived = false
   }
 }

@@ -37,8 +37,6 @@ export interface InputState {
   up: boolean
   down: boolean
   boost: boolean
-  turnAroundLeft: boolean
-  turnAroundRight: boolean
 }
 
 export interface WorldBounds {

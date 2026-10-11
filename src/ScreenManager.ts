@@ -22,7 +22,7 @@ const HUD_IDS = [
 
 const OUTCOME_TITLES: Record<RunOutcome, string> = {
   died: "¡Se acabó! La toxicidad ganó.",
-  completed: "¡Has ayudado a limpiar el océano!",
+  completed: "¡Gracias, has ayudado a limpiar el océano!",
   abandoned: "Has abandonado la run. El océano seguirá su curso.",
 }
 

@@ -1,15 +1,15 @@
 // src/Game.ts
 // Clase principal del juego:
-// Incia la escena, la cámara, la tortuga, el generador de biomas y la UI.
+// Inicia la escena, la cámara, la tortuga, el generador de biomas y la UI.
 
 import * as THREE from "three"
 import { Turtle } from "./Turtle"
 import { BiomeGenerator } from "./BiomeGenerator"
 import { UIManager } from "./UIManager"
 import { TouchControls } from "./TouchControls"
-import { DevMenu } from "./DevMenu"
 import { BubbleTrail } from "./BubbleTrail"
 import { BiomeTransition } from "./BiomeTransition"
+import { DevMenu } from "./DevMenu"
 import { StructureManager } from "./StructureManager"
 import { STRUCTURES, type StructureKey } from "./StructureConfig"
 import { ScreenManager } from "./ScreenManager"
@@ -29,9 +29,9 @@ import {
 } from "./types"
 
 const MAX_DELTA = 0.1 // Restringe el deltaTime para que no se rompa la física si hay un lagazo o se cambia de pestaña.
-const TOXICITY_SCALE = 6 // toxicityRate 0.1 => ~0.6 de toxicidad por segundo.
-const CLEAN_THRESHOLD = 0.3 // Tasa de contaminación por debajo de la cual la toxicidad empieza a bajar sola.
-const ZONE_COMPLETION_RATIO = 0.8 // % de desechos que hay que recoger para pasar de zona
+const TOXICITY_SCALE = 3 // toxicityRate 0.1 => ~0.3 de toxicidad por segundo.
+const CLEAN_THRESHOLD = 0.6 // Tasa de contaminación por debajo de la cual la toxicidad empieza a bajar sola.
+const ZONE_COMPLETION_RATIO = 0.7 // % de desechos que hay que recoger para pasar de zona
 const CAMERA_OFFSET = new THREE.Vector3(0, 5, -12) // Posición de la cámara respecto a la tortuga.
 const UP = new THREE.Vector3(0, 1, 0)
 const BUILD_DISTANCE = 4 // las estructuras se colocan delante de la tortuga
@@ -59,17 +59,20 @@ export class Game {
   private ambientLight!: THREE.AmbientLight
   private directionalLight!: THREE.DirectionalLight
   private pointLights: THREE.PointLight[] = []
+  private devMenu?: DevMenu
 
   private biomeIndex = 0
   private collectedInZone = 0
   private godMode = false
-  private devMenu?: DevMenu
   private bubbles: BubbleTrail
   private structures: StructureManager
   private lookBack = false // C mantenida: cámara mirando hacia atrás
   private lookBackApplied = false // valor de lookBack con el que está colocada la cámara
   private paused = false
   private transition: BiomeTransition
+
+  // Flag para reintentar advanceBiome si transition.play() falla
+  private pendingAdvance = false
 
   private saveManager = new SaveManager()
   private meta: MetaState
@@ -126,8 +129,6 @@ export class Game {
     this.input = {
       forward: false,
       backward: false,
-      turnAroundLeft: false,
-      turnAroundRight: false,
       left: false,
       right: false,
       up: false,
@@ -149,7 +150,7 @@ export class Game {
     this.setupEventListeners()
     this.showHub()
 
-    /* Menú de desarrollador: solo con `vite dev` o con ?dev en la URL
+    // Menú de desarrollador: con `vite dev` o con ?dev en la URL.
     if (
       import.meta.env.DEV ||
       new URLSearchParams(location.search).has("dev")
@@ -170,8 +171,43 @@ export class Game {
         restartRun: () => this.restartRun(),
       })
     }
-      */
+
     this.animate()
+  }
+
+  // Métodos
+  /**
+   * Salta directamente a un bioma (herramienta de desarrollo).
+   * No resetea la run: conserva eco, desechos recolectados y toxicidad.
+   * Si no hay run activa (estás en el hub), simplemente carga el bioma
+   * en modo "vista previa" sin iniciar una run.
+   */
+  private goToBiome(index: number): void {
+    if (index < 0 || index >= BIOME_ORDER.length) return
+
+    // Cancelar cualquier transición pendiente o en curso
+    this.transition.cancel()
+    this.pendingAdvance = false
+    this.paused = false
+
+    // Si no estamos en run, entrar en modo run sin resetear stats
+    if (this.screen !== "run") {
+      this.screen = "run"
+      this.state.isRunning = true
+      this.screens.hide()
+    }
+
+    this.loadBiome(index)
+    this.devMenu?.refresh()
+  }
+
+  /**
+   * Reinicia la run actual (herramienta de desarrollo).
+   * Equivale a pulsar "Empezar" desde el hub.
+   */
+  private restartRun(): void {
+    this.startRun()
+    this.devMenu?.refresh()
   }
 
   private setupLighting(): void {
@@ -193,23 +229,22 @@ export class Game {
     window.addEventListener("keydown", (e) => this.handleKeyDown(e))
     window.addEventListener("keyup", (e) => this.handleKeyUp(e))
     window.addEventListener("resize", () => this.handleResize())
-    // Pausa automática al cambiar de pestaña o minimizar
+
+    // Pausa automática al cambiar de pestaña o minimizar.
+    // No pausamos si hay una transición en curso: la transición debe
+    // terminar sola y luego el usuario decide.
     document.addEventListener("visibilitychange", () => {
-      if (document.hidden) this.setPaused(true)
+      if (document.hidden && !this.transition.isActive()) {
+        this.setPaused(true)
+      }
     })
   }
 
   private setKey(code: string, pressed: boolean): void {
     switch (code) {
-      case "KeyQ":
-        this.input.turnAroundLeft = pressed
-        break
       case "KeyW":
       case "ArrowUp":
         this.input.forward = pressed
-        break
-      case "KeyE":
-        this.input.turnAroundRight = pressed
         break
       case "KeyS":
       case "ArrowDown":
@@ -241,6 +276,7 @@ export class Game {
       if (!e.repeat) this.togglePause()
       return
     }
+
     // Enter: solo pausa. Reanudar con Enter lo gestiona ScreenManager; si Game también
     // lo alternara, la pausa se reabriría en el mismo evento.
     if (e.code === "Enter") {
@@ -250,21 +286,25 @@ export class Game {
       }
       return
     }
+
     if (this.paused) return // en pausa no se atienden los demás controles
 
     if (e.code === "KeyR") {
       if (!e.repeat && this.screen === "run") this.endRun("abandoned")
       return
     }
+
     if (e.code === "KeyB") {
       if (!e.repeat) this.tryBuild("filter")
       return
     }
+
     // C (mantener): ver hacia atrás
     if (e.code === "KeyC") {
       this.lookBack = true
       return
     }
+
     // Q / E: giro de 360° (solo al pulsar, no se repite al mantener la tecla)
     if (e.code === "KeyQ" || e.code === "KeyE") {
       if (
@@ -272,10 +312,19 @@ export class Game {
         this.screen === "run" &&
         !this.transition.blocksGameplay
       ) {
-        this.turtle.trigger360Spin(e.code === "KeyQ" ? "left" : "right")
+        const direction = e.code === "KeyQ" ? "left" : "right"
+        this.turtle.trigger360Spin(direction)
+
+        // Feedback visual: mensaje breve con el dash
+        if (!this.turtle.isSpinBoosting()) {
+          // Solo mostramos el mensaje si el boost estaba inactivo,
+          // para no spamear con giros encadenados
+          this.uiManager.showMessage("¡DASH!", 700)
+        }
       }
       return
     }
+
     this.setKey(e.code, true)
   }
 
@@ -303,12 +352,13 @@ export class Game {
     const bounds = this.biomeGenerator.getBounds()
     this.turtle.reset(new THREE.Vector3(0, (bounds.minY + bounds.maxY) / 2, 0))
 
+    // Luces puntuales deterministas: usan el mismo rng derivado
     for (const light of this.pointLights) {
       light.color.setHex(this.biomeGenerator.getBiome().accentColor)
       light.position.set(
-        (Math.random() - 0.5) * bounds.halfSize * 2,
-        bounds.minY + Math.random() * (bounds.maxY - bounds.minY),
-        (Math.random() - 0.5) * bounds.halfSize * 2,
+        rng.range(-bounds.halfSize, bounds.halfSize),
+        rng.range(bounds.minY, bounds.maxY),
+        rng.range(-bounds.halfSize, bounds.halfSize),
       )
     }
 
@@ -316,18 +366,7 @@ export class Game {
     this.structures.clear()
     this.lookBackApplied = this.lookBack
     this.snapCamera()
-    this.devMenu?.refresh()
   }
-
-  /* Salta directamente a un bioma (herramienta de desarrollo).
-  private goToBiome(index: number): void {
-    window.clearTimeout(this.restartTimeout)
-    this.state.isRunning = true
-    this.state.toxicity = 0
-    this.loadBiome(index)
-    this.uiManager.showMessage(`Zona: ${this.biomeGenerator.getBiomeName()}`)
-  }
-  */
 
   private getCameraTarget(): THREE.Vector3 {
     return CAMERA_OFFSET.clone()
@@ -431,6 +470,7 @@ export class Game {
   /** Refugio: escena de fondo con la cámara orbitando y menú encima. */
   private showHub(): void {
     this.transition.cancel()
+    this.pendingAdvance = false
     this.paused = false
     this.screen = "hub"
     this.state.isRunning = false
@@ -442,6 +482,7 @@ export class Game {
 
   private startRun(): void {
     this.transition.cancel()
+    this.pendingAdvance = false
     this.paused = false
     this.runSeed = seedFromUrl() ?? randomSeed()
     this.runTime = 0
@@ -463,10 +504,12 @@ export class Game {
     if (this.screen !== "run") return
 
     this.transition.cancel()
+    this.pendingAdvance = false
     this.screen = "summary"
     this.state.isRunning = false
     this.clearInput()
 
+    // "abandoned" conserva lo recolectado pero no da bono de completitud.
     const { base, bonus } = computeEco(this.state.ecoAwareness, outcome)
     const summary: RunSummary = {
       outcome,
@@ -502,17 +545,31 @@ export class Game {
       return
     }
 
-    this.transition.play(() => {
+    // Si ya hay una transición activa, marcamos pendiente y reintentamos
+    if (this.transition.isActive()) {
+      this.pendingAdvance = true
+      return
+    }
+
+    const started = this.transition.play(() => {
       this.state.toxicity *= 0.5
       this.loadBiome(next)
       this.uiManager.showMessage(this.biomeGenerator.getBiomeName())
     })
+
+    // Si no arrancó (por race condition), reintentamos en el siguiente frame
+    if (!started) {
+      this.pendingAdvance = true
+    }
   }
 
   private update(deltaTime: number, time: number): void {
     if (!this.state.isRunning) return
     if (this.transition.blocksGameplay) return
     if (this.paused) return
+
+    // runTime solo cuenta cuando el gameplay está activo.
+    // Durante "revealing" el juego no está bloqueado, así que cuenta.
     this.runTime += deltaTime
 
     const bounds = this.biomeGenerator.getBounds()
@@ -541,13 +598,27 @@ export class Game {
       1,
       this.biomeGenerator.getInitialDebrisCount() * ZONE_COMPLETION_RATIO,
     )
+
     for (const debris of collected) {
       this.state.debrisCollected++
       this.state.ecoAwareness += debris.ecoValue
       this.collectedInZone++
     }
+
     // Los filtros absorben desechos por su cuenta (cuentan para la zona y dan Conciencia Ecológica)
     const credit = this.structures.update(deltaTime, time, this.biomeGenerator)
+    this.state.zoneProgress = Math.min(
+      100,
+      (this.collectedInZone / required) * 100,
+    )
+
+    // HUD del boost de giro
+    const spinBoost = this.turtle.getSpinBoost()
+    const spinBoostActive = this.turtle.isSpinBoosting()
+    this.uiManager.updateSpinBoostHud(
+      spinBoost / 1.6, // normalizado a 0..1 respecto al máximo
+      spinBoostActive,
+    )
     this.state.debrisCollected += credit.count
     this.state.ecoAwareness += credit.eco
     this.collectedInZone += credit.count
@@ -567,6 +638,7 @@ export class Game {
       drift > 0
         ? base * drift * (1 - this.turtle.stats.toxicityResistance)
         : base * drift // la recuperación no depende de la resistencia
+
     if (!this.godMode) {
       this.state.toxicity = Math.max(0, this.state.toxicity + rate * deltaTime)
     }
@@ -589,22 +661,46 @@ export class Game {
     const time = this.timer.getElapsed()
 
     this.update(deltaTime, time)
+
     if (this.screen !== "run") this.orbitCamera(time)
-    this.transition.update(deltaTime)
+
+    // La transición NO avanza si el juego está pausado
+    if (!this.paused) {
+      this.transition.update(deltaTime)
+    }
+
+    // Reintentar advanceBiome si quedó pendiente
+    if (
+      this.pendingAdvance &&
+      !this.transition.isActive() &&
+      !this.paused &&
+      this.screen === "run"
+    ) {
+      this.pendingAdvance = false
+      this.advanceBiome()
+    }
 
     const simDelta = this.paused ? 0 : deltaTime // en pausa, la estela queda congelada
 
     // Estela de burbujas mientras se usa el impulso y la tortuga avanza de verdad
+    // Intensidad del boost: si hay spin boost o boost normal, las burbujas
+    // salen más grandes y más rápido
+    const spinIntensity = this.turtle.isSpinBoosting()
+      ? Math.min(1, this.turtle.getSpinBoost() / 1.6)
+      : 0
+
     const boosting =
       this.state.isRunning &&
       !this.transition.blocksGameplay &&
-      this.input.boost &&
+      (this.input.boost || this.turtle.isSpinBoosting()) &&
       this.turtle.getSpeed() > 1
+
     this.bubbles.update(
       simDelta,
       this.turtle.getPosition(),
       this.turtle.mesh.rotation.y,
       boosting,
+      spinIntensity,
     )
 
     this.pointLights.forEach((light, i) => {

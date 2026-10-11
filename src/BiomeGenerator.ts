@@ -177,9 +177,13 @@ export class BiomeGenerator {
   private baseColor = new THREE.Color()
   private waterColor = new THREE.Color()
   private visualRatio = 1
+  private lastAppliedRatio = -1 // para evitar recalcular niebla/fog cada frame
 
   private particlePositions: Float32Array = new Float32Array(0)
   private particleVelocities: Float32Array = new Float32Array(0)
+
+  // Caché de bounds: se invalida al cambiar de bioma
+  private cachedBounds: WorldBounds | null = null
 
   constructor(scene: THREE.Scene) {
     this.scene = scene
@@ -198,23 +202,32 @@ export class BiomeGenerator {
   }
 
   public generateBiome(biomeKey: BiomeKey, rng: Rng): void {
+    // Liberar recursos del bioma anterior antes de reemplazarlos
+    this.disposeDebris()
+    this.disposeFloor()
+    this.disposeParticles()
+
     this.currentBiome = BIOMES[biomeKey]
     this.currentAmbience = BIOME_AMBIENCE[biomeKey]
 
-    this.debrisGroup.clear()
-    this.debrisList = []
-
     this.baseColor.setRGB(...this.currentBiome.waterColor)
-    this.scene.background = this.waterColor
+
+    // El fondo se asigna como copia para no compartir referencia mutable
+    this.waterColor.copy(this.baseColor)
+    this.scene.background = this.waterColor.clone()
 
     this.scene.fog = new THREE.FogExp2(
-      this.baseColor,
+      this.baseColor.clone(),
       this.currentBiome.fogDensity,
     )
 
     this.visualRatio = 1
+    this.lastAppliedRatio = -1 // forzar primer applyVisuals
     this.applyVisuals()
     this.applyLighting()
+
+    // Invalidar caché de bounds al cambiar de bioma
+    this.cachedBounds = null
 
     const bounds = this.getBounds()
 
@@ -255,6 +268,36 @@ export class BiomeGenerator {
     this.generateParticles(rng)
   }
 
+  // Dispose de recursos
+
+  private disposeDebris(): void {
+    for (const debris of this.debrisList) {
+      debris.dispose()
+    }
+    this.debrisGroup.clear()
+    this.debrisList = []
+  }
+
+  private disposeFloor(): void {
+    if (!this.floor) return
+
+    this.scene.remove(this.floor)
+    this.floor.geometry.dispose()
+    ;(this.floor.material as THREE.Material).dispose()
+    this.floor = undefined
+  }
+
+  private disposeParticles(): void {
+    if (!this.particles) return
+
+    this.scene.remove(this.particles)
+    this.particles.geometry.dispose()
+    ;(this.particles.material as THREE.Material).dispose()
+    this.particles = undefined
+  }
+
+  // Luces
+
   private applyLighting(): void {
     if (!this.ambientLight || !this.hemisphereLight) return
 
@@ -262,20 +305,17 @@ export class BiomeGenerator {
     this.ambientLight.color.set(this.currentAmbience.lightColor)
 
     this.hemisphereLight.intensity = this.currentAmbience.ambientLight * 0.65
-
     this.hemisphereLight.color.set(this.currentAmbience.lightColor)
   }
 
+  // Terreno
+
   private generateTerrain(): void {
-    if (this.floor) {
-      this.scene.remove(this.floor)
-      this.floor.geometry.dispose()
-      ;(this.floor.material as THREE.Material).dispose()
-    }
+    this.disposeFloor()
 
     const { floorAmplitude, floorFrequency, floorDetail } = this.currentAmbience
 
-    const geometry = new THREE.PlaneGeometry(220, 220, 64, 64)
+    const geometry = new THREE.PlaneGeometry(220, 220, 48, 48)
     const positions = geometry.attributes.position.array as Float32Array
 
     for (let i = 0; i < positions.length; i += 3) {
@@ -345,12 +385,10 @@ export class BiomeGenerator {
     return -this.currentBiome.depth + mainWave + detail
   }
 
+  // Particulas
+
   private generateParticles(rng: Rng): void {
-    if (this.particles) {
-      this.scene.remove(this.particles)
-      this.particles.geometry.dispose()
-      ;(this.particles.material as THREE.Material).dispose()
-    }
+    this.disposeParticles()
 
     const count = this.currentAmbience.particleCount
     const bounds = this.getBounds()
@@ -391,7 +429,11 @@ export class BiomeGenerator {
     this.scene.add(this.particles)
   }
 
+  // Bounds con caché
+
   public getBounds(): WorldBounds {
+    if (this.cachedBounds) return this.cachedBounds
+
     const floorY = -this.currentBiome.depth
     const { floorAmplitude, floorDetail } = this.currentAmbience
 
@@ -399,12 +441,16 @@ export class BiomeGenerator {
     const maxRise = floorAmplitude * (1 + 0.25 * floorDetail)
     const bandStart = Math.max(BAND_ABOVE_FLOOR, maxRise + FLOOR_CLEARANCE)
 
-    return {
+    this.cachedBounds = {
       halfSize: HALF_SIZE + 5,
       minY: floorY + bandStart,
       maxY: floorY + bandStart + BAND_HEIGHT,
     }
+
+    return this.cachedBounds
   }
+
+  // Debris
 
   public updateDebris(
     turtlePosition: THREE.Vector3,
@@ -418,17 +464,14 @@ export class BiomeGenerator {
       const debris = this.debrisList[i]
       debris.animate(time, deltaTime)
 
+      if (debris.removed) {
+        this.debrisList.splice(i, 1)
+        continue
+      }
+
       if (debris.mesh.position.distanceTo(turtlePosition) < collectionRadius) {
         collected.push(debris)
-        debris.removed = true
-
-        this.debrisGroup.remove(debris.mesh)
-        this.debrisList.splice(i, 1)
-
-        this.pollutionRemaining = Math.max(
-          0,
-          this.pollutionRemaining - debris.pollution,
-        )
+        this.removeDebrisInternal(debris, i)
       }
     }
 
@@ -439,17 +482,29 @@ export class BiomeGenerator {
     return collected
   }
 
+  /**
+   * Elimina un debris del bioma. Si el debris no está en la lista,
+   * no hace nada. No llama a dispose() para no liberar materiales
+   * compartidos; solo quita del grupo y actualiza la contaminación.
+   */
   public removeDebris(debris: Debris): void {
     if (debris.removed) return
 
-    debris.removed = true
-    this.debrisGroup.remove(debris.mesh)
-
     const index = this.debrisList.indexOf(debris)
-
-    if (index >= 0) {
-      this.debrisList.splice(index, 1)
+    if (index < 0) {
+      // El debris ya no pertenece a este bioma; solo marcamos
+      debris.removed = true
+      return
     }
+
+    this.removeDebrisInternal(debris, index)
+  }
+
+  private removeDebrisInternal(debris: Debris, index: number): void {
+    debris.removed = true
+
+    this.debrisGroup.remove(debris.mesh)
+    this.debrisList.splice(index, 1)
 
     this.pollutionRemaining = Math.max(
       0,
@@ -467,6 +522,8 @@ export class BiomeGenerator {
       : 0
   }
 
+  // Visuals
+
   public updateVisuals(deltaTime: number): void {
     const target = this.getPollutionRatio()
 
@@ -474,7 +531,12 @@ export class BiomeGenerator {
       (target - this.visualRatio) *
       (1 - Math.exp(-VISUAL_SMOOTHING * deltaTime))
 
-    this.applyVisuals()
+    // Solo recalcular niebla/fog si el ratio cambió de forma apreciable
+    if (Math.abs(this.visualRatio - this.lastAppliedRatio) > 0.001) {
+      this.applyVisuals()
+      this.lastAppliedRatio = this.visualRatio
+    }
+
     this.updateParticles(deltaTime)
   }
 
@@ -525,10 +587,21 @@ export class BiomeGenerator {
 
     fog.color.copy(this.waterColor)
 
+    // Actualizar el fondo sin compartir referencia con waterColor
+    if (this.scene.background instanceof THREE.Color) {
+      this.scene.background.copy(this.waterColor)
+    } else {
+      this.scene.background = this.waterColor.clone()
+    }
+
     fog.density =
       this.currentBiome.fogDensity *
       (CLEAN_FOG_FACTOR + (1 - CLEAN_FOG_FACTOR) * ratio)
   }
+
+  /* ---------------------------------------------
+     Accesores
+  --------------------------------------------- */
 
   public getDebrisList(): Debris[] {
     return this.debrisList
@@ -544,5 +617,13 @@ export class BiomeGenerator {
 
   public getBiomeName(): string {
     return this.currentBiome.name
+  }
+
+  /** Libera todos los recursos del bioma actual. Llamar al destruir el juego. */
+  public dispose(): void {
+    this.disposeDebris()
+    this.disposeFloor()
+    this.disposeParticles()
+    this.props.clear()
   }
 }
