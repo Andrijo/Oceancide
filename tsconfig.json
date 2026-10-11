@@ -3,18 +3,29 @@
     "target": "es2023",
     "module": "esnext",
     "lib": ["ES2023", "DOM"],
-    "types": ["vite/client"],
+    "types": ["vite/client", "node"],
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
 
-    /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
 
-    /* Linting */
+    "paths": {
+      "@/*": ["./src/*"],
+      "@core/*": ["./src/core/*"],
+      "@world/*": ["./src/world/*"],
+      "@entities/*": ["./src/entities/*"],
+      "@ui/*": ["./src/ui/*"],
+      "@cards/*": ["./src/cards/*"],
+      "@tycoon/*": ["./src/tycoon/*"],
+      "@events/*": ["./src/events/*"],
+      "@relics/*": ["./src/relics/*"],
+      "@drones/*": ["./src/drones/*"],
+      "@bosses/*": ["./src/bosses/*"]
+    },
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
