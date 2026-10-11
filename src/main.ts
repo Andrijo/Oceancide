@@ -1,6 +1,6 @@
 // src/main.ts
 import "./styles.css"
-import { Game } from "./Game"
+import { Game } from "@core/Game"
 
 document.addEventListener("DOMContentLoaded", () => {
   new Game()

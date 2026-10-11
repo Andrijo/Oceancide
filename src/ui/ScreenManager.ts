@@ -1,6 +1,6 @@
 // src/ScreenManager.ts
-import { BIOME_ORDER, BIOMES, type RunOutcome, type RunSummary } from "./types"
-import type { MetaState } from "./MetaState"
+import { BIOME_ORDER, BIOMES, type RunOutcome, type RunSummary } from "@core/types"
+import type { MetaState } from "@core/MetaState"
 
 export interface ScreenCallbacks {
   onStartRun(): void

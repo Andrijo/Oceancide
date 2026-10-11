@@ -5,10 +5,10 @@ import {
   type BiomeConfig,
   type BiomeKey,
   type WorldBounds,
-} from "./types"
+} from "@core/types"
 import { BiomeProps } from "./BiomeProps"
-import { Debris } from "./Debris"
-import type { Rng } from "./rng"
+import { Debris } from "@entities/Debris"
+import type { Rng } from "@core/rng"
 
 const WHITE = new THREE.Color(1, 1, 1)
 const CLEAN_FOG_FACTOR = 0.55

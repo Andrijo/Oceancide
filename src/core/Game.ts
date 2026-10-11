@@ -3,30 +3,30 @@
 // Inicia la escena, la cámara, la tortuga, el generador de biomas y la UI.
 
 import * as THREE from "three"
-import { Turtle } from "./Turtle"
-import { BiomeGenerator } from "./BiomeGenerator"
-import { UIManager } from "./UIManager"
-import { TouchControls } from "./TouchControls"
-import { BubbleTrail } from "./BubbleTrail"
-import { BiomeTransition } from "./BiomeTransition"
-import { DevMenu } from "./DevMenu"
-import { StructureManager } from "./StructureManager"
-import { STRUCTURES, type StructureKey } from "./StructureConfig"
-import { ScreenManager } from "./ScreenManager"
+import { Turtle } from "@entities/Turtle"
+import { BiomeGenerator } from "@world/BiomeGenerator"
+import { UIManager } from "@ui/UIManager"
+import { TouchControls } from "@ui/TouchControls"
+import { DevMenu } from "@ui/DevMenu"
+import { BubbleTrail } from "@entities/BubbleTrail"
+import { BiomeTransition } from "@world/BiomeTransition"
+import { StructureManager } from "@world/StructureManager"
+import { STRUCTURES, type StructureKey } from "@world/StructureConfig"
+import { ScreenManager } from "@ui/ScreenManager"
 import {
   SaveManager,
   applyRunToMeta,
   computeEco,
   type MetaState,
-} from "./MetaState"
-import { Rng, deriveSeed, randomSeed } from "./rng"
+} from "@core/MetaState"
+import { Rng, deriveSeed, randomSeed } from "@core/rng"
 import {
   BIOME_ORDER,
   type GameState,
   type InputState,
   type RunOutcome,
   type RunSummary,
-} from "./types"
+} from "@core/types"
 
 const MAX_DELTA = 0.1 // Restringe el deltaTime para que no se rompa la física si hay un lagazo o se cambia de pestaña.
 const TOXICITY_SCALE = 3 // toxicityRate 0.1 => ~0.3 de toxicidad por segundo.

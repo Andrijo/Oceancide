@@ -1,6 +1,6 @@
 // src/TouchControls.ts
 
-import type { InputState } from "./types"
+import type { InputState } from "@core/types"
 
 const EDGE_MARGIN = 10
 const DEADZONE = 0.3

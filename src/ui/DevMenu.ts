@@ -1,6 +1,6 @@
 // src/DevMenu.ts
 
-import { BIOME_ORDER, BIOMES } from "./types"
+import { BIOME_ORDER, BIOMES } from "@core/types"
 
 export interface DevApi {
   getBiomeIndex(): number
