@@ -14,34 +14,14 @@
 
 @font-face {
   font-family: "Montserrat";
-  src: url("/public/fonts/montserrat-regular.woff") format("woff");
+  src: url("/public/fonts/Montserrat-Regular.woff") format("woff");
   font-weight: normal;
   font-display: swap;
 }
 
 @font-face {
   font-family: "Geist-Semibold";
-  src: url("/public/fonts/Geist-Semibold.woff") format("woff");
+  src: url("/public/fonts/Geist-SemiBold.woff") format("woff");
   font-weight: bold;
   font-display: swap;
-}
-
-@keyframes menuBubbleFloat {
-  0% {
-    transform: translate3d(0, 0, 0) scale(0.92);
-    opacity: 0;
-  }
-
-  15% {
-    opacity: 0.55;
-  }
-
-  80% {
-    opacity: 0.42;
-  }
-
-  100% {
-    transform: translate3d(18px, -170px, 0) scale(1.12);
-    opacity: 0;
-  }
 }

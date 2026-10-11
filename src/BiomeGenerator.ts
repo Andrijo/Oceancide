@@ -19,6 +19,7 @@ const HALF_SIZE = 40
 const DEBRIS_BASE_COUNT = 200
 const BAND_ABOVE_FLOOR = 6
 const BAND_HEIGHT = 20
+const FLOOR_CLEARANCE = 2 // margen sobre la cima más alta del relieve
 
 type BiomeAmbience = {
   floorAmplitude: number
@@ -392,11 +393,16 @@ export class BiomeGenerator {
 
   public getBounds(): WorldBounds {
     const floorY = -this.currentBiome.depth
+    const { floorAmplitude, floorDetail } = this.currentAmbience
+
+    // Altura máxima que puede alcanzar el relieve (las dos ondas coincidiendo)
+    const maxRise = floorAmplitude * (1 + 0.25 * floorDetail)
+    const bandStart = Math.max(BAND_ABOVE_FLOOR, maxRise + FLOOR_CLEARANCE)
 
     return {
       halfSize: HALF_SIZE + 5,
-      minY: floorY + BAND_ABOVE_FLOOR,
-      maxY: floorY + BAND_ABOVE_FLOOR + BAND_HEIGHT,
+      minY: floorY + bandStart,
+      maxY: floorY + bandStart + BAND_HEIGHT,
     }
   }
 
