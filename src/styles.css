@@ -25,3 +25,23 @@
   font-weight: bold;
   font-display: swap;
 }
+
+@keyframes menuBubbleFloat {
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.92);
+    opacity: 0;
+  }
+
+  15% {
+    opacity: 0.55;
+  }
+
+  80% {
+    opacity: 0.42;
+  }
+
+  100% {
+    transform: translate3d(18px, -170px, 0) scale(1.12);
+    opacity: 0;
+  }
+}

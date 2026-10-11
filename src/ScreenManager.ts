@@ -1,6 +1,4 @@
 // src/ScreenManager.ts
-// Pantallas del juego: Refugio (hub) y resumen de run.
-
 import { BIOME_ORDER, BIOMES, type RunOutcome, type RunSummary } from "./types"
 import type { MetaState } from "./MetaState"
 
@@ -13,7 +11,6 @@ export interface ScreenCallbacks {
 const titleFONT = '"Pogonia", Tahoma, Geneva, Verdana, sans-serif'
 const paragraphFONT = '"Geist-SemiBold", Tahoma, Geneva, Verdana, sans-serif'
 
-// Elementos del HUD que se ocultan fuera de la run
 const HUD_IDS = [
   "ui-overlay",
   "toxicity-bar",
@@ -24,9 +21,9 @@ const HUD_IDS = [
 ]
 
 const OUTCOME_TITLES: Record<RunOutcome, string> = {
-  died: "¡Se acabó! Lo lograron, la toxicidad ganó, el océano.",
-  completed: "¡Has limpiado el océano!",
-  abandoned: "Has abandonado la run. El océano sigue su curso.",
+  died: "¡Se acabó! La toxicidad ganó.",
+  completed: "¡Has ayudado a limpiar el océano!",
+  abandoned: "Has abandonado la run. El océano seguirá su curso.",
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -36,15 +33,20 @@ function el<K extends keyof HTMLElementTagNameMap>(
 ): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag)
   node.style.cssText = css
-  if (text !== undefined) node.textContent = text
+
+  if (text !== undefined) {
+    node.textContent = text
+  }
+
   return node
 }
 
 function formatTime(seconds: number): string {
   const total = Math.floor(seconds)
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${m}:${s.toString().padStart(2, "0")}`
+  const minutes = Math.floor(total / 60)
+  const remainingSeconds = total % 60
+
+  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`
 }
 
 export class ScreenManager {
@@ -55,30 +57,45 @@ export class ScreenManager {
   constructor(callbacks: ScreenCallbacks) {
     this.callbacks = callbacks
 
+    this.ensureBubbleAnimation()
+
     this.overlay = el(
       "div",
-      `position: absolute; inset: 0; z-index: 400; display: none;
-       align-items: center; justify-content: center;
-       background: rgba(0, 20, 40, 0.55); backdrop-filter: blur(3px);
-       font-family: ${paragraphFONT};`,
+      `position: absolute;
+      inset: 0;
+      z-index: 400;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      box-sizing: border-box;
+      background:
+        radial-gradient(
+          circle at 50% 20%,
+          rgba(24, 121, 156, 0.20),
+          transparent 48%
+        ),
+        rgba(0, 12, 30, 0.46);
+      backdrop-filter: blur(4px);
+      font-family: ${paragraphFONT};`,
     )
+
     document.getElementById("game-container")!.appendChild(this.overlay)
 
-    // Enter = acción principal de la pantalla abierta
-    window.addEventListener("keydown", (e) => {
-      if (e.code === "Enter" && !e.repeat && this.primaryAction) {
-        e.preventDefault()
+    window.addEventListener("keydown", (event) => {
+      if (event.code === "Enter" && !event.repeat && this.primaryAction) {
+        event.preventDefault()
         this.primaryAction()
       }
     })
   }
 
-  /** Cierra cualquier pantalla y muestra el HUD de la run. */
   public hide(): void {
     this.overlay.style.display = "none"
     this.overlay.replaceChildren()
     this.primaryAction = null
     this.setHudVisible(true)
+
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur()
     }
@@ -86,28 +103,77 @@ export class ScreenManager {
 
   public showHub(meta: MetaState): void {
     const bestKey = BIOME_ORDER[meta.bestBiomeIndex]
-    const best = bestKey
+
+    const bestBiome = bestKey
       ? `${meta.bestBiomeIndex + 1}. ${BIOMES[bestKey].name}`
       : "—"
+
     const start = () => this.callbacks.onStartRun()
 
+    const title = el(
+      "div",
+      `width: 100%;
+      box-sizing: border-box;
+      overflow: visible;
+      margin-bottom: 50px;
+      font-family: ${titleFONT};
+      font-size: clamp(68px, 10vw, 142px);
+      font-weight: 900;
+      font-stretch: condensed;
+      line-height: 0.72;
+      letter-spacing: -0.045em;
+      text-align: center;
+      white-space: nowrap;`,
+    )
+
+    const ocean = el(
+      "span",
+      `color: #ffffff;
+      text-shadow:
+        0 5px 0 rgba(0, 44, 70, 0.72),
+        0 11px 18px rgba(0, 5, 18, 0.65),
+        0 0 14px rgba(220, 252, 255, 0.35);`,
+      "OCEAN",
+    )
+
+    const cide = el(
+      "span",
+      `color: #efffff;
+      background:
+        linear-gradient(
+          180deg,
+          #ffffff 0%,
+          #d8fbff 25%,
+          #7cecff 55%,
+          #129ec5 100%
+        );
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow:
+        0 5px 0 rgba(0, 62, 94, 0.92),
+        0 10px 0 rgba(0, 40, 65, 0.72),
+        0 16px 20px rgba(7, 26, 73, 0.68),
+        0 0 20px rgba(102, 241, 255, 0.42);`,
+      "CIDE",
+    )
+
+    title.append(ocean, cide)
+
     const card = this.makeCard()
+
     card.append(
-      el(
-        "div",
-        `font-size: 54px; letter-spacing: 1.2px; text-align: center; font-family: ${titleFONT}; z-index: 2000;`,
-        "OCEANCIDE",
-      ),
+      title,
       this.statList([
-        ["Conciencia Ecológica", meta.ecoPoints.toLocaleString("es")],
-        ["Mejor zona", best],
+        ["Conciencia ecológica", meta.ecoPoints.toLocaleString("es")],
+        ["Mejor zona", bestBiome],
         [
           "Runs jugadas",
           `${meta.runsPlayed} (${meta.runsCompleted} completadas)`,
         ],
         ["Desechos recolectados", meta.totalDebris.toLocaleString("es")],
       ]),
-      this.makeButton("Iniciar run", start),
+      this.makeButton("Empezar", start),
       this.makeButton(
         "Eliminar progreso",
         () => {
@@ -122,6 +188,7 @@ export class ScreenManager {
         false,
       ),
     )
+
     this.open(card, start)
   }
 
@@ -129,58 +196,188 @@ export class ScreenManager {
     const rows: [string, string][] = [
       ["Zona alcanzada", `${summary.biomeIndex + 1}. ${summary.biomeName}`],
       ["Desechos recolectados", String(summary.debrisCollected)],
-      ["Tiempo", formatTime(summary.durationSeconds)],
-      ["Conciencia Ecológica", `+${summary.ecoBase}`],
+      ["Tiempo de inmersión", formatTime(summary.durationSeconds)],
+      ["Conciencia ecológica", `+${summary.ecoBase}`],
     ]
+
     if (summary.ecoBonus > 0) {
       rows.push(["Bono por completar", `+${summary.ecoBonus}`])
     }
-    rows.push(["Total en el Refugio", meta.ecoPoints.toLocaleString("es")])
+
+    rows.push(["Total en el refugio", meta.ecoPoints.toLocaleString("es")])
 
     const again = () => this.callbacks.onStartRun()
 
     const card = this.makeCard()
+
     card.append(
       el(
         "div",
-        `font-size: 24px; font-weight: bold; text-align: center; line-height: 1.70; font-family: ${titleFONT};`,
+        `font-size: clamp(32px, 5vw, 52px);
+        font-weight: bold;
+        text-align: center;
+        line-height: 1.1;
+        font-family: ${titleFONT};
+        color: #d9fbff;`,
         OUTCOME_TITLES[summary.outcome],
       ),
       this.statList(rows),
       el(
         "div",
-        `font-size: 14px; opacity: 0.8; text-align: center; font-family: ${paragraphFONT};`,
+        `font-size: 13px;
+        opacity: 0.78;
+        text-align: center;
+        color: #bcebf6;
+        font-family: ${paragraphFONT};`,
         `Semilla: ${summary.seed}`,
       ),
-      this.makeButton("Nueva run", again),
+      this.makeButton("Nueva inmersión", again),
       this.makeButton(
         "Volver al inicio",
         () => this.callbacks.onReturnToHub(),
         false,
       ),
     )
+
     this.open(card, again)
   }
 
-  /** Menú de pausa: Continuar (Enter) o abandonar la run. */
   public showPause(onResume: () => void, onAbandon: () => void): void {
     const card = this.makeCard()
+
     card.append(
       el(
         "div",
-        `font-size: 54px; letter-spacing: 1.2px; text-align: center; font-family: ${titleFONT};`,
+        `font-size: clamp(52px, 8vw, 78px);
+        line-height: 0.9;
+        letter-spacing: 0.12em;
+        text-align: center;
+        font-family: ${titleFONT};
+        color: #d9fbff;
+        text-shadow:
+          0 0 12px rgba(83, 226, 255, 0.55),
+          0 6px 16px rgba(0, 0, 0, 0.75);`,
         "PAUSA",
       ),
-      this.makeButton("Continuar", onResume),
+      el(
+        "div",
+        `text-align: center;
+        font: 700 13px ${paragraphFONT};
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: rgba(204, 245, 255, 0.72);`,
+        "La inmersión está detenida",
+      ),
+      this.makeButton("Reanudar", onResume),
       this.makeButton("Abandonar", onAbandon, false),
     )
+
     this.open(card, onResume)
   }
 
-  // ---------- Helpers ----------
+  private ensureBubbleAnimation(): void {
+    if (document.getElementById("menu-bubble-animation")) return
 
-  private open(card: HTMLElement, primary: () => void): void {
-    this.overlay.replaceChildren(card)
+    const style = document.createElement("style")
+    style.id = "menu-bubble-animation"
+
+    style.textContent = `
+      @keyframes menuBubbleFloat {
+        0% {
+          transform: translate3d(0, 0, 0) scale(0.92);
+          opacity: 0;
+        }
+
+        15% {
+          opacity: 0.55;
+        }
+
+        80% {
+          opacity: 0.42;
+        }
+
+        100% {
+          transform: translate3d(18px, -170px, 0) scale(1.12);
+          opacity: 0;
+        }
+      }
+    `
+
+    document.head.appendChild(style)
+  }
+
+  private makeCornerBubbles(): HTMLElement {
+    const layer = el(
+      "div",
+      `position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;`,
+    )
+
+    const bubbles = [
+      { size: 94, left: "4%", bottom: "8%", delay: "0s", duration: "7s" },
+      { size: 48, left: "10%", bottom: "20%", delay: "-2s", duration: "6s" },
+      { size: 82, left: "2%", bottom: "-4%", delay: "-4s", duration: "9s" },
+      { size: 52, left: "18%", bottom: "2%", delay: "-1s", duration: "7s" },
+      { size: 44, left: "24%", bottom: "14%", delay: "-5s", duration: "6s" },
+      { size: 60, left: "31%", bottom: "-3%", delay: "-3s", duration: "8s" },
+      { size: 46, left: "40%", bottom: "9%", delay: "-6s", duration: "6s" },
+      { size: 60, left: "48%", bottom: "-5%", delay: "-2s", duration: "9s" },
+      { size: 42, left: "57%", bottom: "17%", delay: "-4s", duration: "5s" },
+      { size: 56, left: "65%", bottom: "3%", delay: "-7s", duration: "8s" },
+      { size: 48, left: "74%", bottom: "12%", delay: "-1s", duration: "6s" },
+      { size: 58, left: "83%", bottom: "-4%", delay: "-5s", duration: "10s" },
+
+      { size: 38, right: "6%", bottom: "8%", delay: "-1s", duration: "8s" },
+      { size: 56, right: "13%", bottom: "21%", delay: "-3s", duration: "6s" },
+    ]
+
+    for (const bubble of bubbles) {
+      const position = [
+        bubble.left ? `left: ${bubble.left};` : "",
+        bubble.right ? `right: ${bubble.right};` : "",
+        bubble.top ? `top: ${bubble.top};` : "",
+        bubble.bottom ? `bottom: ${bubble.bottom};` : "",
+      ].join(" ")
+
+      const node = el(
+        "div",
+        `position: absolute;
+      ${position}
+      width: ${bubble.size}px;
+      height: ${bubble.size}px;
+      border-radius: 50%;
+      box-sizing: border-box;
+      opacity: 0.55;
+      background:
+        radial-gradient(
+          circle at 30% 25%,
+          rgba(255, 255, 255, 0.95) 0%,
+          rgba(23, 75, 164, 0.28) 18%,
+          rgba(71, 211, 238, 0.12) 48%,
+          rgba(6, 107, 144, 0.05) 72%,
+          transparent 73%
+        );
+      border: 1px solid rgba(196, 250, 255, 0.72);
+      box-shadow:
+        inset -3px -4px 7px rgba(0, 77, 110, 0.22),
+        inset 2px 2px 5px rgba(255, 255, 255, 0.35),
+        0 0 12px rgba(91, 236, 255, 0.28);
+      animation:
+        menuBubbleFloat ${bubble.duration} ease-in-out ${bubble.delay} infinite;`,
+      )
+
+      layer.append(node)
+    }
+
+    return layer
+  }
+
+  private open(container: HTMLElement, primary: () => void): void {
+    this.overlay.replaceChildren(this.makeCornerBubbles(), container)
+
     this.overlay.style.display = "flex"
     this.primaryAction = primary
     this.setHudVisible(false)
@@ -189,38 +386,81 @@ export class ScreenManager {
   private setHudVisible(visible: boolean): void {
     for (const id of HUD_IDS) {
       const node = document.getElementById(id)
-      if (node) node.style.display = visible ? "" : "none"
+
+      if (node) {
+        node.style.display = visible ? "" : "none"
+      }
     }
   }
 
   private makeCard(): HTMLElement {
     return el(
       "div",
-      `width: min(420px, 90vw); max-height: 90dvh; overflow-y: auto;
-       padding: 25px; display: flex; flex-direction: column; gap: 14px;
-       color: #f7f7ff; text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.7);
-       background: none;`,
+      `position: relative;
+      z-index: 1;
+      width: min(900px, 92vw);
+      max-height: 88dvh;
+      overflow-y: auto;
+      overflow-x: hidden;
+      box-sizing: border-box;
+      padding: clamp(20px, 4vw, 48px);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      color: #f7f7ff;
+      background: transparent;
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
+      backdrop-filter: none;`,
     )
   }
 
   private statList(rows: [string, string][]): HTMLElement {
-    const list = el("div", "display: flex; flex-direction: column; gap: 8px;")
+    const list = el(
+      "div",
+      `display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px 40px;
+      padding: 12px 0 6px;
+      margin-bottom: 18px;
+      `,
+    )
+
     for (const [label, value] of rows) {
       const row = el(
         "div",
-        `display: flex; justify-content: space-between; gap: 16px;
-         padding: 10px 12px; background: rgba(0, 0, 0, 0.45); border-radius: 8px;`,
+        `display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        min-width: 0;
+        font-family: ${paragraphFONT};`,
       )
+
       row.append(
         el(
           "span",
-          `opacity: 0.85; font-size: 14px; font-family: ${paragraphFONT};`,
+          `min-width: 0;
+          font-size: 16px;
+          color: rgba(227, 249, 255, 0.82);`,
           label,
         ),
-        el("span", `text-align: right; font-family: ${paragraphFONT};`, value),
+        el(
+          "span",
+          `min-width: 0;
+          text-align: right;
+          overflow-wrap: anywhere;
+          font-size: 16px;
+          color: #9cf3ff;
+          font-weight: bold;`,
+          value,
+        ),
       )
+
       list.append(row)
     }
+
     return list
   }
 
@@ -231,13 +471,43 @@ export class ScreenManager {
   ): HTMLButtonElement {
     const btn = el(
       "button",
-      `min-height: 48px; padding: 12px 22px; cursor: pointer;
-       font: bold 16px ${titleFONT}; color: #f7f7ff; text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.7);
-       background: none; border: none; outline: none;
-       border: 2px solid rgba(100, 200, 255, 0.4); border-radius: 10px;`,
+      `width: 100%;
+      min-height: 58px;
+      padding: 12px 22px;
+      border-radius: 12px 6px;
+      cursor: pointer;
+      background: transparent;
+      font: bold 19px ${titleFONT};
+      letter-spacing: 0.04em;
+      color: ${primary ? "#d9f8ff" : "#d9f8ff"};
+      transition:
+        transform 150ms ease,
+        filter 150ms ease,
+        background 150ms ease;`,
       label,
     )
+
+    btn.addEventListener("mouseenter", () => {
+      btn.style.transform = "translateY(-2px)"
+      btn.style.filter = "brightness(1.82)"
+    })
+
+    btn.addEventListener("mouseleave", () => {
+      btn.style.transform = "translateY(0)"
+      btn.style.filter = "brightness(1)"
+    })
+
+    btn.addEventListener("focus", () => {
+      btn.style.outline = "2px solid #baf8ff"
+      btn.style.outlineOffset = "3px"
+    })
+
+    btn.addEventListener("blur", () => {
+      btn.style.outline = "none"
+    })
+
     btn.addEventListener("click", onClick)
+
     return btn
   }
 }
