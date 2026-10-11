@@ -338,7 +338,6 @@ export class ScreenManager {
       const position = [
         bubble.left ? `left: ${bubble.left};` : "",
         bubble.right ? `right: ${bubble.right};` : "",
-        bubble.top ? `top: ${bubble.top};` : "",
         bubble.bottom ? `bottom: ${bubble.bottom};` : "",
       ].join(" ")
 
