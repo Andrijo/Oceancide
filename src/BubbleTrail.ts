@@ -9,7 +9,7 @@ const BUBBLE_COLORS = [
   new THREE.Color(0x59a6ff), // Azul
   new THREE.Color(0xa45cff), // Violeta
   new THREE.Color(0xff5fd2), // Rosa
-  new THREE.Color(0xffff), // Blanco
+  new THREE.Color(0xffffff), // Blanco
 ]
 
 export class BubbleTrail {

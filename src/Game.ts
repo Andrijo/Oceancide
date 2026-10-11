@@ -236,9 +236,18 @@ export class Game {
   }
 
   private handleKeyDown(e: KeyboardEvent): void {
-    // Enter / P: pausar o continuar
-    if (e.code === "Enter" || e.code === "Escape") {
+    // Escape: pausar o continuar.
+    if (e.code === "Escape") {
       if (!e.repeat) this.togglePause()
+      return
+    }
+    // Enter: solo pausa. Reanudar con Enter lo gestiona ScreenManager; si Game también
+    // lo alternara, la pausa se reabriría en el mismo evento.
+    if (e.code === "Enter") {
+      if (!e.repeat && !e.defaultPrevented && !this.paused) {
+        this.setPaused(true)
+        e.preventDefault() // ScreenManager no debe tomarlo como "Reanudar"
+      }
       return
     }
     if (this.paused) return // en pausa no se atienden los demás controles

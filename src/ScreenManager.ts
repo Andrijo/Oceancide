@@ -83,7 +83,12 @@ export class ScreenManager {
     document.getElementById("game-container")!.appendChild(this.overlay)
 
     window.addEventListener("keydown", (event) => {
-      if (event.code === "Enter" && !event.repeat && this.primaryAction) {
+      if (
+        event.code === "Enter" &&
+        !event.repeat &&
+        !event.defaultPrevented &&
+        this.primaryAction
+      ) {
         event.preventDefault()
         this.primaryAction()
       }
