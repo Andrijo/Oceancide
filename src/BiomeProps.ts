@@ -24,6 +24,28 @@ function randomColor(rng: Rng, base: number, variation = 0.08): THREE.Color {
   return color
 }
 
+/* ---------------------------------------------
+   Caché de geometrías compartidas
+--------------------------------------------- */
+
+const geometryCache = new Map<string, THREE.BufferGeometry>()
+
+function cachedGeometry(
+  key: string,
+  factory: () => THREE.BufferGeometry,
+): THREE.BufferGeometry {
+  let geometry = geometryCache.get(key)
+  if (!geometry) {
+    geometry = factory()
+    geometryCache.set(key, geometry)
+  }
+  return geometry
+}
+
+/* ---------------------------------------------
+   Fábricas de props
+--------------------------------------------- */
+
 function createRock(rng: Rng): THREE.Object3D {
   const geometry = new THREE.DodecahedronGeometry(1 + rng.range(0, 2), 0)
 
@@ -63,15 +85,18 @@ function createCoral(rng: Rng): THREE.Object3D {
 
   const branches = rng.int(5) + 5
 
+  const branchGeometry = cachedGeometry(
+    "coral-branch",
+    () => new THREE.CylinderGeometry(0.07, 0.16, 1, 5),
+  )
+
   for (let i = 0; i < branches; i++) {
     const height = rng.range(0.8, 2.3)
 
-    const branch = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.07, 0.16, height, 5),
-      material,
-    )
+    const branch = new THREE.Mesh(branchGeometry, material)
 
     branch.position.set(rng.range(-0.4, 0.4), height / 2, rng.range(-0.4, 0.4))
+    branch.scale.set(1, height, 1)
 
     branch.rotation.set(
       rng.range(-0.3, 0.3),
@@ -87,8 +112,13 @@ function createCoral(rng: Rng): THREE.Object3D {
 }
 
 function createShell(rng: Rng): THREE.Object3D {
+  const geometry = cachedGeometry(
+    "shell",
+    () => new THREE.SphereGeometry(0.45, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2),
+  )
+
   const shell = new THREE.Mesh(
-    new THREE.SphereGeometry(0.45, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2),
+    geometry,
     new THREE.MeshStandardMaterial({
       color: randomColor(rng, 0xcbb794, 0.08),
       roughness: 0.75,
@@ -119,19 +149,22 @@ function createSeaweed(rng: Rng): THREE.Object3D {
 
   const blades = rng.int(5) + 4
 
+  const bladeGeometry = cachedGeometry(
+    "seaweed-blade",
+    () => new THREE.BoxGeometry(0.12, 1, 0.04),
+  )
+
   for (let i = 0; i < blades; i++) {
     const height = rng.range(1.6, 4.6)
 
-    const blade = new THREE.Mesh(
-      new THREE.BoxGeometry(0.12, height, 0.04),
-      material,
-    )
+    const blade = new THREE.Mesh(bladeGeometry, material)
 
     blade.position.set(
       rng.range(-0.35, 0.35),
       height / 2,
       rng.range(-0.35, 0.35),
     )
+    blade.scale.set(1, height, 1)
 
     blade.rotation.z = rng.range(-0.11, 0.11)
     group.add(blade)
@@ -151,19 +184,23 @@ function createSponge(rng: Rng): THREE.Object3D {
     flatShading: true,
   })
 
-  const body = new THREE.Mesh(
-    new THREE.DodecahedronGeometry(rng.range(0.55, 0.95), 0),
-    material,
+  const bodyGeometry = cachedGeometry(
+    "sponge-body",
+    () => new THREE.DodecahedronGeometry(0.75, 0),
   )
+
+  const body = new THREE.Mesh(bodyGeometry, material)
 
   body.scale.set(1, 1.25, 1)
   body.position.y = 0.6
   group.add(body)
 
-  const opening = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.16, 0.22, 0.35, 7),
-    material,
+  const openingGeometry = cachedGeometry(
+    "sponge-opening",
+    () => new THREE.CylinderGeometry(0.16, 0.22, 0.35, 7),
   )
+
+  const opening = new THREE.Mesh(openingGeometry, material)
 
   opening.position.y = 1.15
   group.add(opening)
@@ -182,10 +219,12 @@ function createReefMound(rng: Rng): THREE.Object3D {
     flatShading: true,
   })
 
-  const mound = new THREE.Mesh(
-    new THREE.DodecahedronGeometry(rng.range(1.4, 2.4), 0),
-    material,
+  const moundGeometry = cachedGeometry(
+    "reef-mound",
+    () => new THREE.DodecahedronGeometry(1.9, 0),
   )
+
+  const mound = new THREE.Mesh(moundGeometry, material)
 
   mound.scale.set(1.3, 0.65, 1.3)
   mound.position.y = 0.35
@@ -201,11 +240,16 @@ function createReefMound(rng: Rng): THREE.Object3D {
 
   const corals = rng.int(4) + 3
 
+  const coralGeometry = cachedGeometry(
+    "reef-coral",
+    () => new THREE.ConeGeometry(0.24, 1, 5),
+  )
+
   for (let i = 0; i < corals; i++) {
-    const coral = new THREE.Mesh(
-      new THREE.ConeGeometry(rng.range(0.18, 0.3), rng.range(0.7, 1.5), 5),
-      coralMaterial,
-    )
+    const height = rng.range(0.7, 1.5)
+
+    const coral = new THREE.Mesh(coralGeometry, coralMaterial)
+    coral.scale.set(1, height, 1)
 
     coral.position.set(
       rng.range(-0.9, 0.9),
@@ -246,7 +290,6 @@ const BIOME_PROPS: Record<BiomeKey, BiomePropConfig> = {
       PROP_FACTORIES.reef,
     ],
   },
-
   pelagic_mid: {
     count: 210,
     factories: [
@@ -257,7 +300,6 @@ const BIOME_PROPS: Record<BiomeKey, BiomePropConfig> = {
       PROP_FACTORIES.reef,
     ],
   },
-
   subphotic: {
     count: 210,
     factories: [
@@ -268,7 +310,6 @@ const BIOME_PROPS: Record<BiomeKey, BiomePropConfig> = {
       PROP_FACTORIES.sponge,
     ],
   },
-
   mesopelagic_upper: {
     count: 190,
     factories: [
@@ -278,7 +319,6 @@ const BIOME_PROPS: Record<BiomeKey, BiomePropConfig> = {
       PROP_FACTORIES.sponge,
     ],
   },
-
   mesopelagic_deep: {
     count: 190,
     factories: [
@@ -288,7 +328,6 @@ const BIOME_PROPS: Record<BiomeKey, BiomePropConfig> = {
       PROP_FACTORIES.sponge,
     ],
   },
-
   bathypelagic_upper: {
     count: 180,
     factories: [
@@ -298,7 +337,6 @@ const BIOME_PROPS: Record<BiomeKey, BiomePropConfig> = {
       PROP_FACTORIES.sponge,
     ],
   },
-
   bathypelagic_deep: {
     count: 180,
     factories: [
@@ -308,7 +346,6 @@ const BIOME_PROPS: Record<BiomeKey, BiomePropConfig> = {
       PROP_FACTORIES.sponge,
     ],
   },
-
   abyssopelagic: {
     count: 190,
     factories: [
@@ -318,7 +355,6 @@ const BIOME_PROPS: Record<BiomeKey, BiomePropConfig> = {
       PROP_FACTORIES.sponge,
     ],
   },
-
   hadopelagic: {
     count: 210,
     factories: [
@@ -328,7 +364,6 @@ const BIOME_PROPS: Record<BiomeKey, BiomePropConfig> = {
       PROP_FACTORIES.sponge,
     ],
   },
-
   deepSea: {
     count: 200,
     factories: [
@@ -378,16 +413,18 @@ export class BiomeProps {
     }
   }
 
+  /**
+   * Limpia los props. Las geometrías compartidas se conservan en caché;
+   * solo se liberan los materiales únicos creados por prop.
+   */
   public clear(): void {
     this.group.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return
 
-      object.geometry.dispose()
-
       const material = object.material
 
       if (Array.isArray(material)) {
-        material.forEach((item) => item.dispose())
+        material.forEach((m) => m.dispose())
       } else {
         material.dispose()
       }
@@ -395,4 +432,12 @@ export class BiomeProps {
 
     this.group.clear()
   }
+}
+
+/** Libera todas las geometrías cacheadas. Llamar al destruir el juego. */
+export function disposeBiomePropsCache(): void {
+  for (const geometry of geometryCache.values()) {
+    geometry.dispose()
+  }
+  geometryCache.clear()
 }

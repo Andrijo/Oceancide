@@ -15,12 +15,14 @@ export class Structure {
   private core: THREE.Mesh
   private coreMaterial: THREE.MeshStandardMaterial
   private rings: THREE.Mesh[] = []
-  private phase = Math.random() * Math.PI * 2
+  private static nextPhase = 0
+  private phase: number
 
   constructor(config: StructureConfig, position: THREE.Vector3) {
     this.config = config
     this.remaining = config.capacity
     this.group.position.copy(position)
+    this.phase = (Structure.nextPhase++ * 0.7) % (Math.PI * 2)
 
     this.coreMaterial = new THREE.MeshStandardMaterial({
       color: 0x1a3a40,

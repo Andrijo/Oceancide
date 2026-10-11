@@ -1,5 +1,4 @@
 // src/StructureConfig.ts
-// Estructuras que el jugador puede construir durante una run (definidas como datos).
 
 export type StructureKey = "filter"
 
@@ -16,7 +15,9 @@ export interface StructureConfig {
 export const STRUCTURES: Record<StructureKey, StructureConfig> = {
   filter: {
     name: "Esfera filtradora",
-    cost: 40,
+    // Antes 40 → necesitabas ~1.5 desechos tóxicos para el primer filtro.
+    // Ahora 25 → ~1 desecho. El primer filtro llega antes y se siente recompensa.
+    cost: 25,
     radius: 12,
     interval: 1,
     capacity: 8,

@@ -5,11 +5,11 @@ const POOL_SIZE = 120
 const EMIT_RATE = 34
 
 const BUBBLE_COLORS = [
-  new THREE.Color(0x35f0ff), // Cian
-  new THREE.Color(0x59a6ff), // Azul
-  new THREE.Color(0xa45cff), // Violeta
-  new THREE.Color(0xff5fd2), // Rosa
-  new THREE.Color(0xffffff), // Blanco
+  new THREE.Color(0x35f0ff),
+  new THREE.Color(0x59a6ff),
+  new THREE.Color(0xa45cff),
+  new THREE.Color(0xff5fd2),
+  new THREE.Color(0xffffff),
 ]
 
 export class BubbleTrail {
@@ -96,7 +96,7 @@ export class BubbleTrail {
     this.mesh.setMatrixAt(index, this.dummy.matrix)
   }
 
-  private spawn(emitter: THREE.Vector3): void {
+  private spawn(emitter: THREE.Vector3, sizeMultiplier = 1): void {
     const i = this.cursor
     this.cursor = (this.cursor + 1) % POOL_SIZE
 
@@ -117,26 +117,33 @@ export class BubbleTrail {
 
     this.age[i] = 0
     this.life[i] = 1.15 + Math.random() * 1.1
-    this.size[i] = 0.05 + Math.random() * 0.13
+    this.size[i] = (0.05 + Math.random() * 0.13) * sizeMultiplier
     this.phase[i] = Math.random() * Math.PI * 2
     this.wobble[i] = 0.5 + Math.random() * 1.2
   }
 
+  /**
+   * @param intensity 0 = sin boost, 1 = boost máximo. Multiplica la emisión.
+   */
   public update(
     deltaTime: number,
     emitter: THREE.Vector3,
     yaw: number,
     emitting: boolean,
+    intensity = 0,
   ): void {
     this.time += deltaTime
     this.forward.set(Math.sin(yaw), 0, Math.cos(yaw))
 
     if (emitting) {
-      this.emitAccumulator += EMIT_RATE * deltaTime
+      const rate = EMIT_RATE * (1 + intensity * 1.5)
+      const sizeMul = 1 + intensity * 0.6
+
+      this.emitAccumulator += rate * deltaTime
 
       while (this.emitAccumulator >= 1) {
         this.emitAccumulator -= 1
-        this.spawn(emitter)
+        this.spawn(emitter, sizeMul)
       }
     } else {
       this.emitAccumulator = 0
@@ -186,6 +193,10 @@ export class BubbleTrail {
     }
 
     this.mesh.instanceMatrix.needsUpdate = true
+
+    // El emisivo también sube con la intensidad
+    const material = this.mesh.material as THREE.MeshPhysicalMaterial
+    material.emissiveIntensity = 0.55 + intensity * 0.85
   }
 
   public dispose(): void {

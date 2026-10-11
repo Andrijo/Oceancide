@@ -26,6 +26,11 @@ export class Turtle {
 
   private completedRoll = 0
 
+  // Boost de giro (Q/E)
+  private spinBoost = 0
+  private readonly spinBoostMultiplier = 1.6
+  private readonly spinBoostDecay = 4
+
   constructor() {
     const { model, body, flippers, tail } = this.createTurtleModel()
 
@@ -44,7 +49,7 @@ export class Turtle {
     this.stats = {
       speed: 9,
       collectionRadius: 3,
-      toxicityResistance: 0.1,
+      toxicityResistance: 0.2,
       filterCapacity: 5,
     }
   }
@@ -83,7 +88,6 @@ export class Turtle {
       flatShading: true,
     })
 
-    // Caparazón principal: dodecaedro low-poly
     const shell = new THREE.Mesh(
       new THREE.DodecahedronGeometry(1, 0),
       shellMaterial,
@@ -91,7 +95,6 @@ export class Turtle {
     shell.scale.set(1, 0.55, 1.5)
     body.add(shell)
 
-    // Placas centrales del caparazón
     const plateMaterial = new THREE.MeshStandardMaterial({
       color: 0x0f6329,
       roughness: 0.65,
@@ -122,7 +125,6 @@ export class Turtle {
       body.add(plate)
     }
 
-    // Borde inferior original
     const shellRim = new THREE.Mesh(
       new THREE.CylinderGeometry(1.02, 0.82, 0.22, 10),
       shellRimMaterial,
@@ -131,7 +133,6 @@ export class Turtle {
     shellRim.scale.set(1, 1, 1.45)
     body.add(shellRim)
 
-    // Cabeza low-poly
     const head = new THREE.Mesh(
       new THREE.DodecahedronGeometry(0.36, 0),
       skinMaterial,
@@ -140,7 +141,6 @@ export class Turtle {
     head.scale.set(0.9, 0.85, 1.1)
     body.add(head)
 
-    // Ojos
     const eyeGeometry = new THREE.SphereGeometry(0.09, 8, 6)
     const eyeMaterial = new THREE.MeshStandardMaterial({
       color: 0x101010,
@@ -153,7 +153,6 @@ export class Turtle {
       body.add(eye)
     }
 
-    // Aletas delanteras simples
     const frontFlipperGeometry = new THREE.BoxGeometry(0.85, 0.12, 0.42)
 
     const leftFrontFlipper = new THREE.Mesh(frontFlipperGeometry, skinMaterial)
@@ -166,7 +165,6 @@ export class Turtle {
     rightFrontFlipper.rotation.z = -0.3
     body.add(rightFrontFlipper)
 
-    // Aletas traseras simples
     const backFlipperGeometry = new THREE.BoxGeometry(0.5, 0.1, 0.3)
 
     const leftBackFlipper = new THREE.Mesh(backFlipperGeometry, skinMaterial)
@@ -177,7 +175,6 @@ export class Turtle {
     rightBackFlipper.position.set(0.6, -0.15, -0.8)
     body.add(rightBackFlipper)
 
-    // Cola
     const tail = new THREE.Mesh(
       new THREE.ConeGeometry(0.22, 0.6, 6),
       skinMaterial,
@@ -205,6 +202,9 @@ export class Turtle {
     this.isSpinning = true
     this.spinProgress = 0
     this.spinDirection = direction === "left" ? 1 : -1
+
+    // Impulso inmediato: multiplicador temporal de velocidad
+    this.spinBoost = this.spinBoostMultiplier
   }
 
   public reset(position: THREE.Vector3): void {
@@ -216,6 +216,7 @@ export class Turtle {
     this.isSpinning = false
     this.spinProgress = 0
     this.completedRoll = 0
+    this.spinBoost = 0
   }
 
   public update(
@@ -225,7 +226,17 @@ export class Turtle {
   ): void {
     this.time += deltaTime
 
-    const maxSpeed = this.stats.speed * (input.boost ? 2 : 1)
+    // Decaimiento exponencial del boost de giro
+    if (this.spinBoost > 0) {
+      this.spinBoost *= Math.exp(-this.spinBoostDecay * deltaTime)
+      if (this.spinBoost < 0.01) this.spinBoost = 0
+    }
+
+    // Boost normal (I) × boost de giro (Q/E)
+    const inputBoost = input.boost ? 2 : 1
+    const totalBoost = inputBoost * (1 + this.spinBoost)
+
+    const maxSpeed = this.stats.speed * totalBoost
 
     let targetSpeed = 0
 
@@ -233,6 +244,12 @@ export class Turtle {
       targetSpeed = maxSpeed
     } else if (input.backward) {
       targetSpeed = -maxSpeed * 0.5
+    }
+
+    // Durante el giro, forzamos avance hacia adelante para que se sienta
+    // como un "dash" incluso si el jugador suelta W
+    if (this.isSpinning && targetSpeed === 0) {
+      targetSpeed = maxSpeed * 0.6
     }
 
     this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-4 * deltaTime))
@@ -249,8 +266,12 @@ export class Turtle {
         this.spinProgress = 1
         this.isSpinning = false
 
-        // Conserva la vuelta completada
         this.completedRoll += Math.PI * 2 * this.spinDirection
+
+        // Normalizar solo cuando supera muchas vueltas (evita el salto visual)
+        if (Math.abs(this.completedRoll) > Math.PI * 20) {
+          this.completedRoll = this.completedRoll % (Math.PI * 2)
+        }
       }
 
       const t = this.spinProgress
@@ -329,6 +350,27 @@ export class Turtle {
 
     this.model.rotation.z +=
       (targetRoll - this.model.rotation.z) * (1 - Math.exp(-7 * deltaTime))
+
+    // Uso del body: flotación + squash & stretch
+
+    // Flotación sutil constante (respiración)
+    this.body.position.y = Math.sin(this.time * 1.8) * 0.06
+    this.body.rotation.x = Math.sin(this.time * 1.4) * 0.03
+
+    // Squash & stretch durante el boost de giro.
+    // boostVisual va de 0 (sin boost) a 1 (boost máximo).
+    const boostVisual = Math.min(1, this.spinBoost / this.spinBoostMultiplier)
+
+    // Estirar en Z (dirección de avance) y comprimir en X/Y
+    const targetScaleX = 1 - boostVisual * 0.05
+    const targetScaleY = 1 - boostVisual * 0.08
+    const targetScaleZ = 1 + boostVisual * 0.15
+
+    const scaleSmoothing = 1 - Math.exp(-8 * deltaTime)
+
+    this.body.scale.x += (targetScaleX - this.body.scale.x) * scaleSmoothing
+    this.body.scale.y += (targetScaleY - this.body.scale.y) * scaleSmoothing
+    this.body.scale.z += (targetScaleZ - this.body.scale.z) * scaleSmoothing
   }
 
   public getSpeed(): number {
@@ -341,5 +383,20 @@ export class Turtle {
 
   public getCollectionRadius(): number {
     return this.stats.collectionRadius
+  }
+
+  /** Multiplicador de velocidad actual por el boost de giro (1 = sin boost). */
+  public getSpinBoost(): number {
+    return this.spinBoost
+  }
+
+  /** True si el boost de giro está activo de forma apreciable. */
+  public isSpinBoosting(): boolean {
+    return this.spinBoost > 0.05
+  }
+
+  /** True si la tortuga está en medio de un giro de 360°. */
+  public isSpinInProgress(): boolean {
+    return this.isSpinning
   }
 }

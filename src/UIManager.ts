@@ -1,6 +1,4 @@
 // src/UIManager.ts
-// Clase encargada de actualizar los elementos de la interfaz de usuario (HUD) y mostrar mensajes en pantalla.
-
 import type { GameState } from "./types"
 
 export class UIManager {
@@ -9,7 +7,9 @@ export class UIManager {
   private zoneProgressEl: HTMLElement
   private toxicityFillEl: HTMLElement
   private buildHudEl: HTMLElement
+  private spinBoostHudEl: HTMLElement
   private lastBuildHud = ""
+  private lastSpinBoostVisible = false
   private currentMessage?: HTMLElement
   private messageTimeout?: number
 
@@ -37,9 +37,31 @@ export class UIManager {
       z-index: 100;
     `
     document.getElementById("game-container")!.appendChild(this.buildHudEl)
+
+    // HUD del boost de giro (aparece solo cuando está activo)
+    this.spinBoostHudEl = document.createElement("div")
+    this.spinBoostHudEl.id = "spin-boost-hud"
+    this.spinBoostHudEl.style.cssText = `
+      position: absolute;
+      bottom: 110px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 6px 18px;
+      font-family: "Geist-Semibold", sans-serif;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      color: #0ff;
+      background: rgba(0, 40, 60, 0.65);
+      border: 1px solid rgba(0, 255, 255, 0.5);
+      border-radius: 8px;
+      pointer-events: none;
+      z-index: 100;
+      display: none;
+      text-shadow: 0 0 8px rgba(0, 255, 255, 0.6);
+    `
+    document.getElementById("game-container")!.appendChild(this.spinBoostHudEl)
   }
 
-  /** Botón de pausa del HUD (círculo con dos barras, arriba a la derecha). */
   public createPauseButton(onClick: () => void): void {
     const btn = document.createElement("button")
     btn.id = "pause-btn"
@@ -68,13 +90,12 @@ export class UIManager {
       </svg>
     `
     btn.addEventListener("click", () => {
-      btn.blur() // que Enter/Espacio no vuelvan a activarlo
+      btn.blur()
       onClick()
     })
     document.getElementById("game-container")!.appendChild(btn)
   }
 
-  // Indicador de la estructura que se puede construir (rojo si no es posible ahora).
   public updateBuildHud(text: string, available: boolean): void {
     const key = `${available}|${text}`
     if (key === this.lastBuildHud) return
@@ -83,7 +104,24 @@ export class UIManager {
     this.buildHudEl.style.color = available ? "#f7f7ff" : "#ff9a9a"
   }
 
-  // Método para actualizar la interfaz de usuario con el estado actual del juego.
+  /**
+   * Actualiza el HUD del boost de giro.
+   * @param boost 0..1 (fracción del boost restante respecto al máximo)
+   * @param active si el boost está activo
+   */
+  public updateSpinBoostHud(boost: number, active: boolean): void {
+    if (active !== this.lastSpinBoostVisible) {
+      this.spinBoostHudEl.style.display = active ? "block" : "none"
+      this.lastSpinBoostVisible = active
+    }
+
+    if (!active) return
+
+    // Mostrar el multiplicador aproximado (1 + boost*0.6 aprox)
+    const multiplier = 1 + boost * 0.6
+    this.spinBoostHudEl.textContent = `DASH ×${multiplier.toFixed(2)}`
+  }
+
   public updateUI(state: GameState): void {
     this.debrisCountEl.textContent = state.debrisCollected.toString()
     this.ecoAwarenessEl.textContent = state.ecoAwareness.toString()
@@ -101,11 +139,10 @@ export class UIManager {
     }
   }
 
-  // Método para mostrar un mensaje en pantalla durante un tiempo determinado.
   public showMessage(message: string, duration: number = 2000): void {
-    // Evita que se apilen mensajes
     this.currentMessage?.remove()
     window.clearTimeout(this.messageTimeout)
+    this.messageTimeout = undefined
 
     const msgEl = document.createElement("div")
     msgEl.textContent = message
@@ -133,6 +170,7 @@ export class UIManager {
     this.messageTimeout = window.setTimeout(() => {
       msgEl.remove()
       if (this.currentMessage === msgEl) this.currentMessage = undefined
+      this.messageTimeout = undefined
     }, duration)
   }
 }

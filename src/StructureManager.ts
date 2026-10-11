@@ -1,12 +1,10 @@
 // src/StructureManager.ts
-
 import * as THREE from "three"
 import type { BiomeGenerator } from "./BiomeGenerator"
 import type { Debris } from "./Debris"
 import { Structure } from "./Structure"
 import { STRUCTURES, type StructureKey } from "./StructureConfig"
 
-/** Lo que las estructuras han ganado en este frame. */
 export interface StructureCredit {
   eco: number
   count: number
@@ -33,6 +31,12 @@ export class StructureManager {
 
   public clear(): void {
     for (const s of this.structures) {
+      // Liberar los desechos que iban en camino: vuelven a estar disponibles
+      for (const debris of s.inFlight) {
+        debris.release()
+      }
+      s.inFlight.length = 0
+
       this.scene.remove(s.group)
       s.dispose()
     }
@@ -50,11 +54,10 @@ export class StructureManager {
       const s = this.structures[i]
       s.update(time, deltaTime)
 
-      // Cobrar los desechos que han llegado al filtro
       for (let j = s.inFlight.length - 1; j >= 0; j--) {
         const debris = s.inFlight[j]
         if (debris.removed) {
-          s.inFlight.splice(j, 1) // lo recogió la tortuga por el camino
+          s.inFlight.splice(j, 1)
         } else if (debris.pullArrived) {
           biome.removeDebris(debris)
           s.inFlight.splice(j, 1)
@@ -63,7 +66,6 @@ export class StructureManager {
         }
       }
 
-      // Reservar el siguiente desecho
       if (s.remaining > 0) {
         s.timer += deltaTime
         if (s.timer >= s.config.interval) {
@@ -74,7 +76,7 @@ export class StructureManager {
             s.remaining -= 1
             s.timer = 0
           } else {
-            s.timer = s.config.interval // espera a que haya algo en alcance
+            s.timer = s.config.interval
           }
         }
       }
@@ -89,7 +91,6 @@ export class StructureManager {
     return credit
   }
 
-  /** Desecho libre más cercano dentro del alcance de la estructura. */
   private findTarget(s: Structure, debrisList: Debris[]): Debris | null {
     let best: Debris | null = null
     let bestDist = s.config.radius
