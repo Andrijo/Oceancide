@@ -6,6 +6,8 @@ Juego 3D donde controlas una tortuga marina que limpia los océanos de desechos.
 
 Toma el control de una tortuga y desciende por las capas del océano recolectando basura y desechos tóxicos. Cada zona tiene mayor contaminación, menor visibilidad y más densidad de desechos. Tienes que recoger un porcentaje de los desechos de cada bioma para avanzar, mientras controlas el nivel de toxicidad: si llega al 100%, se acaba la partida.
 
+Además de recolectar desechos directamente, puedes gastar **Conciencia Ecológica** para construir **esferas filtradoras** que atraen y absorben desechos por su cuenta. Y con el **dash de giro** (Q/E) puedes encadenar giros de 360° con un impulso temporal de velocidad.
+
 ## Zonas
 
 El juego recorre 10 biomas, desde la superficie hasta las fosas más profundas:
@@ -29,22 +31,37 @@ Cada bioma tiene su propio catálogo de desechos (botellas, redes fantasma, micr
 
 ### Teclado
 
-| Tecla | Acción            |
-| ----- | ----------------- |
-| `W`   | Avanzar           |
-| `S`   | Retroceder        |
-| `A`   | Girar izquierda   |
-| `D`   | Girar derecha     |
-| `U`   | Subir             |
-| `J`   | Bajar             |
-| `I`   | Impulso           |
-| `R`   | Reiniciar partida |
+| Tecla           | Acción                      |
+| --------------- | --------------------------- |
+| `W` / `↑`       | Avanzar                     |
+| `S` / `↓`       | Retroceder                  |
+| `A` / `←`       | Girar a la izquierda        |
+| `D` / `→`       | Girar a la derecha          |
+| `U`             | Subir                       |
+| `J`             | Bajar                       |
+| `I`             | Impulso                     |
+| `Q` / `E`       | Giro de 360° (dash)         |
+| `B`             | Construir esfera filtradora |
+| `C` (mantener)  | Ver hacia atrás             |
+| `Esc` / `Enter` | Pausar / reanudar           |
+| `R`             | Abandonar la inmersión      |
 
 ### Táctil (móvil)
 
 - **Joystick izquierdo** (mitad izquierda de la pantalla): movimiento y giro.
 - **Stick vertical derecho** (mitad derecha): subir / bajar.
 - **Botón de impulso**: aumenta la velocidad.
+- **Botón de filtro**: construye una esfera filtradora.
+- **Botón de vista trasera** (mantener): cámara mirando hacia atrás.
+
+## Conciencia Ecológica y Refugio
+
+Cada desecho recolectado (o absorbido por un filtro) otorga **Conciencia Ecológica**, que sirve para:
+
+- Construir esferas filtradoras durante la inmersión.
+- Acumularse como progreso persistente en el **Refugio** (menú inicial), guardado en `localStorage` bajo la clave `oceancide.meta`.
+
+Al terminar cada run se muestra un resumen (zona alcanzada, desechos, duración y conciencia obtenida) y se actualiza el progreso global: mejor zona, runs jugadas/completadas y total de desechos.
 
 ## Instalación y ejecución
 
@@ -68,23 +85,55 @@ bun run preview
 
 ```
 oceancidio/
-├── index.html           # Entry point, estilos y UI
+├── index.html            # Entry point, HUD, estilos base y controles táctiles
 ├── package.json
 ├── tsconfig.json
+├── vite.config.ts        # Config de Vite (alias de importación)
+├── public/
+│   ├── fonts/            # Fuentes (Pogonia, Montserrat, Geist)
+│   ├── favicon.svg
+│   └── icons.svg
 └── src/
     ├── main.ts           # Bootstrap del juego
-    ├── Game.ts           # Lógica principal, loop y cámara
-    ├── Turtle.ts         # Modelo y movimiento de la tortuga
-    ├── BiomeGenerator.ts # Generación de biomas y desechos
-    ├── Debris.ts         # Desechos recolectables
-    ├── DebrisVisuals.ts  # Aspecto visual de cada tipo de desecho
-    ├── debrisCatalog.ts  # Catálogo de desechos por bioma
-    ├── BubbleTrail.ts    # Estela de burbujas (instancing)
-    ├── DevMenu.ts        # Menú de desarrollo
-    ├── TouchControls.ts  # Controles táctiles (joysticks)
-    ├── UIManager.ts      # HUD y mensajes
-    └── types.ts          # Tipos y configuración de biomas
+    ├── styles.css        # @font-face
+    ├── core/             # Núcleo y estado global
+    │   ├── Game.ts             # Lógica principal, loop y cámara
+    │   ├── MetaState.ts        # Progreso persistente (Refugio) y guardado
+    │   ├── rng.ts              # Generador pseudoaleatorio con semilla
+    │   └── types.ts            # Tipos y configuración de biomas
+    ├── world/            # Generación y elementos del mundo
+    │   ├── BiomeGenerator.ts   # Generación de biomas, terreno, partículas y desechos
+    │   ├── BiomeProps.ts       # Props decorativos por bioma
+    │   ├── BiomeTransition.ts  # Transición animada entre biomas
+    │   ├── Structure.ts        # Esfera filtradora colocada en el agua
+    │   ├── StructureConfig.ts  # Configuración de estructuras
+    │   └── StructureManager.ts # Ciclo de vida de las estructuras
+    ├── entities/         # Entidades del juego
+    │   ├── Turtle.ts           # Modelo y movimiento de la tortuga
+    │   ├── Debris.ts           # Desechos recolectables
+    │   ├── DebrisVisuals.ts    # Aspecto visual de cada tipo de desecho
+    │   ├── debrisCatalog.ts    # Catálogo de desechos por bioma
+    │   └── BubbleTrail.ts      # Estela de burbujas (instancing)
+    └── ui/               # Interfaz y controles
+        ├── UIManager.ts        # HUD y mensajes
+        ├── ScreenManager.ts    # Menús (hub, resumen y pausa)
+        ├── TouchControls.ts    # Controles táctiles (joysticks)
+        └── DevMenu.ts          # Menú de desarrollo
 ```
+
+## Alias de importación
+
+Los imports entre carpetas usan alias configurados en `tsconfig.json` y `vite.config.ts`:
+
+| Alias         | Ruta             |
+| ------------- | ---------------- |
+| `@core/*`     | `src/core/*`     |
+| `@world/*`    | `src/world/*`    |
+| `@entities/*` | `src/entities/*` |
+| `@ui/*`       | `src/ui/*`       |
+| `@/*`         | `src/*`          |
+
+> Reservados para sistemas futuros (aún sin carpeta): `@cards`, `@tycoon`, `@events`, `@relics`, `@drones`, `@bosses`.
 
 ## Tecnologías utilizadas
 
