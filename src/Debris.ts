@@ -13,179 +13,271 @@ import type { Rng } from "./rng"
 
 const ECO_BASE = 5
 const ECO_PER_TOXICITY = 25
-const PULL_SPEED = 6 // unidades/s con las que un filtro atrae un desecho
+const PULL_SPEED = 6
+
 const pullDelta = new THREE.Vector3()
 
-// --- Generadores procedurales de alta definición ---
+/* ---------------------------------------------
+   Utilidades de deformación
+--------------------------------------------- */
 
-/** Genera una botella con cuerpo, hombros cónicos y cuello */
-function createBottleGeometry(): THREE.BufferGeometry {
-  const body = new THREE.CylinderGeometry(0.12, 0.12, 0.35, 12)
-  body.translate(0, -0.05, 0)
+function deformGeometry(
+  geometry: THREE.BufferGeometry,
+  intensity: number,
+  frequency = 4,
+): THREE.BufferGeometry {
+  if (intensity <= 0) return geometry
 
-  const shoulder = new THREE.ConeGeometry(0.12, 0.1, 12)
-  shoulder.rotateX(Math.PI)
-  shoulder.translate(0, 0.175, 0)
+  const position = geometry.attributes.position
+  const vertex = new THREE.Vector3()
 
-  const neck = new THREE.CylinderGeometry(0.04, 0.04, 0.12, 12)
-  neck.translate(0, 0.28, 0)
+  for (let i = 0; i < position.count; i++) {
+    vertex.fromBufferAttribute(position, i)
 
-  return mergeGeometries([body, shoulder, neck])
+    const noise =
+      Math.sin(vertex.x * frequency) * 0.5 +
+      Math.cos(vertex.y * frequency * 1.3) * 0.3 +
+      Math.sin(vertex.z * frequency * 0.8) * 0.4
+
+    const factor = 1 + noise * intensity * 0.25
+
+    vertex.multiplyScalar(factor)
+    position.setXYZ(i, vertex.x, vertex.y, vertex.z)
+  }
+
+  geometry.computeVertexNormals()
+  return geometry
 }
 
-/** Genera un bidón/barril con anillos de relieve en los extremos y al centro */
+/* ---------------------------------------------
+   Geometrías
+--------------------------------------------- */
+
+function createBottleGeometry(): THREE.BufferGeometry {
+  const body = new THREE.CylinderGeometry(0.12, 0.13, 0.34, 16, 1)
+  body.translate(0, -0.06, 0)
+
+  const shoulder = new THREE.CylinderGeometry(0.04, 0.12, 0.1, 16, 1)
+  shoulder.translate(0, 0.16, 0)
+
+  const neck = new THREE.CylinderGeometry(0.04, 0.04, 0.1, 12)
+  neck.translate(0, 0.26, 0)
+
+  const cap = new THREE.CylinderGeometry(0.05, 0.05, 0.035, 12)
+  cap.translate(0, 0.325, 0)
+
+  return mergeGeometries([body, shoulder, neck, cap])
+}
+
 function createDrumGeometry(): THREE.BufferGeometry {
-  const body = new THREE.CylinderGeometry(0.26, 0.26, 0.55, 16)
-  const ring1 = new THREE.TorusGeometry(0.27, 0.015, 8, 16)
-  ring1.rotateX(Math.PI / 2)
+  const body = new THREE.CylinderGeometry(0.26, 0.26, 0.55, 20, 1)
+  const top = new THREE.CylinderGeometry(0.265, 0.265, 0.02, 20)
+  top.translate(0, 0.285, 0)
+
+  const bottom = new THREE.CylinderGeometry(0.265, 0.265, 0.02, 20)
+  bottom.translate(0, -0.285, 0)
+
+  const ringGeometry = new THREE.TorusGeometry(0.27, 0.016, 8, 24)
+  ringGeometry.rotateX(Math.PI / 2)
+
+  const ring1 = ringGeometry.clone()
   ring1.translate(0, 0.18, 0)
 
-  const ring2 = ring1.clone()
-  ring2.translate(0, -0.36, 0)
+  const ring2 = ringGeometry.clone()
+  ring2.translate(0, -0.18, 0)
 
-  const ring3 = ring1.clone()
-  ring3.translate(0, -0.18, 0)
-
-  return mergeGeometries([body, ring1, ring2, ring3])
+  return mergeGeometries([body, top, bottom, ring1, ring2])
 }
 
-/** Genera una masa orgánica o fragmento irregular aplicando deformación a los vértices */
-function createDeformedBlobGeometry(): THREE.BufferGeometry {
-  const geo = new THREE.IcosahedronGeometry(0.3, 2)
-  const pos = geo.attributes.position
-
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i)
-    const y = pos.getY(i)
-    const z = pos.getZ(i)
-
-    // Factor de deformación pseudoaleatorio basado en posición
-    const factor =
-      1 +
-      Math.sin(x * 5) * 0.12 +
-      Math.cos(y * 5) * 0.12 +
-      Math.sin(z * 5) * 0.12
-    pos.setXYZ(i, x * factor, y * factor, z * factor)
-  }
-
-  geo.computeVertexNormals()
-  return geo
-}
-
-/** Genera un fragmento o cristal afilado con vértices perturbados */
-function createShardGeometry(): THREE.BufferGeometry {
-  const geo = new THREE.ConeGeometry(0.2, 0.6, 6)
-  const pos = geo.attributes.position
-
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i)
-    const y = pos.getY(i)
-    const z = pos.getZ(i)
-    pos.setXYZ(
-      i,
-      x * (0.8 + Math.random() * 0.4),
-      y,
-      z * (0.8 + Math.random() * 0.4),
-    )
-  }
-
-  geo.computeVertexNormals()
-  return geo
-}
-
-/** Genera una lámina levemente curvada */
 function createSheetGeometry(): THREE.BufferGeometry {
-  const geo = new THREE.BoxGeometry(0.6, 0.02, 0.45, 4, 1, 4)
-  const pos = geo.attributes.position
+  const geometry = new THREE.BoxGeometry(0.62, 0.018, 0.46, 8, 1, 6)
+  const position = geometry.attributes.position
 
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i)
-    const z = pos.getZ(i)
-    const curve = Math.sin(x * 3) * 0.05 + Math.cos(z * 3) * 0.05
-    pos.setY(i, pos.getY(i) + curve)
+  for (let i = 0; i < position.count; i++) {
+    const x = position.getX(i)
+    const z = position.getZ(i)
+
+    const curve =
+      Math.sin(x * 4) * 0.045 +
+      Math.cos(z * 5) * 0.03 +
+      Math.sin((x + z) * 7) * 0.015
+
+    position.setY(i, position.getY(i) + curve)
   }
 
-  geo.computeVertexNormals()
-  return geo
+  geometry.computeVertexNormals()
+  return geometry
+}
+
+function createBlobGeometry(): THREE.BufferGeometry {
+  return deformGeometry(new THREE.IcosahedronGeometry(0.3, 3), 0.85, 5)
+}
+
+function createShardGeometry(): THREE.BufferGeometry {
+  const geometry = new THREE.ConeGeometry(0.18, 0.62, 7, 1)
+  const position = geometry.attributes.position
+
+  for (let i = 0; i < position.count; i++) {
+    const x = position.getX(i)
+    const z = position.getZ(i)
+
+    const irregularity = 0.78 + Math.random() * 0.45
+    position.setX(i, x * irregularity)
+    position.setZ(i, z * irregularity)
+  }
+
+  geometry.computeVertexNormals()
+  return geometry
+}
+
+function createBarGeometry(): THREE.BufferGeometry {
+  const geometry = new THREE.BoxGeometry(0.16, 0.16, 0.82, 2, 2, 6)
+  return deformGeometry(geometry, 0.18, 6)
+}
+
+function createCloudObject(): THREE.Object3D {
+  const group = new THREE.Group()
+  const count = 26
+
+  const geometry = new THREE.IcosahedronGeometry(0.045, 1)
+  const material = new THREE.MeshStandardMaterial({
+    transparent: true,
+    opacity: 0.75,
+    roughness: 0.9,
+    metalness: 0,
+  })
+
+  for (let i = 0; i < count; i++) {
+    const particle = new THREE.Mesh(geometry, material)
+
+    particle.position.set(
+      (Math.random() - 0.5) * 0.55,
+      (Math.random() - 0.5) * 0.45,
+      (Math.random() - 0.5) * 0.55,
+    )
+
+    const particleScale = 0.45 + Math.random() * 1.1
+    particle.scale.setScalar(particleScale)
+
+    particle.rotation.set(
+      Math.random() * Math.PI,
+      Math.random() * Math.PI,
+      Math.random() * Math.PI,
+    )
+
+    group.add(particle)
+  }
+
+  return group
 }
 
 const SHAPE_FACTORIES: Record<DebrisShape, () => THREE.BufferGeometry> = {
   bottle: createBottleGeometry,
   drum: createDrumGeometry,
   sheet: createSheetGeometry,
-  blob: createDeformedBlobGeometry,
-  ring: () => new THREE.TorusGeometry(0.28, 0.08, 12, 24),
+  blob: createBlobGeometry,
+  ring: () => new THREE.TorusGeometry(0.28, 0.085, 14, 32),
   shard: createShardGeometry,
   cloud: () => new THREE.IcosahedronGeometry(0.35, 1),
-  bar: () => new THREE.BoxGeometry(0.18, 0.18, 0.8),
+  bar: createBarGeometry,
 }
 
 const geometries = new Map<DebrisShape, THREE.BufferGeometry>()
 const materials = new Map<string, THREE.Material>()
 const warned = new Set<string>()
 
+/* ---------------------------------------------
+   Visual / material
+--------------------------------------------- */
+
 function getVisual(id: string): DebrisVisual {
   const visual = DEBRIS_VISUALS[id]
+
   if (visual) return visual
+
   if (!warned.has(id)) {
     warned.add(id)
-    console.warn(`[Debris] Sin aspecto visual para "${id}" en debrisVisuals.ts`)
+    console.warn(`[Debris] Sin aspecto visual para "${id}"`)
   }
+
   return FALLBACK_VISUAL
 }
 
-function getGeometry(shape: DebrisShape): THREE.BufferGeometry {
-  let geometry = geometries.get(shape)
+function getGeometry(visual: DebrisVisual): THREE.BufferGeometry {
+  let geometry = geometries.get(visual.shape)
+
   if (!geometry) {
-    geometry = SHAPE_FACTORIES[shape]()
-    geometries.set(shape, geometry)
+    geometry = SHAPE_FACTORIES[visual.shape]()
+    geometries.set(visual.shape, geometry)
   }
+
   return geometry
 }
 
-function getMaterial(id: string, v: DebrisVisual): THREE.Material {
-  let material = materials.get(id)
-  if (!material) {
-    const opacity = v.opacity ?? 1
+function getMaterial(id: string, visual: DebrisVisual): THREE.Material {
+  const cached = materials.get(id)
+  if (cached) return cached
 
-    material = new THREE.MeshPhysicalMaterial({
-      color: v.color,
-      roughness: v.roughness ?? 0.5,
-      metalness: v.metalness ?? 0,
-      emissive: v.emissive ?? 0x000000,
-      emissiveIntensity: v.emissive !== undefined ? (v.glow ?? 0.4) : 0,
-      transparent: opacity < 1 || (v.transmission ?? 0) > 0,
-      opacity,
-      wireframe: v.wireframe ?? false,
-      side: THREE.DoubleSide,
+  const opacity = visual.opacity ?? 1
+  const weathering = visual.weathering ?? 0
+  const biofouling = visual.biofouling ?? 0
+  const rust = visual.rust ?? 0
+  const wetness = visual.wetness ?? 0
 
-      // Propiedades físicas avanzadas
-      transmission: v.transmission ?? 0,
-      ior: v.ior ?? 1.5,
-      clearcoat: v.clearcoat ?? 0,
-      clearcoatRoughness: v.clearcoatRoughness ?? 0.1,
-    })
+  const roughness = THREE.MathUtils.clamp(
+    (visual.roughness ?? 0.6) + weathering * 0.18 + biofouling * 0.12,
+    0.02,
+    1,
+  )
 
-    materials.set(id, material)
-  }
+  const metalness = THREE.MathUtils.clamp(
+    (visual.metalness ?? 0) * (1 - rust * 0.35),
+    0,
+    1,
+  )
+
+  const material = new THREE.MeshPhysicalMaterial({
+    color: visual.color,
+    roughness,
+    metalness,
+    transparent: opacity < 1 || (visual.transmission ?? 0) > 0,
+    opacity,
+    wireframe: visual.wireframe ?? false,
+    side: THREE.DoubleSide,
+
+    transmission: visual.transmission ?? 0,
+    ior: visual.ior ?? 1.45,
+    thickness: visual.thickness ?? 0.2,
+    clearcoat: Math.max(visual.clearcoat ?? 0, wetness * 0.6),
+    clearcoatRoughness: visual.clearcoatRoughness ?? 0.25,
+
+    emissive: visual.emissive ?? 0x000000,
+    emissiveIntensity: visual.emissive !== undefined ? (visual.glow ?? 0.3) : 0,
+  })
+
+  materials.set(id, material)
   return material
 }
 
+/* ---------------------------------------------
+   Clase principal
+--------------------------------------------- */
+
 export class Debris {
-  public mesh: THREE.Mesh
+  public object: THREE.Object3D
   public readonly id: string
   public readonly name: string
   public readonly description: string
   public readonly ecoValue: number
   public readonly pollution: number
 
+  public removed = false
+  public claimed = false
+  public pullArrived = false
+
   private baseY: number
   private phase: number
   private baseScale: number
-
-  public removed = false // ya fuera del agua (recogido o absorbido)
-  public claimed = false // un filtro lo ha reservado
-  public pullArrived = false // ha llegado al filtro que lo atrae
   private pullTarget: THREE.Vector3 | null = null
 
   constructor(position: THREE.Vector3, definition: OceanDebrisType, rng: Rng) {
@@ -198,28 +290,61 @@ export class Debris {
     this.pollution = definition.toxicityImpact
 
     const visual = getVisual(definition.id)
-    this.mesh = new THREE.Mesh(
-      getGeometry(visual.shape),
-      getMaterial(definition.id, visual),
-    )
-    this.mesh.position.copy(position)
-    this.baseScale = (visual.scale ?? 1) * rng.range(0.85, 1.15)
-    this.mesh.scale.setScalar(this.baseScale)
+
+    if (visual.shape === "cloud") {
+      this.object = createCloudObject()
+      this.applyCloudMaterial(this.object, visual)
+    } else {
+      const geometry = getGeometry(visual)
+      const material = getMaterial(definition.id, visual)
+
+      const mesh = new THREE.Mesh(geometry, material)
+      this.object = mesh
+    }
+
+    this.object.position.copy(position)
+
+    this.baseScale = (visual.scale ?? 1) * rng.range(0.85, 1.18)
+    this.object.scale.setScalar(this.baseScale)
+
     this.baseY = position.y
     this.phase = rng.range(0, Math.PI * 2)
 
-    this.mesh.rotation.set(
+    this.object.rotation.set(
       rng.range(0, Math.PI),
       rng.range(0, Math.PI),
       rng.range(0, Math.PI),
     )
+  }
+
+  private applyCloudMaterial(
+    group: THREE.Object3D,
+    visual: DebrisVisual,
+  ): void {
+    group.traverse((child) => {
+      if (!(child instanceof THREE.Mesh)) return
+
+      child.material = new THREE.MeshStandardMaterial({
+        color: visual.color,
+        transparent: true,
+        opacity: visual.opacity ?? 0.6,
+        roughness: 0.9,
+        metalness: visual.metalness ?? 0,
+        emissive: visual.emissive ?? 0x000000,
+        emissiveIntensity:
+          visual.emissive !== undefined ? (visual.glow ?? 0.3) : 0,
+      })
+    })
+  }
+
+  public get mesh(): THREE.Object3D {
+    return this.object
   }
 
   public static pickDefinition(biome: BiomeKey, rng: Rng): OceanDebrisType {
     return rng.pick(BIOME_DEBRIS[biome])
   }
 
-  /** Un filtro reserva este desecho: se desplaza hacia él hasta llegar. */
   public pull(target: THREE.Vector3): void {
     this.claimed = true
     this.pullTarget = target.clone()
@@ -227,23 +352,33 @@ export class Debris {
 
   public animate(time: number, deltaTime: number): void {
     if (this.pullTarget) {
-      pullDelta.copy(this.pullTarget).sub(this.mesh.position)
-      const dist = pullDelta.length()
+      pullDelta.copy(this.pullTarget).sub(this.object.position)
+
+      const distance = pullDelta.length()
       const step = PULL_SPEED * deltaTime
-      if (dist <= Math.max(step, 0.4)) {
+
+      if (distance <= Math.max(step, 0.4)) {
         this.pullArrived = true
         return
       }
-      this.mesh.position.addScaledVector(pullDelta, step / dist)
-      this.mesh.rotation.y += 4 * deltaTime
-      this.mesh.scale.setScalar(
-        this.baseScale * Math.min(1, Math.max(0.25, dist / 3)),
-      )
+
+      this.object.position.addScaledVector(pullDelta, step / distance)
+      this.object.rotation.y += 4 * deltaTime
+
+      const shrink = THREE.MathUtils.clamp(distance / 3, 0.25, 1)
+      this.object.scale.setScalar(this.baseScale * shrink)
+
       return
     }
 
-    this.mesh.rotation.y += 0.6 * deltaTime
-    this.mesh.rotation.x += 0.2 * deltaTime
-    this.mesh.position.y = this.baseY + Math.sin(time * 1.5 + this.phase) * 0.3
+    this.object.rotation.y += 0.55 * deltaTime
+    this.object.rotation.x += 0.18 * deltaTime
+    this.object.rotation.z +=
+      Math.sin(time * 0.7 + this.phase) * 0.12 * deltaTime
+
+    this.object.position.y =
+      this.baseY +
+      Math.sin(time * 1.4 + this.phase) * 0.28 +
+      Math.cos(time * 0.6 + this.phase) * 0.05
   }
 }

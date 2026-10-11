@@ -68,6 +68,7 @@ export class Game {
   private structures: StructureManager
   private lookBack = false // C mantenida: cámara mirando hacia atrás
   private lookBackApplied = false // valor de lookBack con el que está colocada la cámara
+  private paused = false
   private transition: BiomeTransition
 
   private saveManager = new SaveManager()
@@ -101,6 +102,7 @@ export class Game {
 
     this.biomeGenerator = new BiomeGenerator(this.scene)
     this.uiManager = new UIManager()
+    this.uiManager.createPauseButton(() => this.togglePause())
     this.transition = new BiomeTransition()
 
     this.meta = this.saveManager.load()
@@ -191,6 +193,10 @@ export class Game {
     window.addEventListener("keydown", (e) => this.handleKeyDown(e))
     window.addEventListener("keyup", (e) => this.handleKeyUp(e))
     window.addEventListener("resize", () => this.handleResize())
+    // Pausa automática al cambiar de pestaña o minimizar
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) this.setPaused(true)
+    })
   }
 
   private setKey(code: string, pressed: boolean): void {
@@ -230,6 +236,13 @@ export class Game {
   }
 
   private handleKeyDown(e: KeyboardEvent): void {
+    // Enter / P: pausar o continuar
+    if (e.code === "Enter" || e.code === "Escape") {
+      if (!e.repeat) this.togglePause()
+      return
+    }
+    if (this.paused) return // en pausa no se atienden los demás controles
+
     if (e.code === "KeyR") {
       if (!e.repeat && this.screen === "run") this.endRun("abandoned")
       return
@@ -370,6 +383,31 @@ export class Game {
     )
   }
 
+  private togglePause(): void {
+    this.setPaused(!this.paused)
+  }
+
+  private setPaused(paused: boolean): void {
+    if (paused === this.paused) return
+
+    if (paused) {
+      // Solo se puede pausar durante una run y fuera de una transición
+      if (this.screen !== "run" || this.transition.isActive()) return
+      this.paused = true
+      this.clearInput()
+      this.screens.showPause(
+        () => this.setPaused(false),
+        () => {
+          this.paused = false
+          this.endRun("abandoned")
+        },
+      )
+    } else {
+      this.paused = false
+      this.screens.hide()
+    }
+  }
+
   private clearInput(): void {
     this.lookBack = false
     this.input.forward = false
@@ -384,6 +422,7 @@ export class Game {
   /** Refugio: escena de fondo con la cámara orbitando y menú encima. */
   private showHub(): void {
     this.transition.cancel()
+    this.paused = false
     this.screen = "hub"
     this.state.isRunning = false
     this.clearInput()
@@ -394,6 +433,7 @@ export class Game {
 
   private startRun(): void {
     this.transition.cancel()
+    this.paused = false
     this.runSeed = seedFromUrl() ?? randomSeed()
     this.runTime = 0
 
@@ -463,6 +503,7 @@ export class Game {
   private update(deltaTime: number, time: number): void {
     if (!this.state.isRunning) return
     if (this.transition.blocksGameplay) return
+    if (this.paused) return
     this.runTime += deltaTime
 
     const bounds = this.biomeGenerator.getBounds()
@@ -542,6 +583,8 @@ export class Game {
     if (this.screen !== "run") this.orbitCamera(time)
     this.transition.update(deltaTime)
 
+    const simDelta = this.paused ? 0 : deltaTime // en pausa, la estela queda congelada
+
     // Estela de burbujas mientras se usa el impulso y la tortuga avanza de verdad
     const boosting =
       this.state.isRunning &&
@@ -549,7 +592,7 @@ export class Game {
       this.input.boost &&
       this.turtle.getSpeed() > 1
     this.bubbles.update(
-      deltaTime,
+      simDelta,
       this.turtle.getPosition(),
       this.turtle.mesh.rotation.y,
       boosting,
