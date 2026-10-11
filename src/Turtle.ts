@@ -8,6 +8,7 @@ export class Turtle {
 
   private model: THREE.Group
   private body: THREE.Group
+
   private leftFrontFlipper: THREE.Mesh
   private rightFrontFlipper: THREE.Mesh
   private leftBackFlipper: THREE.Mesh
@@ -23,11 +24,14 @@ export class Turtle {
   private spinDirection = 1
   private readonly spinDuration = 0.8
 
+  private completedRoll = 0
+
   constructor() {
     const { model, body, flippers, tail } = this.createTurtleModel()
 
     this.model = model
     this.body = body
+
     this.leftFrontFlipper = flippers.leftFront
     this.rightFrontFlipper = flippers.rightFront
     this.leftBackFlipper = flippers.leftBack
@@ -61,33 +65,64 @@ export class Turtle {
     model.add(body)
 
     const shellMaterial = new THREE.MeshStandardMaterial({
-      color: 0x2d5016,
+      color: 0x0a4d20,
       roughness: 0.8,
       metalness: 0.05,
       flatShading: true,
     })
 
     const shellRimMaterial = new THREE.MeshStandardMaterial({
-      color: 0x6d8f3a,
+      color: 0xf0c053,
       roughness: 0.75,
       flatShading: true,
     })
 
     const skinMaterial = new THREE.MeshStandardMaterial({
-      color: 0x9acd32,
+      color: 0x61b112,
       roughness: 0.7,
       flatShading: true,
     })
 
-    // Caparazón principal: conservamos el dodecaedro
+    // Caparazón principal: dodecaedro low-poly
     const shell = new THREE.Mesh(
       new THREE.DodecahedronGeometry(1, 0),
       shellMaterial,
     )
-    shell.scale.set(1, 0.5, 1.5)
+    shell.scale.set(1, 0.55, 1.5)
     body.add(shell)
 
-    // Borde inferior para que no parezca una piedra flotante
+    // Placas centrales del caparazón
+    const plateMaterial = new THREE.MeshStandardMaterial({
+      color: 0x0f6329,
+      roughness: 0.65,
+      metalness: 0.08,
+      flatShading: true,
+    })
+
+    const platePositions: Array<[number, number, number, number]> = [
+      [0, 0.52, 0.55, 0],
+      [0, 0.58, 0, 0],
+      [0, 0.52, -0.55, 0],
+      [-0.42, 0.42, 0.28, 0.5],
+      [0.42, 0.42, 0.28, -0.5],
+      [-0.42, 0.42, -0.28, -0.5],
+      [0.42, 0.42, -0.28, 0.5],
+    ]
+
+    for (const [x, y, z, rotation] of platePositions) {
+      const plate = new THREE.Mesh(
+        new THREE.DodecahedronGeometry(0.26, 0),
+        plateMaterial,
+      )
+
+      plate.position.set(x, y, z)
+      plate.rotation.y = rotation
+      plate.scale.set(1.1, 0.45, 1.25)
+
+      body.add(plate)
+    }
+
+    // Borde inferior original
     const shellRim = new THREE.Mesh(
       new THREE.CylinderGeometry(1.02, 0.82, 0.22, 10),
       shellRimMaterial,
@@ -118,8 +153,9 @@ export class Turtle {
       body.add(eye)
     }
 
-    // Aletas delanteras
+    // Aletas delanteras simples
     const frontFlipperGeometry = new THREE.BoxGeometry(0.85, 0.12, 0.42)
+
     const leftFrontFlipper = new THREE.Mesh(frontFlipperGeometry, skinMaterial)
     leftFrontFlipper.position.set(-0.85, 0, 0.5)
     leftFrontFlipper.rotation.z = 0.3
@@ -130,7 +166,7 @@ export class Turtle {
     rightFrontFlipper.rotation.z = -0.3
     body.add(rightFrontFlipper)
 
-    // Aletas traseras
+    // Aletas traseras simples
     const backFlipperGeometry = new THREE.BoxGeometry(0.5, 0.1, 0.3)
 
     const leftBackFlipper = new THREE.Mesh(backFlipperGeometry, skinMaterial)
@@ -175,9 +211,11 @@ export class Turtle {
     this.mesh.position.copy(position)
     this.mesh.rotation.set(0, 0, 0)
     this.model.rotation.set(0, 0, 0)
+
     this.speed = 0
     this.isSpinning = false
     this.spinProgress = 0
+    this.completedRoll = 0
   }
 
   public update(
@@ -210,6 +248,9 @@ export class Turtle {
       if (this.spinProgress >= 1) {
         this.spinProgress = 1
         this.isSpinning = false
+
+        // Conserva la vuelta completada
+        this.completedRoll += Math.PI * 2 * this.spinDirection
       }
 
       const t = this.spinProgress
@@ -233,11 +274,13 @@ export class Turtle {
       -bounds.halfSize,
       bounds.halfSize,
     )
+
     position.z = THREE.MathUtils.clamp(
       position.z,
       -bounds.halfSize,
       bounds.halfSize,
     )
+
     position.y = THREE.MathUtils.clamp(position.y, bounds.minY, bounds.maxY)
 
     this.animateSwimming(deltaTime, turn, vertical, extraRollAngle)
@@ -264,7 +307,7 @@ export class Turtle {
     this.leftFrontFlipper.rotation.x = paddle * swimAmplitude
     this.rightFrontFlipper.rotation.x = -paddle * swimAmplitude
 
-    // Aleteo trasero más sutil
+    // Aletas traseras más sutiles
     this.leftBackFlipper.rotation.x = -paddle * swimAmplitude * 0.45
     this.rightBackFlipper.rotation.x = paddle * swimAmplitude * 0.45
 
@@ -277,11 +320,12 @@ export class Turtle {
     this.model.rotation.x +=
       (pitchTarget - this.model.rotation.x) * (1 - Math.exp(-6 * deltaTime))
 
-    // Inclinación al girar + balanceo natural + giro 360
+    // Inclinación al girar + balanceo + giros completados
     const bankTarget = -turn * 0.28
     const baseRoll = Math.sin(this.time * 4.5) * 0.07
 
-    const targetRoll = bankTarget + baseRoll + extraRollAngle
+    const targetRoll =
+      bankTarget + baseRoll + this.completedRoll + extraRollAngle
 
     this.model.rotation.z +=
       (targetRoll - this.model.rotation.z) * (1 - Math.exp(-7 * deltaTime))
