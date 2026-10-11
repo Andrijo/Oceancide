@@ -1,6 +1,6 @@
 // src/Turtle.ts
 import * as THREE from "three"
-import type { InputState, TurtleStats, WorldBounds } from "./types"
+import type { InputState, TurtleStats, WorldBounds } from "@core/types"
 
 export class Turtle {
   public mesh: THREE.Group

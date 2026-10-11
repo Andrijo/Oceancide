@@ -1,7 +1,7 @@
 // src/StructureManager.ts
 import * as THREE from "three"
 import type { BiomeGenerator } from "./BiomeGenerator"
-import type { Debris } from "./Debris"
+import type { Debris } from "@entities/Debris"
 import { Structure } from "./Structure"
 import { STRUCTURES, type StructureKey } from "./StructureConfig"
 

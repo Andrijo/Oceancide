@@ -1,6 +1,6 @@
 // src/debrisCatalog.ts
 
-import type { BiomeKey } from "./types"
+import type { BiomeKey } from "@core/types"
 
 export type OceanDebrisType = {
   id: string

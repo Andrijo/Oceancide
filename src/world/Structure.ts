@@ -1,7 +1,7 @@
 // src/Structure.ts
 
 import * as THREE from "three"
-import type { Debris } from "./Debris"
+import type { Debris } from "@entities/Debris"
 import type { StructureConfig } from "./StructureConfig"
 
 /** Una estructura colocada en el agua: aspecto, usos restantes y desechos en camino. */

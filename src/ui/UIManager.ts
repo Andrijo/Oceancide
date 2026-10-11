@@ -1,5 +1,5 @@
 // src/UIManager.ts
-import type { GameState } from "./types"
+import type { GameState } from "@core/types"
 
 export class UIManager {
   private debrisCountEl: HTMLElement

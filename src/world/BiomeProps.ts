@@ -1,7 +1,7 @@
 // src/BiomeProps.ts
 import * as THREE from "three"
-import type { BiomeKey } from "./types"
-import type { Rng } from "./rng"
+import type { BiomeKey } from "@core/types"
+import type { Rng } from "@core/rng"
 
 type PropFactory = (rng: Rng) => THREE.Object3D
 

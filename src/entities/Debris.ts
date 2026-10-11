@@ -8,8 +8,8 @@ import {
   type DebrisShape,
   type DebrisVisual,
 } from "./DebrisVisuals"
-import type { BiomeKey } from "./types"
-import { Rng } from "./rng"
+import type { BiomeKey } from "@core/types"
+import { Rng } from "@core/rng"
 
 const ECO_BASE = 5
 const ECO_PER_TOXICITY = 25
