@@ -27,7 +27,7 @@ const HUD_IDS = [
 
 const OUTCOME_TITLES: Record<RunOutcome, string> = {
   died: "¡Se acabó! La toxicidad ganó.",
-  completed: "¡Gracias, has ayudado a limpiar el océano!",
+  completed: "¡Felicidades, has limpiado el océano!",
   abandoned: "Has abandonado la run. El océano seguirá su curso.",
 }
 
@@ -272,11 +272,10 @@ export class ScreenManager {
       el(
         "div",
         `text-align: center;
-        font: 700 13px ${paragraphFONT};
+        font: 16px ${paragraphFONT};
         letter-spacing: 0.13em;
-        text-transform: uppercase;
         color: rgba(204, 245, 255, 0.72);`,
-        "La inmersión está detenida",
+        "El juego está detenido",
       ),
       this.makeButton("Reanudar", onResume),
       this.makeButton("Abandonar", onAbandon, false),
