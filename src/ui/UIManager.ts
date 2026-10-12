@@ -233,6 +233,61 @@ export class UIManager {
     )
   }
 
+  // src/ui/UIManager.ts — fragmento: nuevo método
+
+  /**
+   * Muestra un número flotante con el eco ganado al recoger un desecho.
+   * El tamaño escala con el valor: desechos más valiosos → número más grande.
+   *
+   * @param value Cantidad de eco (positivo).
+   * @param screenX Coordenada X en píxeles (relativa al viewport).
+   * @param screenY Coordenada Y en píxeles (relativa al viewport).
+   */
+  public showFloatingEco(
+    value: number,
+    screenX: number,
+    screenY: number,
+  ): void {
+    // Tamaño: base 16px + 0.6px por punto de eco, cap a 34px.
+    // Un desecho de 5 eco → 19px. Uno de 30 eco → 34px.
+    const size = Math.min(34, 16 + value * 0.6)
+
+    // Color según valor (coherente con el tamaño)
+    const color =
+      value >= 20
+        ? "#ffd166" // dorado: desechos muy tóxicos
+        : value >= 12
+          ? "#7cf7d4" // verde: desechos medios
+          : "#a5f3fc" // cian claro: desechos benignos
+
+    // Duración escala un poco con el tamaño (los grandes duran más)
+    const duration = 1.1 + Math.min(0.5, value * 0.015)
+
+    const el = document.createElement("div")
+    el.textContent = `+${value}`
+    el.style.cssText = `
+    position: fixed;
+    left: ${screenX}px;
+    top: ${screenY}px;
+    transform: translate(-50%, -50%);
+    font-family: "Geist-Semibold", sans-serif;
+    font-size: ${size}px;
+    font-weight: bold;
+    color: ${color};
+    text-shadow:
+      0 0 6px rgba(0, 0, 0, 0.9),
+      0 0 14px ${color}99;
+    pointer-events: none;
+    z-index: 1000;
+    animation: floatUpFade ${duration}s ease-out forwards;
+    will-change: transform, opacity;
+  `
+
+    document.body.appendChild(el)
+
+    window.setTimeout(() => el.remove(), duration * 1000)
+  }
+
   /** Flash verde breve cuando la toxicidad baja. */
   private triggerCleansing(): void {
     this.toxicitySkullEl.classList.add("cleansing")

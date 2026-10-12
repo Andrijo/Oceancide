@@ -1,5 +1,10 @@
 // src/ScreenManager.ts
-import { BIOME_ORDER, BIOMES, type RunOutcome, type RunSummary } from "@core/types"
+import {
+  BIOME_ORDER,
+  BIOMES,
+  type RunOutcome,
+  type RunSummary,
+} from "@core/types"
 import type { MetaState } from "@core/MetaState"
 
 export interface ScreenCallbacks {
@@ -133,7 +138,7 @@ export class ScreenManager {
 
     const ocean = el(
       "span",
-      `color: #ffffff;
+      `color: #efffff;
       text-shadow:
         0 5px 0 rgba(0, 44, 70, 0.72),
         0 11px 18px rgba(0, 5, 18, 0.65),
@@ -478,9 +483,9 @@ export class ScreenManager {
       `width: 100%;
       min-height: 58px;
       padding: 12px 22px;
-      border-radius: 12px 6px;
+      border-radius: 30px 60px;
       cursor: pointer;
-      background: transparent;
+       background:  rgba(0, 44, 70, 0.52);
       font: bold 19px ${titleFONT};
       letter-spacing: 0.04em;
       color: ${primary ? "#d9f8ff" : "#d9f8ff"};
@@ -493,7 +498,7 @@ export class ScreenManager {
 
     btn.addEventListener("mouseenter", () => {
       btn.style.transform = "translateY(-2px)"
-      btn.style.filter = "brightness(1.82)"
+      btn.style.filter = "brightness(1.32)"
     })
 
     btn.addEventListener("mouseleave", () => {
