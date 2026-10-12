@@ -7,6 +7,7 @@ import { Turtle } from "@entities/Turtle"
 import { BiomeGenerator } from "@world/BiomeGenerator"
 import { UIManager } from "@ui/UIManager"
 import { TouchControls } from "@ui/TouchControls"
+import { Debris } from "@/entities/Debris"
 import { BubbleTrail } from "@entities/BubbleTrail"
 import { BiomeTransition } from "@world/BiomeTransition"
 import { StructureManager } from "@world/StructureManager"
@@ -523,6 +524,40 @@ export class Game {
     }
   }
 
+  /**
+   * Proyecta la posición 3D de un desecho recogido a coordenadas de pantalla
+   * y muestra un número flotante con su eco.
+   *
+   * Filtra los desechos que están detrás de la cámara o fuera de pantalla.
+   */
+  private showFloatingEco(debris: Debris): void {
+    // Clonar la posición porque `project` la muta in-place
+    const worldPos = debris.mesh.position.clone()
+    worldPos.project(this.camera)
+
+    // Si el punto está detrás de la cámara (NDC z > 1), no mostrar
+    if (worldPos.z > 1) return
+
+    // Convertir de NDC (-1..1) a píxeles
+    const halfW = window.innerWidth / 2
+    const halfH = window.innerHeight / 2
+    const screenX = worldPos.x * halfW + halfW
+    const screenY = -worldPos.y * halfH + halfH
+
+    // Filtrar si está fuera de pantalla (con un pequeño margen)
+    const margin = 40
+    if (
+      screenX < -margin ||
+      screenX > window.innerWidth + margin ||
+      screenY < -margin ||
+      screenY > window.innerHeight + margin
+    ) {
+      return
+    }
+
+    this.uiManager.showFloatingEco(debris.ecoValue, screenX, screenY)
+  }
+
   private update(deltaTime: number, time: number): void {
     if (!this.state.isRunning) return
     if (this.transition.blocksGameplay) return
@@ -581,12 +616,16 @@ export class Game {
       this.state.ecoAwareness += debris.ecoValue
       this.collectedInZone++
 
+      // Reducción de toxicidad
       if (!this.godMode) {
         const reduction =
           TOXICITY_REDUCTION_BASE +
           debris.pollution * TOXICITY_REDUCTION_PER_POLLUTION
         this.state.toxicity = Math.max(0, this.state.toxicity - reduction)
       }
+
+      // Número flotante con el eco ganado
+      this.showFloatingEco(debris)
     }
 
     // Los filtros absorben desechos por su cuenta: cuentan para la zona,
