@@ -1,4 +1,4 @@
-// src/Game.ts
+// src/core/Game.ts
 // Clase principal del juego:
 // Inicia la escena, la cámara, la tortuga, el generador de biomas y la UI.
 
@@ -7,7 +7,6 @@ import { Turtle } from "@entities/Turtle"
 import { BiomeGenerator } from "@world/BiomeGenerator"
 import { UIManager } from "@ui/UIManager"
 import { TouchControls } from "@ui/TouchControls"
-import { DevMenu } from "@ui/DevMenu"
 import { BubbleTrail } from "@entities/BubbleTrail"
 import { BiomeTransition } from "@world/BiomeTransition"
 import { StructureManager } from "@world/StructureManager"
@@ -29,8 +28,25 @@ import {
 } from "@core/types"
 
 const MAX_DELTA = 0.1 // Restringe el deltaTime para que no se rompa la física si hay un lagazo o se cambia de pestaña.
-const TOXICITY_SCALE = 3 // toxicityRate 0.1 => ~0.3 de toxicidad por segundo.
-const CLEAN_THRESHOLD = 0.6 // Tasa de contaminación por debajo de la cual la toxicidad empieza a bajar sola.
+
+// Toxicidad:
+// - TOXICITY_SCALE: multiplica el toxicityRate del bioma.
+//   En deepSea (rate 1.0) sube a 3/seg. Muerte en ~33s si no recoges.
+const TOXICITY_SCALE = 3
+
+// Reducción de toxicidad al recoger un desecho:
+// - Base: 0.4 (todos los desechos reducen al menos esto)
+// - Por contaminación: pollution * 1.6 (los desechos más tóxicos reducen más)
+// Un desecho típico de bioma profundo (pollution ≈ 0.5) reduce ~1.2.
+const TOXICITY_REDUCTION_BASE = 0.4
+const TOXICITY_REDUCTION_PER_POLLUTION = 1.6
+
+// Reducción media estimada por desecho absorbido por un filtro.
+// Los filtros no nos dicen qué desecho absorben, así que usamos un promedio
+// asumiendo pollution ≈ 0.5.
+const FILTER_TOXICITY_REDUCTION =
+  TOXICITY_REDUCTION_BASE + 0.5 * TOXICITY_REDUCTION_PER_POLLUTION
+
 const ZONE_COMPLETION_RATIO = 0.7 // % de desechos que hay que recoger para pasar de zona
 const CAMERA_OFFSET = new THREE.Vector3(0, 5, -12) // Posición de la cámara respecto a la tortuga.
 const UP = new THREE.Vector3(0, 1, 0)
@@ -59,7 +75,6 @@ export class Game {
   private ambientLight!: THREE.AmbientLight
   private directionalLight!: THREE.DirectionalLight
   private pointLights: THREE.PointLight[] = []
-  private devMenu?: DevMenu
 
   private biomeIndex = 0
   private collectedInZone = 0
@@ -150,64 +165,7 @@ export class Game {
     this.setupEventListeners()
     this.showHub()
 
-    // Menú de desarrollador: con `vite dev` o con ?dev en la URL.
-    if (
-      import.meta.env.DEV ||
-      new URLSearchParams(location.search).has("dev")
-    ) {
-      this.devMenu = new DevMenu({
-        getBiomeIndex: () => this.biomeIndex,
-        goToBiome: (i) => this.goToBiome(i),
-        isGodMode: () => this.godMode,
-        setGodMode: (v) => {
-          this.godMode = v
-        },
-        clearToxicity: () => {
-          this.state.toxicity = 0
-        },
-        completeZone: () => {
-          this.collectedInZone = Number.MAX_SAFE_INTEGER
-        },
-        restartRun: () => this.restartRun(),
-      })
-    }
-
     this.animate()
-  }
-
-  // Métodos
-  /**
-   * Salta directamente a un bioma (herramienta de desarrollo).
-   * No resetea la run: conserva eco, desechos recolectados y toxicidad.
-   * Si no hay run activa (estás en el hub), simplemente carga el bioma
-   * en modo "vista previa" sin iniciar una run.
-   */
-  private goToBiome(index: number): void {
-    if (index < 0 || index >= BIOME_ORDER.length) return
-
-    // Cancelar cualquier transición pendiente o en curso
-    this.transition.cancel()
-    this.pendingAdvance = false
-    this.paused = false
-
-    // Si no estamos en run, entrar en modo run sin resetear stats
-    if (this.screen !== "run") {
-      this.screen = "run"
-      this.state.isRunning = true
-      this.screens.hide()
-    }
-
-    this.loadBiome(index)
-    this.devMenu?.refresh()
-  }
-
-  /**
-   * Reinicia la run actual (herramienta de desarrollo).
-   * Equivale a pulsar "Empezar" desde el hub.
-   */
-  private restartRun(): void {
-    this.startRun()
-    this.devMenu?.refresh()
   }
 
   private setupLighting(): void {
@@ -315,10 +273,7 @@ export class Game {
         const direction = e.code === "KeyQ" ? "left" : "right"
         this.turtle.trigger360Spin(direction)
 
-        // Feedback visual: mensaje breve con el dash
         if (!this.turtle.isSpinBoosting()) {
-          // Solo mostramos el mensaje si el boost estaba inactivo,
-          // para no spamear con giros encadenados
           this.uiManager.showMessage("¡DASH!", 700)
         }
       }
@@ -494,6 +449,9 @@ export class Game {
     this.screen = "run"
     this.clearInput()
 
+    // Resetear los avisos de "primera vez por run"
+    this.uiManager.resetRunHints()
+
     this.screens.hide()
     this.loadBiome(0)
     this.uiManager.showMessage(this.biomeGenerator.getBiomeName())
@@ -552,6 +510,8 @@ export class Game {
     }
 
     const started = this.transition.play(() => {
+      // Al cambiar de bioma, la toxicidad se reduce a la mitad.
+      // No se resetea a 0 para que las runs profundas sigan siendo tensas.
       this.state.toxicity *= 0.5
       this.loadBiome(next)
       this.uiManager.showMessage(this.biomeGenerator.getBiomeName())
@@ -586,7 +546,7 @@ export class Game {
     this.camera.position.lerp(this.getCameraTarget(), smoothing)
     this.camera.lookAt(this.turtle.getPosition())
 
-    // Recolección
+    // Recolección manual
     const collected = this.biomeGenerator.updateDebris(
       this.turtle.getPosition(),
       this.turtle.getCollectionRadius(),
@@ -599,49 +559,54 @@ export class Game {
       this.biomeGenerator.getInitialDebrisCount() * ZONE_COMPLETION_RATIO,
     )
 
+    // Toxicidad pasiva: SIEMPRE sube, proporcional a la contaminación restante.
+    // Cuando el bioma está limpio (pollution ≈ 0), casi no sube, pero nunca baja.
+    this.biomeGenerator.updateVisuals(deltaTime)
+    const pollution = this.biomeGenerator.getPollutionRatio()
+    const base = this.biomeGenerator.getBiome().toxicityRate * TOXICITY_SCALE
+    const passiveRate =
+      base * pollution * (1 - this.turtle.stats.toxicityResistance)
+
+    if (!this.godMode) {
+      this.state.toxicity = Math.max(
+        0,
+        this.state.toxicity + passiveRate * deltaTime,
+      )
+    }
+
+    // Recolección manual: cada desecho reduce la toxicidad directamente.
+    // Es la única forma de bajarla (además de los filtros).
     for (const debris of collected) {
       this.state.debrisCollected++
       this.state.ecoAwareness += debris.ecoValue
       this.collectedInZone++
+
+      if (!this.godMode) {
+        const reduction =
+          TOXICITY_REDUCTION_BASE +
+          debris.pollution * TOXICITY_REDUCTION_PER_POLLUTION
+        this.state.toxicity = Math.max(0, this.state.toxicity - reduction)
+      }
     }
 
-    // Los filtros absorben desechos por su cuenta (cuentan para la zona y dan Conciencia Ecológica)
+    // Los filtros absorben desechos por su cuenta: cuentan para la zona,
+    // dan eco, y también reducen toxicidad (como si la tortuga los recogiera).
     const credit = this.structures.update(deltaTime, time, this.biomeGenerator)
-    this.state.zoneProgress = Math.min(
-      100,
-      (this.collectedInZone / required) * 100,
-    )
-
-    // HUD del boost de giro
-    const spinBoost = this.turtle.getSpinBoost()
-    const spinBoostActive = this.turtle.isSpinBoosting()
-    this.uiManager.updateSpinBoostHud(
-      spinBoost / 1.6, // normalizado a 0..1 respecto al máximo
-      spinBoostActive,
-    )
     this.state.debrisCollected += credit.count
     this.state.ecoAwareness += credit.eco
     this.collectedInZone += credit.count
 
+    if (!this.godMode && credit.count > 0) {
+      this.state.toxicity = Math.max(
+        0,
+        this.state.toxicity - FILTER_TOXICITY_REDUCTION * credit.count,
+      )
+    }
+
     this.state.zoneProgress = Math.min(
       100,
       (this.collectedInZone / required) * 100,
     )
-
-    // Toxicidad según la contaminación que queda en la zona:
-    // sube mientras quede mucha y baja sola cuando está casi limpia.
-    this.biomeGenerator.updateVisuals(deltaTime)
-    const pollution = this.biomeGenerator.getPollutionRatio()
-    const drift = (pollution - CLEAN_THRESHOLD) / (1 - CLEAN_THRESHOLD) // 1 sucia .. <0 casi limpia
-    const base = this.biomeGenerator.getBiome().toxicityRate * TOXICITY_SCALE
-    const rate =
-      drift > 0
-        ? base * drift * (1 - this.turtle.stats.toxicityResistance)
-        : base * drift // la recuperación no depende de la resistencia
-
-    if (!this.godMode) {
-      this.state.toxicity = Math.max(0, this.state.toxicity + rate * deltaTime)
-    }
 
     if (!this.godMode && this.state.toxicity >= 100) {
       this.endRun("died")
@@ -651,6 +616,11 @@ export class Game {
 
     this.uiManager.updateUI(this.state)
     this.updateBuildHud()
+
+    // HUD del boost de giro
+    const spinBoost = this.turtle.getSpinBoost()
+    const spinBoostActive = this.turtle.isSpinBoosting()
+    this.uiManager.updateSpinBoostHud(spinBoost / 1.6, spinBoostActive)
   }
 
   private animate(timestamp: number = 0): void {
@@ -683,8 +653,6 @@ export class Game {
     const simDelta = this.paused ? 0 : deltaTime // en pausa, la estela queda congelada
 
     // Estela de burbujas mientras se usa el impulso y la tortuga avanza de verdad
-    // Intensidad del boost: si hay spin boost o boost normal, las burbujas
-    // salen más grandes y más rápido
     const spinIntensity = this.turtle.isSpinBoosting()
       ? Math.min(1, this.turtle.getSpinBoost() / 1.6)
       : 0

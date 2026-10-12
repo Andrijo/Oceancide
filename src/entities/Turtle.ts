@@ -47,9 +47,9 @@ export class Turtle {
     this.mesh.add(this.model)
 
     this.stats = {
-      speed: 9,
+      speed: 8,
       collectionRadius: 3,
-      toxicityResistance: 0.2,
+      toxicityResistance: 0.05,
       filterCapacity: 5,
     }
   }

@@ -74,17 +74,108 @@
         pointer-events: none;
       }
 
-      #toxicity-bar {
+      /* ============================================
+         Calavera de toxicidad
+         ============================================ */
+
+      .toxicity-skull {
         position: absolute;
-        top: 20px;
-        right: 20px;
-        width: 200px;
-        height: 20px;
-        background: rgba(0, 0, 0, 0.5);
-        border-radius: 10px;
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 76px;
+        height: 92px;
+        z-index: 150;
+        pointer-events: none;
         opacity: 0;
-        overflow: hidden;
-        border: 2px solid rgba(255, 255, 255, 0.3);
+        transition: opacity 0.4s ease;
+        will-change: transform, opacity;
+      }
+
+      .toxicity-skull.active {
+        opacity: 1;
+      }
+
+      .toxicity-skull svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      .skull-shape {
+        fill: rgba(28, 16, 16, 0.85);
+        stroke: rgba(220, 230, 240, 0.55);
+        stroke-width: 2;
+        stroke-linejoin: round;
+        transition:
+          stroke 0.3s ease,
+          filter 0.3s ease;
+      }
+
+      .skull-hole {
+        fill: rgba(10, 6, 6, 0.95);
+      }
+
+      .skull-tooth {
+        fill: rgba(10, 6, 6, 0.95);
+      }
+
+      .skull-fill {
+        fill: #2ecc71;
+        /* Vacío: desplazado 120px hacia abajo (altura del viewBox) */
+        transform: translateY(120px);
+        transition: fill 0.3s ease;
+      }
+
+      .toxicity-skull.level-low .skull-fill {
+        fill: #2ecc71;
+      }
+      .toxicity-skull.level-mid .skull-fill {
+        fill: #facc15;
+      }
+      .toxicity-skull.level-high .skull-fill {
+        fill: #f97316;
+      }
+      .toxicity-skull.level-crit .skull-fill {
+        fill: #ef4444;
+      }
+
+      .toxicity-skull.level-crit .skull-shape {
+        stroke: rgba(255, 80, 80, 0.95);
+        filter: drop-shadow(0 0 8px rgba(255, 60, 60, 0.7));
+      }
+
+      .toxicity-skull.level-low {
+        animation: skullPulse 3s ease-in-out infinite;
+      }
+      .toxicity-skull.level-mid {
+        animation: skullPulse 2s ease-in-out infinite;
+      }
+      .toxicity-skull.level-high {
+        animation: skullPulse 1.2s ease-in-out infinite;
+      }
+      .toxicity-skull.level-crit {
+        animation: skullPulse 0.6s ease-in-out infinite;
+      }
+
+      /* Flash verde cuando la toxicidad baja */
+      .toxicity-skull.cleansing .skull-shape {
+        stroke: rgba(120, 255, 160, 0.95);
+        filter: drop-shadow(0 0 10px rgba(80, 255, 140, 0.8));
+      }
+
+      .toxicity-skull.cleansing .skull-fill {
+        filter: brightness(1.4) saturate(1.3);
+      }
+
+      @keyframes skullPulse {
+        0%,
+        100% {
+          transform: translateX(-50%) scale(1);
+        }
+        50% {
+          transform: translateX(-50%) scale(1.08);
+        }
       }
 
       @keyframes fadeInOut {
@@ -100,13 +191,6 @@
         100% {
           opacity: 0;
         }
-      }
-
-      #toxicity-fill {
-        height: 100%;
-        width: 0%;
-        background: linear-gradient(90deg, #00ff88, #ff6600, #ff0000);
-        transition: width 0.3s ease;
       }
 
       body {
@@ -273,23 +357,28 @@
         #ui-overlay {
           top: 10px;
           left: 10px;
-          opacity: 0;
+          /* El HUD ahora SÍ se ve en móvil */
         }
+
         .stat-box {
           padding: 6px 10px;
           margin-bottom: 5px;
-          opacity: 0;
         }
+
         .stat-value {
           font-size: 16px;
           margin-top: 2px;
-          opacity: 0;
         }
-        #toxicity-bar {
-          top: 10px;
-          right: 10px;
-          width: 120px;
-          opacity: 0;
+
+        .toxicity-skull {
+          top: 60px;
+          width: 56px;
+          height: 68px;
+        }
+
+        /* En móvil el hint de teclado no aplica: se oculta */
+        #controls-hint {
+          display: none;
         }
       }
     </style>
@@ -311,13 +400,91 @@
         </div>
       </div>
 
-      <div id="toxicity-bar">
-        <div id="toxicity-fill"></div>
+      <div id="toxicity-skull" class="toxicity-skull" aria-hidden="true">
+        <svg viewBox="0 0 100 120" preserveAspectRatio="xMidYMid meet">
+          <!-- Silueta de calavera -->
+          <path
+            class="skull-shape"
+            d="M50 6
+               C 24 6, 10 24, 10 46
+               C 10 62, 16 72, 22 78
+               L 22 92
+               C 22 98, 26 102, 32 102
+               L 38 102
+               L 38 110
+               C 38 115, 42 118, 46 118
+               L 54 118
+               C 58 118, 62 115, 62 110
+               L 62 102
+               L 68 102
+               C 74 102, 78 98, 78 92
+               L 78 78
+               C 84 72, 90 62, 90 46
+               C 90 24, 76 6, 50 6 Z" />
+          <!-- Cuencas y nariz -->
+          <ellipse class="skull-hole" cx="35" cy="48" rx="9" ry="11" />
+          <ellipse class="skull-hole" cx="65" cy="48" rx="9" ry="11" />
+          <path class="skull-hole" d="M50 62 L 45 74 L 55 74 Z" />
+          <!-- Dientes -->
+          <rect class="skull-tooth" x="40" y="88" width="3" height="10" />
+          <rect class="skull-tooth" x="46" y="88" width="3" height="10" />
+          <rect class="skull-tooth" x="52" y="88" width="3" height="10" />
+          <rect class="skull-tooth" x="58" y="88" width="3" height="10" />
+
+          <!-- Relleno animado: sube desde abajo con translateY -->
+          <g mask="url(#skull-mask)">
+            <rect
+              id="toxicity-skull-fill"
+              x="0"
+              y="0"
+              width="100"
+              height="120"
+              class="skull-fill" />
+          </g>
+
+          <!-- Máscara: silueta blanca deja ver, agujeros negros ocultan -->
+          <defs>
+            <mask
+              id="skull-mask"
+              maskUnits="userSpaceOnUse"
+              maskContentUnits="userSpaceOnUse"
+              x="0"
+              y="0"
+              width="100"
+              height="120">
+              <path
+                fill="white"
+                d="M50 6
+                   C 24 6, 10 24, 10 46
+                   C 10 62, 16 72, 22 78
+                   L 22 92
+                   C 22 98, 26 102, 32 102
+                   L 38 102
+                   L 38 110
+                   C 38 115, 42 118, 46 118
+                   L 54 118
+                   C 58 118, 62 115, 62 110
+                   L 62 102
+                   L 68 102
+                   C 74 102, 78 98, 78 92
+                   L 78 78
+                   C 84 72, 90 62, 90 46
+                   C 90 24, 76 6, 50 6 Z" />
+              <ellipse fill="black" cx="35" cy="48" rx="9" ry="11" />
+              <ellipse fill="black" cx="65" cy="48" rx="9" ry="11" />
+              <path fill="black" d="M50 62 L 45 74 L 55 74 Z" />
+              <rect fill="black" x="40" y="88" width="3" height="10" />
+              <rect fill="black" x="46" y="88" width="3" height="10" />
+              <rect fill="black" x="52" y="88" width="3" height="10" />
+              <rect fill="black" x="58" y="88" width="3" height="10" />
+            </mask>
+          </defs>
+        </svg>
       </div>
 
       <div id="controls-hint">
-        WASD / Flechas: Moverse | U / J: Subir / Bajar | I: Impulso | Q/E: Girar
-        | C: Vista trasera | R: Reiniciar | Enter/Escape: Pausar
+        WASD mover · U/J profundidad · I impulso · Q/E giro · B filtro · C mirar
+        atrás · R reiniciar · Enter pausa
       </div>
     </div>
 

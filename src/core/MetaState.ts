@@ -1,7 +1,7 @@
-// src/MetaState.ts
+// src/core/MetaState.ts
 // Progreso persistente entre runs (Refugio) y su guardado en localStorage.
 
-import type { RunOutcome, RunSummary } from "./types"
+import type { RunOutcome, RunSummary } from "@core/types"
 
 export const META_VERSION = 1
 const STORAGE_KEY = "oceancide.meta"
@@ -11,13 +11,13 @@ export const COMPLETION_BONUS = 0.25
 
 export interface MetaState {
   version: number
-  ecoPoints: number // Conciencia Ecológica disponible para gastar
-  lifetimeEco: number // total ganado en toda la historia
-  bestBiomeIndex: number // -1 = aún ninguna
+  ecoPoints: number
+  lifetimeEco: number
+  bestBiomeIndex: number
   runsPlayed: number
   runsCompleted: number
   totalDebris: number
-  upgrades: Record<string, number> // id de mejora => nivel (para el Refugio)
+  upgrades: Record<string, number>
 }
 
 export function createDefaultMeta(): MetaState {
