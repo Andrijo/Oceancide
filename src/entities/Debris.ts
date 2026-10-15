@@ -255,10 +255,11 @@ function getMaterial(id: string, visual: DebrisVisual): THREE.Material {
 // Principal
 
 export class Debris {
+  public static pickDefinition(biome: BiomeKey, rng: Rng): OceanDebrisType {
+    return rng.pick(BIOME_DEBRIS[biome])
+  }
+
   public object: THREE.Object3D
-  public readonly id: string
-  public readonly name: string
-  public readonly description: string
   public readonly ecoValue: number
   public readonly pollution: number
 
@@ -273,9 +274,6 @@ export class Debris {
   private cloudMaterial: THREE.Material | null = null
 
   constructor(position: THREE.Vector3, definition: OceanDebrisType, rng: Rng) {
-    this.id = definition.id
-    this.name = definition.name
-    this.description = definition.description
     this.ecoValue = Math.round(
       ECO_BASE + definition.toxicityImpact * ECO_PER_TOXICITY,
     )
@@ -309,37 +307,8 @@ export class Debris {
     )
   }
 
-  /** Asigna un material compartido a todos los hijos de la nube. */
-  private applyCloudMaterial(
-    group: THREE.Object3D,
-    visual: DebrisVisual,
-  ): THREE.Material {
-    const material = new THREE.MeshStandardMaterial({
-      color: visual.color,
-      transparent: true,
-      opacity: visual.opacity ?? 0.6,
-      roughness: 0.9,
-      metalness: visual.metalness ?? 0,
-      emissive: visual.emissive ?? 0x000000,
-      emissiveIntensity:
-        visual.emissive !== undefined ? (visual.glow ?? 0.3) : 0,
-    })
-
-    group.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.material = material
-      }
-    })
-
-    return material
-  }
-
   public get mesh(): THREE.Object3D {
     return this.object
-  }
-
-  public static pickDefinition(biome: BiomeKey, rng: Rng): OceanDebrisType {
-    return rng.pick(BIOME_DEBRIS[biome])
   }
 
   public pull(target: THREE.Vector3): void {
@@ -393,4 +362,30 @@ export class Debris {
     this.pullTarget = null
     this.pullArrived = false
   }
+
+  /** Asigna un material compartido a todos los hijos de la nube. */
+  private applyCloudMaterial(
+    group: THREE.Object3D,
+    visual: DebrisVisual,
+  ): THREE.Material {
+    const material = new THREE.MeshStandardMaterial({
+      color: visual.color,
+      transparent: true,
+      opacity: visual.opacity ?? 0.6,
+      roughness: 0.9,
+      metalness: visual.metalness ?? 0,
+      emissive: visual.emissive ?? 0x000000,
+      emissiveIntensity:
+        visual.emissive !== undefined ? (visual.glow ?? 0.3) : 0,
+    })
+
+    group.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.material = material
+      }
+    })
+
+    return material
+  }
+
 }

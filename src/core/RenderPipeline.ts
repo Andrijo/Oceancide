@@ -76,29 +76,6 @@ export class RenderPipeline {
     }
   }
 
-  private setupComposer(): void {
-    const size = new THREE.Vector2()
-    this.renderer.getSize(size)
-
-    this.composer = new EffectComposer(this.renderer)
-    this.composer.setPixelRatio(this.renderer.getPixelRatio())
-    this.composer.setSize(size.x, size.y)
-
-    const renderPass = new RenderPass(this.scene, this.camera)
-    this.composer.addPass(renderPass)
-
-    this.bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(size.x, size.y),
-      0, // strength inicial: se actualiza por frame
-      BLOOM_RADIUS,
-      BLOOM_THRESHOLD,
-    )
-    this.composer.addPass(this.bloomPass)
-
-    const outputPass = new OutputPass()
-    this.composer.addPass(outputPass)
-  }
-
   /**
    * Fija el strength objetivo del bloom (0..1). El valor real se interpola
    * suavemente para evitar saltos cuando cambia de bioma.
@@ -142,14 +119,32 @@ export class RenderPipeline {
     }
   }
 
-  /** Ajusta la exposición del tonemapping en caliente. */
-  public setExposure(exposure: number): void {
-    this.renderer.toneMappingExposure = exposure
-  }
-
   public dispose(): void {
     this.composer?.dispose()
     this.composer = null
     this.bloomPass = null
+  }
+
+  private setupComposer(): void {
+    const size = new THREE.Vector2()
+    this.renderer.getSize(size)
+
+    this.composer = new EffectComposer(this.renderer)
+    this.composer.setPixelRatio(this.renderer.getPixelRatio())
+    this.composer.setSize(size.x, size.y)
+
+    const renderPass = new RenderPass(this.scene, this.camera)
+    this.composer.addPass(renderPass)
+
+    this.bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(size.x, size.y),
+      0, // strength inicial: se actualiza por frame
+      BLOOM_RADIUS,
+      BLOOM_THRESHOLD,
+    )
+    this.composer.addPass(this.bloomPass)
+
+    const outputPass = new OutputPass()
+    this.composer.addPass(outputPass)
   }
 }

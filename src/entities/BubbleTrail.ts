@@ -66,19 +66,6 @@ export class BubbleTrail {
     this.clear()
   }
 
-  private applyInstanceColors(): void {
-    const color = new THREE.Color()
-
-    for (let i = 0; i < POOL_SIZE; i++) {
-      color.copy(BUBBLE_COLORS[i % BUBBLE_COLORS.length])
-      this.mesh.setColorAt(i, color)
-    }
-
-    if (this.mesh.instanceColor) {
-      this.mesh.instanceColor.needsUpdate = true
-    }
-  }
-
   public clear(): void {
     for (let i = 0; i < POOL_SIZE; i++) {
       this.age[i] = 1
@@ -87,39 +74,6 @@ export class BubbleTrail {
     }
 
     this.mesh.instanceMatrix.needsUpdate = true
-  }
-
-  private hide(index: number): void {
-    this.dummy.position.set(0, -9999, 0)
-    this.dummy.scale.setScalar(0)
-    this.dummy.updateMatrix()
-    this.mesh.setMatrixAt(index, this.dummy.matrix)
-  }
-
-  private spawn(emitter: THREE.Vector3, sizeMultiplier = 1): void {
-    const i = this.cursor
-    this.cursor = (this.cursor + 1) % POOL_SIZE
-
-    const position = this.positions[i]
-    position.copy(emitter)
-    position.addScaledVector(this.forward, -1.55)
-
-    position.x += (Math.random() - 0.5) * 0.55
-    position.y += (Math.random() - 0.5) * 0.35
-    position.z += (Math.random() - 0.5) * 0.55
-
-    const velocity = this.velocities[i]
-    velocity.copy(this.forward).multiplyScalar(-(0.8 + Math.random() * 1.4))
-
-    velocity.x += (Math.random() - 0.5) * 0.45
-    velocity.z += (Math.random() - 0.5) * 0.45
-    velocity.y = 0.85 + Math.random() * 1.1
-
-    this.age[i] = 0
-    this.life[i] = 1.15 + Math.random() * 1.1
-    this.size[i] = (0.05 + Math.random() * 0.13) * sizeMultiplier
-    this.phase[i] = Math.random() * Math.PI * 2
-    this.wobble[i] = 0.5 + Math.random() * 1.2
   }
 
   /**
@@ -204,4 +158,51 @@ export class BubbleTrail {
     ;(this.mesh.material as THREE.Material).dispose()
     this.mesh.removeFromParent()
   }
+
+  private applyInstanceColors(): void {
+    const color = new THREE.Color()
+
+    for (let i = 0; i < POOL_SIZE; i++) {
+      color.copy(BUBBLE_COLORS[i % BUBBLE_COLORS.length])
+      this.mesh.setColorAt(i, color)
+    }
+
+    if (this.mesh.instanceColor) {
+      this.mesh.instanceColor.needsUpdate = true
+    }
+  }
+
+  private hide(index: number): void {
+    this.dummy.position.set(0, -9999, 0)
+    this.dummy.scale.setScalar(0)
+    this.dummy.updateMatrix()
+    this.mesh.setMatrixAt(index, this.dummy.matrix)
+  }
+
+  private spawn(emitter: THREE.Vector3, sizeMultiplier = 1): void {
+    const i = this.cursor
+    this.cursor = (this.cursor + 1) % POOL_SIZE
+
+    const position = this.positions[i]
+    position.copy(emitter)
+    position.addScaledVector(this.forward, -1.55)
+
+    position.x += (Math.random() - 0.5) * 0.55
+    position.y += (Math.random() - 0.5) * 0.35
+    position.z += (Math.random() - 0.5) * 0.55
+
+    const velocity = this.velocities[i]
+    velocity.copy(this.forward).multiplyScalar(-(0.8 + Math.random() * 1.4))
+
+    velocity.x += (Math.random() - 0.5) * 0.45
+    velocity.z += (Math.random() - 0.5) * 0.45
+    velocity.y = 0.85 + Math.random() * 1.1
+
+    this.age[i] = 0
+    this.life[i] = 1.15 + Math.random() * 1.1
+    this.size[i] = (0.05 + Math.random() * 0.13) * sizeMultiplier
+    this.phase[i] = Math.random() * Math.PI * 2
+    this.wobble[i] = 0.5 + Math.random() * 1.2
+  }
+
 }

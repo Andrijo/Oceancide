@@ -302,21 +302,6 @@ export class WaterEffects {
     this.refreshColors()
   }
 
-  private refreshColors(): void {
-    const lit = this.horizon.clone().lerp(LIGHT, 0.5).multiplyScalar(1.1)
-    const dim = this.horizon.clone().multiplyScalar(0.8)
-    const zenith = dim.lerp(lit, this.sunNorm)
-    const nadir = this.horizon.clone().multiplyScalar(0.5)
-
-    this.domeMaterial.uniforms.uHorizon.value.copy(this.horizon)
-    this.domeMaterial.uniforms.uZenith.value.copy(zenith)
-    this.domeMaterial.uniforms.uNadir.value.copy(nadir)
-
-    const edge = this.horizon.clone().multiplyScalar(0.18).getStyle()
-    const rgba = edge.replace("rgb(", "rgba(").replace(")", ", 0.62)")
-    this.vignette.style.background = `radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 48%, ${rgba} 100%)`
-  }
-
   /**
    * @param cleanliness 0 = bioma contaminado, 1 = limpio. Los rayos se marcan más con agua limpia.
    */
@@ -331,6 +316,38 @@ export class WaterEffects {
     this.dome.position.copy(cameraPosition)
     this.updateSnow(deltaTime, cameraPosition)
     this.updateShafts(cameraPosition)
+  }
+
+  public dispose(): void {
+    this.dome.removeFromParent()
+    this.dome.geometry.dispose()
+    this.domeMaterial.dispose()
+
+    this.snow.removeFromParent()
+    this.snow.geometry.dispose()
+    ;(this.snow.material as THREE.Material).dispose()
+
+    this.shafts.removeFromParent()
+    this.shafts.geometry.dispose()
+    ;(this.shafts.material as THREE.Material).dispose()
+    this.shaftTexture.dispose()
+
+    this.vignette.remove()
+  }
+
+  private refreshColors(): void {
+    const lit = this.horizon.clone().lerp(LIGHT, 0.5).multiplyScalar(1.1)
+    const dim = this.horizon.clone().multiplyScalar(0.8)
+    const zenith = dim.lerp(lit, this.sunNorm)
+    const nadir = this.horizon.clone().multiplyScalar(0.5)
+
+    this.domeMaterial.uniforms.uHorizon.value.copy(this.horizon)
+    this.domeMaterial.uniforms.uZenith.value.copy(zenith)
+    this.domeMaterial.uniforms.uNadir.value.copy(nadir)
+
+    const edge = this.horizon.clone().multiplyScalar(0.18).getStyle()
+    const rgba = edge.replace("rgb(", "rgba(").replace(")", ", 0.62)")
+    this.vignette.style.background = `radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 48%, ${rgba} 100%)`
   }
 
   private updateSnow(deltaTime: number, camera: THREE.Vector3): void {
@@ -395,22 +412,5 @@ export class WaterEffects {
 
     this.shafts.instanceMatrix.needsUpdate = true
     if (this.shafts.instanceColor) this.shafts.instanceColor.needsUpdate = true
-  }
-
-  public dispose(): void {
-    this.dome.removeFromParent()
-    this.dome.geometry.dispose()
-    this.domeMaterial.dispose()
-
-    this.snow.removeFromParent()
-    this.snow.geometry.dispose()
-    ;(this.snow.material as THREE.Material).dispose()
-
-    this.shafts.removeFromParent()
-    this.shafts.geometry.dispose()
-    ;(this.shafts.material as THREE.Material).dispose()
-    this.shaftTexture.dispose()
-
-    this.vignette.remove()
   }
 }

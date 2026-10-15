@@ -1,15 +1,8 @@
 // src/ui/UIManager.ts
-// Clase encargada de actualizar los elementos de la interfaz de usuario (HUD) y mostrar mensajes en pantalla.
-
 import type { GameState } from "@core/types"
 
-// El aviso de toxicidad se muestra una vez por run, la primera vez que
-// aparece la calavera. No se persiste entre sesiones.
-const TOXICITY_HINT_DURATION = 7000 // ms visible
-
-const CLEANSING_DURATION = 600 // ms del flash verde al bajar la toxicidad
-// Con el rediseño, cada desecho reduce ~1.2 de toxicidad.
-// Threshold bajo para que cada recolección dispare el flash.
+const TOXICITY_HINT_DURATION = 7000
+const CLEANSING_DURATION = 600
 const CLEANSING_THRESHOLD = 0.5
 
 export class UIManager {
@@ -18,19 +11,22 @@ export class UIManager {
   private zoneProgressEl: HTMLElement
   private toxicitySkullEl: HTMLElement
   private toxicitySkullFillEl: SVGRectElement
+  private biomeTimerEl: HTMLElement
+  private boostBarEl: HTMLElement
+  private boostBarFillEl: HTMLElement
 
   private buildHudEl: HTMLElement
   private spinBoostHudEl: HTMLElement
   private lastBuildHud = ""
   private lastSpinBoostVisible = false
+  private lastBoostVisible = false
+  private lastBiomeTimerText = ""
 
-  // Estado cacheado para evitar tocar el DOM cada frame
   private lastToxicityLevel: string | null = null
   private lastToxicityVisible = false
   private lastToxicity = 0
   private cleansingTimeout?: number
 
-  // Hint de toxicidad: se resetea al empezar cada run
   private toxicityHintShownThisRun = false
   private toxicityHintEl?: HTMLElement
   private toxicityHintTimeout?: number
@@ -42,12 +38,64 @@ export class UIManager {
     this.debrisCountEl = document.getElementById("debris-count")!
     this.ecoAwarenessEl = document.getElementById("eco-awareness")!
     this.zoneProgressEl = document.getElementById("zone-progress")!
-
     this.toxicitySkullEl = document.getElementById("toxicity-skull")!
     this.toxicitySkullFillEl = document.querySelector<SVGRectElement>(
       "#toxicity-skull-fill",
     )!
 
+    // Timer del bioma (arriba izquierda)
+    this.biomeTimerEl = document.createElement("div")
+    this.biomeTimerEl.id = "biome-timer"
+    this.biomeTimerEl.style.cssText = `
+      position: absolute;
+      top: calc(12px + env(safe-area-inset-top, 0px));
+      left: calc(12px + env(safe-area-inset-left, 0px));
+      padding: 6px 14px;
+      font-family: "Geist-Semibold", sans-serif;
+      font-size: 20px;
+      font-weight: bold;
+      letter-spacing: 0.08em;
+      color: #f7f7ff;
+      background: rgba(0, 0, 0, 0.55);
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      border-radius: 10px;
+      pointer-events: none;
+      z-index: 150;
+      text-shadow: 0 0 10px rgba(0, 0, 0, 0.9);
+      transition: color 0.3s ease, border-color 0.3s ease;
+    `
+    document.getElementById("game-container")!.appendChild(this.biomeTimerEl)
+
+    // Barra de energía del boost (centro inferior)
+    this.boostBarEl = document.createElement("div")
+    this.boostBarEl.id = "boost-energy-bar"
+    this.boostBarEl.style.cssText = `
+      position: absolute;
+      bottom: 130px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 180px;
+      height: 8px;
+      background: rgba(0, 0, 0, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      border-radius: 4px;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 100;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    `
+    this.boostBarFillEl = document.createElement("div")
+    this.boostBarFillEl.style.cssText = `
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, #22d3ee, #38bdf8, #a78bfa);
+      transition: width 0.08s linear, background 0.2s ease;
+    `
+    this.boostBarEl.appendChild(this.boostBarFillEl)
+    document.getElementById("game-container")!.appendChild(this.boostBarEl)
+
+    // HUD de construcción
     this.buildHudEl = document.createElement("div")
     this.buildHudEl.id = "build-hud"
     this.buildHudEl.style.cssText = `
@@ -72,7 +120,7 @@ export class UIManager {
     this.spinBoostHudEl.id = "spin-boost-hud"
     this.spinBoostHudEl.style.cssText = `
       position: absolute;
-      bottom: 110px;
+      bottom: 100px;
       left: 50%;
       transform: translateX(-50%);
       padding: 6px 18px;
@@ -91,7 +139,6 @@ export class UIManager {
     document.getElementById("game-container")!.appendChild(this.spinBoostHudEl)
   }
 
-  /** Botón de pausa del HUD (círculo con dos barras, arriba a la derecha). */
   public createPauseButton(onClick: () => void): void {
     const btn = document.createElement("button")
     btn.id = "pause-btn"
@@ -126,7 +173,6 @@ export class UIManager {
     document.getElementById("game-container")!.appendChild(btn)
   }
 
-  /** Indicador de la estructura que se puede construir. */
   public updateBuildHud(text: string, available: boolean): void {
     const key = `${available}|${text}`
     if (key === this.lastBuildHud) return
@@ -135,50 +181,78 @@ export class UIManager {
     this.buildHudEl.style.color = available ? "#f7f7ff" : "#ff9a9a"
   }
 
-  /**
-   * Actualiza el HUD del boost de giro.
-   * @param boost 0..1 (fracción del boost restante respecto al máximo)
-   * @param active si el boost está activo
-   */
   public updateSpinBoostHud(boost: number, active: boolean): void {
     if (active !== this.lastSpinBoostVisible) {
       this.spinBoostHudEl.style.display = active ? "block" : "none"
       this.lastSpinBoostVisible = active
     }
-
     if (!active) return
-
     const multiplier = 1 + boost * 0.6
     this.spinBoostHudEl.textContent = `DASH ×${multiplier.toFixed(2)}`
   }
 
-  /** Actualiza el HUD con el estado del juego. */
+  public updateBoostEnergy(energy: number, active: boolean): void {
+    const percent = Math.round(energy * 100)
+    this.boostBarFillEl.style.width = `${percent}%`
+
+    if (energy < 0.2) {
+      this.boostBarFillEl.style.background = "#ef4444"
+    } else if (energy < 0.5) {
+      this.boostBarFillEl.style.background = "#f97316"
+    } else {
+      this.boostBarFillEl.style.background =
+        "linear-gradient(90deg, #22d3ee, #38bdf8, #a78bfa)"
+    }
+
+    const visible = active || energy < 0.99
+    if (visible !== this.lastBoostVisible) {
+      this.boostBarEl.style.opacity = visible ? "1" : "0"
+      this.lastBoostVisible = visible
+    }
+  }
+
+  public updateBiomeTimer(remaining: number, limit: number): void {
+    const secs = Math.ceil(remaining)
+    const text = `${secs}s`
+
+    if (text !== this.lastBiomeTimerText) {
+      this.biomeTimerEl.textContent = text
+      this.lastBiomeTimerText = text
+    }
+
+    const ratio = remaining / limit
+    if (remaining <= 10) {
+      this.biomeTimerEl.style.color = "#ef4444"
+      this.biomeTimerEl.style.borderColor = "rgba(239, 68, 68, 0.9)"
+    } else if (ratio < 0.3) {
+      this.biomeTimerEl.style.color = "#f97316"
+      this.biomeTimerEl.style.borderColor = "rgba(249, 115, 22, 0.7)"
+    } else {
+      this.biomeTimerEl.style.color = "#f7f7ff"
+      this.biomeTimerEl.style.borderColor = "rgba(255, 255, 255, 0.35)"
+    }
+  }
+
   public updateUI(state: GameState): void {
     this.debrisCountEl.textContent = state.debrisCollected.toString()
     this.ecoAwarenessEl.textContent = state.ecoAwareness.toString()
     this.zoneProgressEl.textContent = `${Math.round(state.zoneProgress)}%`
 
-    // Toxicidad: 0..100
     const toxicity = Math.min(state.toxicity, 100)
 
-    // Primera vez que aparece la calavera en esta run: se explica
     if (!this.toxicityHintShownThisRun && toxicity > 0.5) {
       this.showToxicityHint()
     }
 
-    // Relleno vertical: sube desde abajo.
-    // viewBox tiene altura 120. translateY(120) = vacío, translateY(0) = lleno.
     const fillY = 120 - (toxicity / 100) * 120
     this.toxicitySkullFillEl.style.transform = `translateY(${fillY}px)`
 
-    // Visibilidad: solo cambia si el estado cambió
     const visible = toxicity > 0.5
     if (visible !== this.lastToxicityVisible) {
       this.toxicitySkullEl.classList.toggle("active", visible)
       this.lastToxicityVisible = visible
     }
 
-    // Feedback de "limpieza": si la toxicidad bajó de forma notable
     if (
       this.lastToxicity > 1 &&
       toxicity < this.lastToxicity - CLEANSING_THRESHOLD
@@ -187,7 +261,6 @@ export class UIManager {
     }
     this.lastToxicity = toxicity
 
-    // Nivel: solo actualiza si cambió
     const level =
       toxicity > 75
         ? "level-crit"
@@ -211,15 +284,9 @@ export class UIManager {
     }
   }
 
-  /**
-   * Resetea los avisos de "primera vez por run". Llamar al empezar una run.
-   * También resetea el estado cacheado para que el próximo bioma se vea limpio.
-   */
   public resetRunHints(): void {
     this.toxicityHintShownThisRun = false
     this.hideToxicityHint()
-
-    // Resetear cachés de toxicidad para que no arrastren estado de la run anterior
     this.lastToxicity = 0
     this.lastToxicityLevel = null
     this.lastToxicityVisible = false
@@ -233,65 +300,8 @@ export class UIManager {
     )
   }
 
-  // src/ui/UIManager.ts — fragmento: nuevo método
-
-  /**
-   * Muestra un número flotante con el eco ganado al recoger un desecho.
-   * El tamaño escala con el valor: desechos más valiosos → número más grande.
-   *
-   * @param value Cantidad de eco (positivo).
-   * @param screenX Coordenada X en píxeles (relativa al viewport).
-   * @param screenY Coordenada Y en píxeles (relativa al viewport).
-   */
-  public showFloatingEco(
-    value: number,
-    screenX: number,
-    screenY: number,
-  ): void {
-    // Tamaño: base 16px + 0.6px por punto de eco, cap a 34px.
-    // Un desecho de 5 eco → 19px. Uno de 30 eco → 34px.
-    const size = Math.min(34, 16 + value * 0.6)
-
-    // Color según valor (coherente con el tamaño)
-    const color =
-      value >= 20
-        ? "#ffd166" // dorado: desechos muy tóxicos
-        : value >= 12
-          ? "#7cf7d4" // verde: desechos medios
-          : "#a5f3fc" // cian claro: desechos benignos
-
-    // Duración escala un poco con el tamaño (los grandes duran más)
-    const duration = 1.1 + Math.min(0.5, value * 0.015)
-
-    const el = document.createElement("div")
-    el.textContent = `+${value}`
-    el.style.cssText = `
-    position: fixed;
-    left: ${screenX}px;
-    top: ${screenY}px;
-    transform: translate(-50%, -50%);
-    font-family: "Geist-Semibold", sans-serif;
-    font-size: ${size}px;
-    font-weight: bold;
-    color: ${color};
-    text-shadow:
-      0 0 6px rgba(0, 0, 0, 0.9),
-      0 0 14px ${color}99;
-    pointer-events: none;
-    z-index: 1000;
-    animation: floatUpFade ${duration}s ease-out forwards;
-    will-change: transform, opacity;
-  `
-
-    document.body.appendChild(el)
-
-    window.setTimeout(() => el.remove(), duration * 1000)
-  }
-
-  /** Flash verde breve cuando la toxicidad baja. */
   private triggerCleansing(): void {
     this.toxicitySkullEl.classList.add("cleansing")
-
     window.clearTimeout(this.cleansingTimeout)
     this.cleansingTimeout = window.setTimeout(() => {
       this.toxicitySkullEl.classList.remove("cleansing")
@@ -299,17 +309,9 @@ export class UIManager {
     }, CLEANSING_DURATION)
   }
 
-  /**
-   * Aviso de primera vez bajo la calavera. No pausa el juego, se desvanece solo.
-   * Se muestra una vez por run.
-   */
   private showToxicityHint(): void {
     this.toxicityHintShownThisRun = true
-
     const container = document.getElementById("game-container")!
-
-    // Posición fija: debajo de la calavera en desktop, más abajo en móvil.
-    // Evita getBoundingClientRect, que es frágil si hay transformaciones.
     const isMobile = window.innerWidth <= 700
     const top = isMobile ? 150 : 130
 
@@ -356,7 +358,6 @@ export class UIManager {
     }, TOXICITY_HINT_DURATION)
   }
 
-  /** Oculta el aviso de toxicidad si está en pantalla (p. ej. al terminar la run). */
   public hideToxicityHint(): void {
     window.clearTimeout(this.toxicityHintTimeout)
     this.toxicityHintTimeout = undefined
@@ -364,7 +365,6 @@ export class UIManager {
     this.toxicityHintEl = undefined
   }
 
-  /** Muestra un mensaje temporal en pantalla. */
   public showMessage(message: string, duration: number = 2000): void {
     this.currentMessage?.remove()
     window.clearTimeout(this.messageTimeout)
@@ -400,7 +400,39 @@ export class UIManager {
     }, duration)
   }
 
-  /** Limpia timeouts y elementos temporales. Llamar al destruir el juego. */
+  public showFloatingEco(
+    value: number,
+    screenX: number,
+    screenY: number,
+  ): void {
+    const size = Math.min(34, 16 + value * 0.6)
+    const color = value >= 20 ? "#ffd166" : value >= 12 ? "#7cf7d4" : "#a5f3fc"
+    const duration = 1.1 + Math.min(0.5, value * 0.015)
+
+    const el = document.createElement("div")
+    el.textContent = `+${value}`
+    el.style.cssText = `
+      position: fixed;
+      left: ${screenX}px;
+      top: ${screenY}px;
+      transform: translate(-50%, -50%);
+      font-family: "Geist-Semibold", sans-serif;
+      font-size: ${size}px;
+      font-weight: bold;
+      color: ${color};
+      text-shadow:
+        0 0 6px rgba(0, 0, 0, 0.9),
+        0 0 14px ${color}99;
+      pointer-events: none;
+      z-index: 1000;
+      animation: floatUpFade ${duration}s ease-out forwards;
+      will-change: transform, opacity;
+    `
+
+    document.body.appendChild(el)
+    window.setTimeout(() => el.remove(), duration * 1000)
+  }
+
   public dispose(): void {
     window.clearTimeout(this.messageTimeout)
     window.clearTimeout(this.toxicityHintTimeout)
@@ -410,5 +442,7 @@ export class UIManager {
     this.toxicityHintEl?.remove()
     this.buildHudEl.remove()
     this.spinBoostHudEl.remove()
+    this.biomeTimerEl.remove()
+    this.boostBarEl.remove()
   }
 }

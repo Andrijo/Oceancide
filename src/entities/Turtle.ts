@@ -1,11 +1,10 @@
-// src/Turtle.ts
+// src/entities/Turtle.ts
 import * as THREE from "three"
 import type { InputState, TurtleStats, WorldBounds } from "@core/types"
 
 export class Turtle {
   public mesh: THREE.Group
   public stats: TurtleStats
-  private baseStats: TurtleStats
 
   private model: THREE.Group
   private body: THREE.Group
@@ -32,6 +31,16 @@ export class Turtle {
   private spinBoostMultiplier = 1.6
   private readonly spinBoostDecay = 4
 
+  // Boost normal (I): energía finita
+  private boostEnergy = 100
+  private readonly boostMaxEnergy = 100
+  private readonly boostDrainRate = 25
+  private readonly boostRegenRate = 12
+  private readonly boostMinToStart = 15
+  private boostActiveThisFrame = false
+
+  private baseStats: TurtleStats
+
   constructor() {
     const { model, body, flippers, tail } = this.createTurtleModel()
 
@@ -48,9 +57,9 @@ export class Turtle {
     this.mesh.add(this.model)
 
     this.stats = {
-      speed: 8,
+      speed: 9,
       collectionRadius: 3,
-      toxicityResistance: 0.05,
+      toxicityResistance: 0.1,
       filterCapacity: 5,
     }
     this.baseStats = { ...this.stats }
@@ -119,11 +128,9 @@ export class Turtle {
         new THREE.DodecahedronGeometry(0.26, 0),
         plateMaterial,
       )
-
       plate.position.set(x, y, z)
       plate.rotation.y = rotation
       plate.scale.set(1.1, 0.45, 1.25)
-
       body.add(plate)
     }
 
@@ -198,18 +205,12 @@ export class Turtle {
     }
   }
 
-  public resetStats(): void {
-    this.stats = { ...this.baseStats }
-  }
-
   public trigger360Spin(direction: "left" | "right" = "left"): void {
     if (this.isSpinning) return
 
     this.isSpinning = true
     this.spinProgress = 0
     this.spinDirection = direction === "left" ? 1 : -1
-
-    // Impulso inmediato: multiplicador temporal de velocidad
     this.spinBoost = this.spinBoostMultiplier
   }
 
@@ -223,6 +224,21 @@ export class Turtle {
     this.spinProgress = 0
     this.completedRoll = 0
     this.spinBoost = 0
+    this.boostEnergy = this.boostMaxEnergy
+    this.boostActiveThisFrame = false
+  }
+
+  /** Restaura las estadísticas a sus valores base. Llamar al empezar una run. */
+  public resetStats(): void {
+    this.stats = { ...this.baseStats }
+  }
+
+  public addSpinBoostMultiplier(delta: number): void {
+    this.spinBoostMultiplier += delta
+  }
+
+  public getSpinBoostMultiplier(): number {
+    return this.spinBoostMultiplier
   }
 
   public update(
@@ -232,28 +248,42 @@ export class Turtle {
   ): void {
     this.time += deltaTime
 
-    // Decaimiento exponencial del boost de giro
+    // Decaimiento del boost de giro
     if (this.spinBoost > 0) {
       this.spinBoost *= Math.exp(-this.spinBoostDecay * deltaTime)
       if (this.spinBoost < 0.01) this.spinBoost = 0
     }
 
-    // Boost normal (I) × boost de giro (Q/E)
-    const inputBoost = input.boost ? 2 : 1
-    const totalBoost = inputBoost * (1 + this.spinBoost)
+    // --- Gestión de la energía del boost normal ---
+    const wantsBoost = input.boost
+    const canBoost = this.boostEnergy >= this.boostMinToStart
+    const isBoosting = wantsBoost && canBoost
 
+    this.boostActiveThisFrame = isBoosting
+
+    if (isBoosting) {
+      this.boostEnergy = Math.max(
+        0,
+        this.boostEnergy - this.boostDrainRate * deltaTime,
+      )
+    } else {
+      this.boostEnergy = Math.min(
+        this.boostMaxEnergy,
+        this.boostEnergy + this.boostRegenRate * deltaTime,
+      )
+    }
+
+    const inputBoost = isBoosting ? 2 : 1
+    const totalBoost = inputBoost * (1 + this.spinBoost)
     const maxSpeed = this.stats.speed * totalBoost
 
     let targetSpeed = 0
-
-    if (input.forward || (input.boost && !input.backward)) {
+    if (input.forward || (isBoosting && !input.backward)) {
       targetSpeed = maxSpeed
     } else if (input.backward) {
       targetSpeed = -maxSpeed * 0.5
     }
 
-    // Durante el giro, forzamos avance hacia adelante para que se sienta
-    // como un "dash" incluso si el jugador suelta W
     if (this.isSpinning && targetSpeed === 0) {
       targetSpeed = maxSpeed * 0.6
     }
@@ -273,8 +303,6 @@ export class Turtle {
         this.isSpinning = false
 
         this.completedRoll += Math.PI * 2 * this.spinDirection
-
-        // Normalizar solo cuando supera muchas vueltas (evita el salto visual)
         if (Math.abs(this.completedRoll) > Math.PI * 20) {
           this.completedRoll = this.completedRoll % (Math.PI * 2)
         }
@@ -282,12 +310,10 @@ export class Turtle {
 
       const t = this.spinProgress
       const easedProgress = t * t * (3 - 2 * t)
-
       extraRollAngle = easedProgress * Math.PI * 2 * this.spinDirection
     }
 
     const yaw = this.mesh.rotation.y
-
     this.mesh.position.x += Math.sin(yaw) * this.speed * deltaTime
     this.mesh.position.z += Math.cos(yaw) * this.speed * deltaTime
 
@@ -295,19 +321,16 @@ export class Turtle {
     this.mesh.position.y += vertical * this.stats.speed * 0.7 * deltaTime
 
     const position = this.mesh.position
-
     position.x = THREE.MathUtils.clamp(
       position.x,
       -bounds.halfSize,
       bounds.halfSize,
     )
-
     position.z = THREE.MathUtils.clamp(
       position.z,
       -bounds.halfSize,
       bounds.halfSize,
     )
-
     position.y = THREE.MathUtils.clamp(position.y, bounds.minY, bounds.maxY)
 
     this.animateSwimming(deltaTime, turn, vertical, extraRollAngle)
@@ -327,66 +350,39 @@ export class Turtle {
 
     const swimFrequency = 2.2 + speedRatio * 2.4
     const swimAmplitude = 0.22 + speedRatio * 0.24
-
     const paddle = Math.sin(this.time * swimFrequency)
 
-    // Aleteo delantero alternado
     this.leftFrontFlipper.rotation.x = paddle * swimAmplitude
     this.rightFrontFlipper.rotation.x = -paddle * swimAmplitude
-
-    // Aletas traseras más sutiles
     this.leftBackFlipper.rotation.x = -paddle * swimAmplitude * 0.45
     this.rightBackFlipper.rotation.x = paddle * swimAmplitude * 0.45
-
-    // Cola
     this.tail.rotation.y = paddle * 0.18
 
-    // Cabeceo vertical
     const pitchTarget = -vertical * 0.38 + Math.sin(this.time * 2.6) * 0.035
-
     this.model.rotation.x +=
       (pitchTarget - this.model.rotation.x) * (1 - Math.exp(-6 * deltaTime))
 
-    // Inclinación al girar + balanceo + giros completados
     const bankTarget = -turn * 0.28
     const baseRoll = Math.sin(this.time * 4.5) * 0.07
-
     const targetRoll =
       bankTarget + baseRoll + this.completedRoll + extraRollAngle
 
     this.model.rotation.z +=
       (targetRoll - this.model.rotation.z) * (1 - Math.exp(-7 * deltaTime))
 
-    // Uso del body: flotación + squash & stretch
-
-    // Flotación sutil constante (respiración)
+    // --- Flotación + squash & stretch del body ---
     this.body.position.y = Math.sin(this.time * 1.8) * 0.06
     this.body.rotation.x = Math.sin(this.time * 1.4) * 0.03
 
-    // Squash & stretch durante el boost de giro.
-    // boostVisual va de 0 (sin boost) a 1 (boost máximo).
     const boostVisual = Math.min(1, this.spinBoost / this.spinBoostMultiplier)
-
-    // Estirar en Z (dirección de avance) y comprimir en X/Y
     const targetScaleX = 1 - boostVisual * 0.05
     const targetScaleY = 1 - boostVisual * 0.08
     const targetScaleZ = 1 + boostVisual * 0.15
 
     const scaleSmoothing = 1 - Math.exp(-8 * deltaTime)
-
     this.body.scale.x += (targetScaleX - this.body.scale.x) * scaleSmoothing
     this.body.scale.y += (targetScaleY - this.body.scale.y) * scaleSmoothing
     this.body.scale.z += (targetScaleZ - this.body.scale.z) * scaleSmoothing
-  }
-
-  /** Suma un delta al multiplicador del boost de giro. */
-  public addSpinBoostMultiplier(delta: number): void {
-    this.spinBoostMultiplier += delta
-  }
-
-  /** Multiplicador actual del boost de giro (para HUD y tests). */
-  public getSpinBoostMultiplier(): number {
-    return this.spinBoostMultiplier
   }
 
   public getSpeed(): number {
@@ -401,18 +397,23 @@ export class Turtle {
     return this.stats.collectionRadius
   }
 
-  /** Multiplicador de velocidad actual por el boost de giro (1 = sin boost). */
   public getSpinBoost(): number {
     return this.spinBoost
   }
 
-  /** True si el boost de giro está activo de forma apreciable. */
   public isSpinBoosting(): boolean {
     return this.spinBoost > 0.05
   }
 
-  /** True si la tortuga está en medio de un giro de 360°. */
   public isSpinInProgress(): boolean {
     return this.isSpinning
+  }
+
+  public isBoosting(): boolean {
+    return this.boostActiveThisFrame
+  }
+
+  public getBoostEnergy(): number {
+    return this.boostEnergy / this.boostMaxEnergy
   }
 }

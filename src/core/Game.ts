@@ -1,6 +1,4 @@
 // src/core/Game.ts
-// Clase principal del juego:
-// Inicia la escena, la cámara, la tortuga, el generador de biomas y la UI.
 
 import * as THREE from "three"
 import { Turtle } from "@entities/Turtle"
@@ -10,7 +8,7 @@ import { UIManager } from "@ui/UIManager"
 import { TouchControls } from "@ui/TouchControls"
 import { CardManager } from "@cards/CardManager"
 import { createRunState, type RunState } from "@cards/Card"
-import { Debris } from "@/entities/Debris"
+import { Debris } from "@entities/Debris"
 import { BubbleTrail } from "@entities/BubbleTrail"
 import { BiomeTransition } from "@world/BiomeTransition"
 import { StructureManager } from "@world/StructureManager"
@@ -32,41 +30,29 @@ import {
   type RunSummary,
 } from "@core/types"
 
-const MAX_DELTA = 0.1 // Restringe el deltaTime para que no se rompa la física si hay un lagazo o se cambia de pestaña.
+const MAX_DELTA = 0.1
 
-// Toxicidad:
-// - TOXICITY_SCALE: multiplica el toxicityRate del bioma.
-//   En deepSea (rate 1.0) sube a 3/seg. Muerte en ~33s si no recoges.
 const TOXICITY_SCALE = 3
-
-// Reducción de toxicidad al recoger un desecho:
-// - Base: 0.4 (todos los desechos reducen al menos esto)
-// - Por contaminación: pollution * 1.6 (los desechos más tóxicos reducen más)
-// Un desecho típico de bioma profundo (pollution ≈ 0.5) reduce ~1.2.
 const TOXICITY_REDUCTION_BASE = 0.4
 const TOXICITY_REDUCTION_PER_POLLUTION = 1.6
-
-// Reducción media estimada por desecho absorbido por un filtro.
-// Los filtros no nos dicen qué desecho absorben, así que usamos un promedio
-// asumiendo pollution ≈ 0.5.
 const FILTER_TOXICITY_REDUCTION =
   TOXICITY_REDUCTION_BASE + 0.5 * TOXICITY_REDUCTION_PER_POLLUTION
 
-const ZONE_COMPLETION_RATIO = 0.7 // % de desechos que hay que recoger para pasar de zona
-const CAMERA_OFFSET = new THREE.Vector3(0, 5, -12) // Posición de la cámara respecto a la tortuga.
+const ZONE_COMPLETION_RATIO = 0.7
+const CAMERA_OFFSET = new THREE.Vector3(0, 5, -12)
 const UP = new THREE.Vector3(0, 1, 0)
-const BUILD_DISTANCE = 4 // las estructuras se colocan delante de la tortuga
-
-// Luz: en las zonas sin sol, las luces puntuales de bioluminiscencia pasan a ser
-// la luz principal. Multiplicador máximo de su intensidad cuando no hay sol
-// (darkness = 1). Con luces físicas (decay 2) hacen falta valores altos; ajústalo a gusto.
+const BUILD_DISTANCE = 4
 const DEEP_POINT_LIGHT_BOOST = 25
-
 const BLOOM_MAX_STRENGTH = 0.5
+
+// Timer por bioma: 90s base, bajando 4s por bioma profundo.
+// Bioma 0: 90s, bioma 9: 54s. Nunca menos de 40s.
+const BIOME_TIME_BASE = 90
+const BIOME_TIME_DECAY = 4
+const BIOME_TIME_MIN = 40
 
 type Screen = "hub" | "run" | "summary"
 
-/** Permite reproducir una run con ?seed=123 en la URL. */
 function seedFromUrl(): number | null {
   const raw = new URLSearchParams(location.search).get("seed")
   if (raw === null) return null
@@ -88,7 +74,8 @@ export class Game {
   private ambientLight!: THREE.AmbientLight
   private directionalLight!: THREE.DirectionalLight
   private pointLights: THREE.PointLight[] = []
-  private pointLightBoost = 1 // sube en biomas oscuros (ver applyBiomeLighting)
+  private pointLightBoost = 1
+
   private cardManager = new CardManager()
   private runState: RunState = createRunState()
   private biomeIndex = 0
@@ -96,13 +83,15 @@ export class Game {
   private godMode = false
   private bubbles: BubbleTrail
   private structures: StructureManager
-  private lookBack = false // C mantenida: cámara mirando hacia atrás
-  private lookBackApplied = false // valor de lookBack con el que está colocada la cámara
+  private lookBack = false
+  private lookBackApplied = false
   private paused = false
   private transition: BiomeTransition
-
-  // Flag para reintentar advanceBiome si transition.play() falla
   private pendingAdvance = false
+
+  // Timer por bioma
+  private biomeTimeRemaining = 0
+  private biomeTimeLimit = 0
 
   private saveManager = new SaveManager()
   private meta: MetaState
@@ -128,7 +117,6 @@ export class Game {
       .getElementById("game-container")!
       .appendChild(this.renderer.domElement)
 
-    // Pipeline de render: tonemapping ACES + bloom (desactivado en móvil)
     this.renderPipeline = new RenderPipeline(
       this.renderer,
       this.scene,
@@ -181,7 +169,7 @@ export class Game {
     })
 
     this.timer = new THREE.Timer()
-    this.timer.connect(document) // ignora el tiempo con la pestaña oculta
+    this.timer.connect(document)
 
     this.setupLighting()
     this.setupEventListeners()
@@ -191,13 +179,9 @@ export class Game {
   }
 
   private setupLighting(): void {
-    // Ambiental mínima: BiomeGenerator ya añade su propia ambiental/hemisférica
-    // por bioma, así que esta solo evita negros absolutos.
     this.ambientLight = new THREE.AmbientLight(0x404040, 0.1)
     this.scene.add(this.ambientLight)
 
-    // "Sol": su intensidad y color los fija applyBiomeLighting() según la profundidad.
-    // Casi vertical, como la luz que baja desde la superficie.
     this.directionalLight = new THREE.DirectionalLight(0xffffff, 0.8)
     this.directionalLight.position.copy(SUN_DIRECTION).multiplyScalar(100)
     this.scene.add(this.directionalLight)
@@ -214,14 +198,11 @@ export class Game {
     window.addEventListener("keyup", (e) => this.handleKeyUp(e))
     window.addEventListener("resize", () => this.handleResize())
 
-    // Pausa automática al cambiar de pestaña o minimizar.
-    // No pausamos si hay una transición en curso: la transición debe
-    // terminar sola y luego el usuario decide.
     document.addEventListener("visibilitychange", () => {
       if (
         document.hidden &&
         !this.transition.isActive() &&
-        this.screens.isCardChoiceActive()
+        !this.screens.isCardChoiceActive()
       ) {
         this.setPaused(true)
       }
@@ -259,23 +240,20 @@ export class Game {
   }
 
   private handleKeyDown(e: KeyboardEvent): void {
-    // Escape: pausar o continuar.
     if (e.code === "Escape") {
       if (!e.repeat && !this.screens.isCardChoiceActive()) this.togglePause()
       return
     }
 
-    // Enter: solo pausa. Reanudar con Enter lo gestiona ScreenManager; si Game también
-    // lo alternara, la pausa se reabriría en el mismo evento.
     if (e.code === "Enter") {
       if (!e.repeat && !e.defaultPrevented && !this.paused) {
         this.setPaused(true)
-        e.preventDefault() // ScreenManager no debe tomarlo como "Reanudar"
+        e.preventDefault()
       }
       return
     }
 
-    if (this.paused) return // en pausa no se atienden los demás controles
+    if (this.paused) return
 
     if (e.code === "KeyR") {
       if (!e.repeat && this.screen === "run") this.endRun("abandoned")
@@ -287,13 +265,11 @@ export class Game {
       return
     }
 
-    // C (mantener): ver hacia atrás
     if (e.code === "KeyC") {
       this.lookBack = true
       return
     }
 
-    // Q / E: giro de 360° (solo al pulsar, no se repite al mantener la tecla)
     if (e.code === "KeyQ" || e.code === "KeyE") {
       if (
         !e.repeat &&
@@ -325,25 +301,28 @@ export class Game {
     this.renderPipeline.setSize(window.innerWidth, window.innerHeight)
   }
 
-  /** Genera un bioma y coloca a la tortuga, las luces y la cámara. */
   private loadBiome(index: number): void {
     this.biomeIndex = index
     this.collectedInZone = 0
     this.state.zoneProgress = 0
 
-    // Cada bioma de una run usa su propia semilla derivada de la semilla de la run
+    // Timer por bioma
+    this.biomeTimeLimit = Math.max(
+      BIOME_TIME_MIN,
+      BIOME_TIME_BASE - index * BIOME_TIME_DECAY,
+    )
+    this.biomeTimeRemaining = this.biomeTimeLimit
+
     const rng = new Rng(deriveSeed(this.runSeed, index))
     this.biomeGenerator.generateBiome(BIOME_ORDER[index], rng)
     this.applyBiomeLighting()
 
-    // Bloom: solo en biomas oscuros
     const sun = this.biomeGenerator.getSun()
     this.renderPipeline.setBloomStrength(sun.darkness * BLOOM_MAX_STRENGTH)
 
     const bounds = this.biomeGenerator.getBounds()
     this.turtle.reset(new THREE.Vector3(0, (bounds.minY + bounds.maxY) / 2, 0))
 
-    // Luces puntuales deterministas: usan el mismo rng derivado
     for (const light of this.pointLights) {
       light.color.setHex(this.biomeGenerator.getBiome().accentColor)
       light.position.set(
@@ -359,11 +338,6 @@ export class Game {
     this.snapCamera()
   }
 
-  /**
-   * Ajusta el sol y las luces de bioluminiscencia al bioma actual.
-   * No se alterna `visible` en la luz (cambiaría el nº de luces y recompilaría
-   * todos los materiales); basta con llevar la intensidad a 0.
-   */
   private applyBiomeLighting(): void {
     const sun = this.biomeGenerator.getSun()
     this.directionalLight.intensity = sun.intensity
@@ -385,7 +359,13 @@ export class Game {
     this.camera.lookAt(this.turtle.getPosition())
   }
 
-  /** Construye una estructura delante de la tortuga, pagando con Conciencia Ecológica. */
+  private computeStructurePhase(): number {
+    const count = this.structures.getActiveCount()
+    const salt = 10000 + this.biomeIndex * 100 + count
+    const hash = deriveSeed(this.runSeed, salt)
+    return (hash / 0xffffffff) * Math.PI * 2
+  }
+
   private tryBuild(key: StructureKey): void {
     if (this.screen !== "run" || this.transition.blocksGameplay) return
 
@@ -420,7 +400,9 @@ export class Game {
     position.y = THREE.MathUtils.clamp(position.y, bounds.minY, bounds.maxY)
 
     this.state.ecoAwareness -= config.cost
-    this.structures.build(key, position)
+
+    const phase = this.computeStructurePhase()
+    this.structures.build(key, position, phase)
   }
 
   private updateBuildHud(): void {
@@ -442,7 +424,6 @@ export class Game {
     if (paused === this.paused) return
 
     if (paused) {
-      // Solo se puede pausar durante una run y fuera de una transición
       if (this.screen !== "run" || this.transition.isActive()) return
       this.paused = true
       this.clearInput()
@@ -476,7 +457,6 @@ export class Game {
     this.input.boost = false
   }
 
-  /** Refugio: escena de fondo con la cámara orbitando y menú encima. */
   private showHub(): void {
     this.transition.cancel()
     this.pendingAdvance = false
@@ -503,11 +483,9 @@ export class Game {
     this.screen = "run"
     this.clearInput()
 
-    // Resetear stats de la tortuga y el estado de la run
     this.turtle.resetStats()
     this.runState = createRunState()
 
-    // Resetear avisos de "primera vez por run"
     this.uiManager.resetRunHints()
 
     this.screens.hide()
@@ -515,7 +493,6 @@ export class Game {
     this.uiManager.showMessage(this.biomeGenerator.getBiomeName())
   }
 
-  /** Cierra la run, guarda el progreso y enseña el resumen. */
   private endRun(outcome: RunOutcome): void {
     if (this.screen !== "run") return
 
@@ -525,7 +502,6 @@ export class Game {
     this.state.isRunning = false
     this.clearInput()
 
-    // "abandoned" conserva lo recolectado pero no da bono de completitud.
     const { base, bonus } = computeEco(this.state.ecoAwareness, outcome)
     const summary: RunSummary = {
       outcome,
@@ -562,47 +538,35 @@ export class Game {
       return
     }
 
-    // Si ya hay una transición activa, marcamos pendiente y reintentamos
     if (this.transition.isActive()) {
       this.pendingAdvance = true
       return
     }
 
     const started = this.transition.play(() => {
-      // Al cambiar de bioma, la toxicidad se reduce a la mitad.
-      // No se resetea a 0 para que las runs profundas sigan siendo tensas.
       this.state.toxicity *= 0.5
       this.loadBiome(next)
       this.uiManager.showMessage(this.biomeGenerator.getBiomeName())
     })
 
-    // Si no arrancó (por race condition), reintentamos en el siguiente frame
     if (!started) {
       this.pendingAdvance = true
     }
   }
 
-  /**
-   * Proyecta la posición 3D de un desecho recogido a coordenadas de pantalla
-   * y muestra un número flotante con su eco.
-   *
-   * Filtra los desechos que están detrás de la cámara o fuera de pantalla.
-   */
-  private showFloatingEco(debris: Debris): void {
-    // Clonar la posición porque `project` la muta in-place
-    const worldPos = debris.mesh.position.clone()
-    worldPos.project(this.camera)
+  private projectToScreen(
+    worldPosition: THREE.Vector3,
+  ): { x: number; y: number } | null {
+    const pos = worldPosition.clone()
+    pos.project(this.camera)
 
-    // Si el punto está detrás de la cámara (NDC z > 1), no mostrar
-    if (worldPos.z > 1) return
+    if (pos.z > 1) return null
 
-    // Convertir de NDC (-1..1) a píxeles
     const halfW = window.innerWidth / 2
     const halfH = window.innerHeight / 2
-    const screenX = worldPos.x * halfW + halfW
-    const screenY = -worldPos.y * halfH + halfH
+    const screenX = pos.x * halfW + halfW
+    const screenY = -pos.y * halfH + halfH
 
-    // Filtrar si está fuera de pantalla (con un pequeño margen)
     const margin = 40
     if (
       screenX < -margin ||
@@ -610,10 +574,22 @@ export class Game {
       screenY < -margin ||
       screenY > window.innerHeight + margin
     ) {
-      return
+      return null
     }
 
-    this.uiManager.showFloatingEco(debris.ecoValue, screenX, screenY)
+    return { x: screenX, y: screenY }
+  }
+
+  private showFloatingEco(debris: Debris, value: number): void {
+    const screen = this.projectToScreen(debris.mesh.position)
+    if (!screen) return
+    this.uiManager.showFloatingEco(value, screen.x, screen.y)
+  }
+
+  private showFloatingEcoAt(position: THREE.Vector3, value: number): void {
+    const screen = this.projectToScreen(position)
+    if (!screen) return
+    this.uiManager.showFloatingEco(value, screen.x, screen.y)
   }
 
   private update(deltaTime: number, time: number): void {
@@ -622,20 +598,30 @@ export class Game {
     if (this.paused) return
     if (this.screens.isCardChoiceActive()) return
 
-    // runTime solo cuenta cuando el gameplay está activo.
-    // Durante "revealing" el juego no está bloqueado, así que cuenta.
     this.runTime += deltaTime
+
+    // --- Timer por bioma ---
+    this.biomeTimeRemaining -= deltaTime
+    if (this.biomeTimeRemaining <= 0) {
+      this.biomeTimeRemaining = 0
+      if (!this.godMode) {
+        this.endRun("died")
+        return
+      }
+    }
+    this.uiManager.updateBiomeTimer(
+      this.biomeTimeRemaining,
+      this.biomeTimeLimit,
+    )
 
     const bounds = this.biomeGenerator.getBounds()
     this.turtle.update(deltaTime, this.input, bounds)
 
-    // Cambiar entre ver delante/atrás recoloca la cámara al instante (sin animación)
     if (this.lookBack !== this.lookBackApplied) {
       this.lookBackApplied = this.lookBack
       this.snapCamera()
     }
 
-    // Cámara suave, independiente de los FPS
     const smoothing = 1 - Math.exp(-6 * deltaTime)
     this.camera.position.lerp(this.getCameraTarget(), smoothing)
     this.camera.lookAt(this.turtle.getPosition())
@@ -653,8 +639,7 @@ export class Game {
       this.biomeGenerator.getInitialDebrisCount() * ZONE_COMPLETION_RATIO,
     )
 
-    // Toxicidad pasiva: SIEMPRE sube, proporcional a la contaminación restante.
-    // Cuando el bioma está limpio (pollution ≈ 0), casi no sube, pero nunca baja.
+    // Toxicidad pasiva
     this.biomeGenerator.updateVisuals(deltaTime)
     const pollution = this.biomeGenerator.getPollutionRatio()
     const base = this.biomeGenerator.getBiome().toxicityRate * TOXICITY_SCALE
@@ -668,8 +653,7 @@ export class Game {
       )
     }
 
-    // Recolección manual: cada desecho reduce la toxicidad directamente.
-    // Es la única forma de bajarla (además de los filtros).
+    // Recolección manual
     for (const debris of collected) {
       this.state.debrisCollected++
 
@@ -677,13 +661,6 @@ export class Game {
       this.state.ecoAwareness += eco
       this.collectedInZone++
 
-      const filterCount = this.structures.getActiveCount()
-      if (filterCount > 0 && this.runState.filterEcoPerSecond > 0) {
-        this.state.ecoAwareness +=
-          filterCount * this.runState.filterEcoPerSecond * deltaTime
-      }
-
-      // Reducción de toxicidad
       if (!this.godMode) {
         const reduction =
           TOXICITY_REDUCTION_BASE +
@@ -691,22 +668,34 @@ export class Game {
         this.state.toxicity = Math.max(0, this.state.toxicity - reduction)
       }
 
-      // Número flotante con el eco ganado
-      this.showFloatingEco(debris)
+      this.showFloatingEco(debris, eco)
     }
 
-    // Los filtros absorben desechos por su cuenta: cuentan para la zona,
-    // dan eco, y también reducen toxicidad (como si la tortuga los recogiera).
+    // Simbiosis: eco por segundo por filtro activo (una vez por frame)
+    const filterCount = this.structures.getActiveCount()
+    if (filterCount > 0 && this.runState.filterEcoPerSecond > 0) {
+      this.state.ecoAwareness +=
+        filterCount * this.runState.filterEcoPerSecond * deltaTime
+    }
+
+    // Filtros
     const credit = this.structures.update(deltaTime, time, this.biomeGenerator)
     this.state.debrisCollected += credit.count
-    this.state.ecoAwareness += credit.eco
     this.collectedInZone += credit.count
+
+    const filterEco = Math.round(credit.eco * this.runState.ecoMultiplier)
+    this.state.ecoAwareness += filterEco
 
     if (!this.godMode && credit.count > 0) {
       this.state.toxicity = Math.max(
         0,
         this.state.toxicity - FILTER_TOXICITY_REDUCTION * credit.count,
       )
+    }
+
+    for (const absorption of credit.absorptions) {
+      const value = Math.round(absorption.eco * this.runState.ecoMultiplier)
+      this.showFloatingEcoAt(absorption.position, value)
     }
 
     this.state.zoneProgress = Math.min(
@@ -717,8 +706,6 @@ export class Game {
     if (!this.godMode && this.state.toxicity >= 100) {
       this.endRun("died")
     } else if (this.state.zoneProgress >= 100) {
-      // Si hay siguiente bioma, mostrar cartas primero.
-      // Si es el último, ir directo al resumen.
       if (this.biomeIndex + 1 < BIOME_ORDER.length) {
         this.openCardChoice()
       } else {
@@ -729,16 +716,16 @@ export class Game {
     this.uiManager.updateUI(this.state)
     this.updateBuildHud()
 
-    // HUD del boost de giro
-    const spinBoost = this.turtle.getSpinBoost()
-    const spinBoostActive = this.turtle.isSpinBoosting()
     this.uiManager.updateSpinBoostHud(
-      spinBoost / this.turtle.getSpinBoostMultiplier(),
-      spinBoostActive,
+      this.turtle.getSpinBoost() / this.turtle.getSpinBoostMultiplier(),
+      this.turtle.isSpinBoosting(),
+    )
+
+    this.uiManager.updateBoostEnergy(
+      this.turtle.getBoostEnergy(),
+      this.turtle.isBoosting(),
     )
   }
-
-  // src/core/Game.ts — método nuevo
 
   private openCardChoice(): void {
     if (this.screens.isCardChoiceActive()) return
@@ -771,18 +758,13 @@ export class Game {
 
     if (this.screen !== "run") {
       this.orbitCamera(time)
-
-      // Fuera de la run, update() no se ejecuta: se mantiene viva el agua del
-      // refugio y del resumen (partículas, cáusticas) para que no quede congelada.
       if (!this.paused) this.biomeGenerator.updateVisuals(deltaTime)
     }
 
-    // La transición NO avanza si el juego está pausado
     if (!this.paused) {
       this.transition.update(deltaTime)
     }
 
-    // Reintentar advanceBiome si quedó pendiente
     if (
       this.pendingAdvance &&
       !this.transition.isActive() &&
@@ -793,17 +775,19 @@ export class Game {
       this.advanceBiome()
     }
 
-    const simDelta = this.paused ? 0 : deltaTime // en pausa, la estela queda congelada
+    const simDelta = this.paused ? 0 : deltaTime
 
-    // Estela de burbujas mientras se usa el impulso y la tortuga avanza de verdad
     const spinIntensity = this.turtle.isSpinBoosting()
-      ? Math.min(1, this.turtle.getSpinBoost() / 1.6)
+      ? Math.min(
+          1,
+          this.turtle.getSpinBoost() / this.turtle.getSpinBoostMultiplier(),
+        )
       : 0
 
     const boosting =
       this.state.isRunning &&
       !this.transition.blocksGameplay &&
-      (this.input.boost || this.turtle.isSpinBoosting()) &&
+      (this.turtle.isBoosting() || this.turtle.isSpinBoosting()) &&
       this.turtle.getSpeed() > 1
 
     this.bubbles.update(
@@ -818,7 +802,6 @@ export class Game {
       light.intensity = (0.3 + Math.sin(time + i) * 0.2) * this.pointLightBoost
     })
 
-    // Cúpula, rayos y nieve marina siguen a la cámara (ya colocada en este frame)
     this.biomeGenerator.updateWater(simDelta, this.camera.position)
     this.renderPipeline.update(simDelta)
     this.renderPipeline.render()

@@ -343,6 +343,160 @@ export class BiomeGenerator {
     this.generateParticles(rng)
   }
 
+  public getFloorHeight(x: number, z: number): number {
+    return -this.currentBiome.depth + this.floorOffset(x, z)
+  }
+
+  // Bounds con caché
+
+  public getBounds(): WorldBounds {
+    if (this.cachedBounds) return this.cachedBounds
+
+    const floorY = -this.currentBiome.depth
+    const { floorAmplitude, floorDetail } = this.currentAmbience
+
+    // Altura máxima que puede alcanzar el relieve (las dos ondas coincidiendo)
+    const maxRise = floorAmplitude * (1 + 0.25 * floorDetail)
+    const bandStart = Math.max(BAND_ABOVE_FLOOR, maxRise + FLOOR_CLEARANCE)
+
+    this.cachedBounds = {
+      halfSize: HALF_SIZE + 5,
+      minY: floorY + bandStart,
+      maxY: floorY + bandStart + BAND_HEIGHT,
+    }
+
+    return this.cachedBounds
+  }
+
+  // Debris
+
+  public updateDebris(
+    turtlePosition: THREE.Vector3,
+    collectionRadius: number,
+    time: number,
+    deltaTime: number,
+  ): Debris[] {
+    const collected: Debris[] = []
+
+    for (let i = this.debrisList.length - 1; i >= 0; i--) {
+      const debris = this.debrisList[i]
+      debris.animate(time, deltaTime)
+
+      if (debris.removed) {
+        this.debrisList.splice(i, 1)
+        continue
+      }
+
+      if (debris.mesh.position.distanceTo(turtlePosition) < collectionRadius) {
+        collected.push(debris)
+        this.removeDebrisInternal(debris, i)
+      }
+    }
+
+    if (this.debrisList.length === 0) {
+      this.pollutionRemaining = 0
+    }
+
+    return collected
+  }
+
+  /**
+   * Elimina un debris del bioma. Si el debris no está en la lista,
+   * no hace nada. No llama a dispose() para no liberar materiales
+   * compartidos; solo quita del grupo y actualiza la contaminación.
+   */
+  public removeDebris(debris: Debris): void {
+    if (debris.removed) return
+
+    const index = this.debrisList.indexOf(debris)
+    if (index < 0) {
+      // El debris ya no pertenece a este bioma; solo marcamos
+      debris.removed = true
+      return
+    }
+
+    this.removeDebrisInternal(debris, index)
+  }
+
+  public getPollutionRatio(): number {
+    return this.pollutionTotal > 0
+      ? this.pollutionRemaining / this.pollutionTotal
+      : 0
+  }
+
+  // Visuals
+
+  public updateVisuals(deltaTime: number): void {
+    const target = this.getPollutionRatio()
+
+    this.visualRatio +=
+      (target - this.visualRatio) *
+      (1 - Math.exp(-VISUAL_SMOOTHING * deltaTime))
+
+    // Solo recalcular niebla/fog si el ratio cambió de forma apreciable
+    if (Math.abs(this.visualRatio - this.lastAppliedRatio) > 0.001) {
+      this.applyVisuals()
+      this.lastAppliedRatio = this.visualRatio
+    }
+
+    // Cáusticas: avanzan con el tiempo y se marcan más cuanto más limpia está el agua
+    this.causticUniforms.uTime.value += deltaTime
+    this.causticUniforms.uStrength.value =
+      this.causticBase * (0.4 + 0.6 * (1 - this.visualRatio))
+
+    this.updateParticles(deltaTime)
+  }
+
+  /**
+   * Efectos del volumen de agua. Llamar cada frame, después de mover la cámara.
+   * Con deltaTime = 0 (pausa) la animación se congela pero la cúpula sigue a la cámara.
+   */
+  public updateWater(deltaTime: number, cameraPosition: THREE.Vector3): void {
+    this.water.update(deltaTime, cameraPosition, 1 - this.visualRatio)
+  }
+
+  /* ---------------------------------------------
+     Accesores
+  --------------------------------------------- */
+
+  public getDebrisList(): Debris[] {
+    return this.debrisList
+  }
+
+  public getInitialDebrisCount(): number {
+    return this.initialDebrisCount
+  }
+
+  public getBiome(): BiomeConfig {
+    return this.currentBiome
+  }
+
+  public getBiomeName(): string {
+    return this.currentBiome.name
+  }
+
+  /**
+   * Sol del bioma actual. `darkness` (0..1) indica cuánta luz solar falta;
+   * Game la usa para reforzar las luces de bioluminiscencia.
+   */
+  public getSun(): { intensity: number; color: number; darkness: number } {
+    const sun = SUN[this.currentBiomeKey]
+    return {
+      intensity: sun.intensity,
+      color: sun.color,
+      darkness: 1 - sun.intensity / MAX_SUN_INTENSITY,
+    }
+  }
+
+  /** Libera todos los recursos del bioma actual. Llamar al destruir el juego. */
+  public dispose(): void {
+    this.disposeDebris()
+    this.disposeFloor()
+    this.disposeParticles()
+    this.props.clear()
+    this.water.dispose()
+  }
+
   // Dispose de recursos
 
   private disposeDebris(): void {
@@ -504,10 +658,6 @@ export class BiomeGenerator {
     }
   }
 
-  public getFloorHeight(x: number, z: number): number {
-    return -this.currentBiome.depth + this.floorOffset(x, z)
-  }
-
   // Particulas
 
   private generateParticles(rng: Rng): void {
@@ -553,77 +703,6 @@ export class BiomeGenerator {
     this.scene.add(this.particles)
   }
 
-  // Bounds con caché
-
-  public getBounds(): WorldBounds {
-    if (this.cachedBounds) return this.cachedBounds
-
-    const floorY = -this.currentBiome.depth
-    const { floorAmplitude, floorDetail } = this.currentAmbience
-
-    // Altura máxima que puede alcanzar el relieve (las dos ondas coincidiendo)
-    const maxRise = floorAmplitude * (1 + 0.25 * floorDetail)
-    const bandStart = Math.max(BAND_ABOVE_FLOOR, maxRise + FLOOR_CLEARANCE)
-
-    this.cachedBounds = {
-      halfSize: HALF_SIZE + 5,
-      minY: floorY + bandStart,
-      maxY: floorY + bandStart + BAND_HEIGHT,
-    }
-
-    return this.cachedBounds
-  }
-
-  // Debris
-
-  public updateDebris(
-    turtlePosition: THREE.Vector3,
-    collectionRadius: number,
-    time: number,
-    deltaTime: number,
-  ): Debris[] {
-    const collected: Debris[] = []
-
-    for (let i = this.debrisList.length - 1; i >= 0; i--) {
-      const debris = this.debrisList[i]
-      debris.animate(time, deltaTime)
-
-      if (debris.removed) {
-        this.debrisList.splice(i, 1)
-        continue
-      }
-
-      if (debris.mesh.position.distanceTo(turtlePosition) < collectionRadius) {
-        collected.push(debris)
-        this.removeDebrisInternal(debris, i)
-      }
-    }
-
-    if (this.debrisList.length === 0) {
-      this.pollutionRemaining = 0
-    }
-
-    return collected
-  }
-
-  /**
-   * Elimina un debris del bioma. Si el debris no está en la lista,
-   * no hace nada. No llama a dispose() para no liberar materiales
-   * compartidos; solo quita del grupo y actualiza la contaminación.
-   */
-  public removeDebris(debris: Debris): void {
-    if (debris.removed) return
-
-    const index = this.debrisList.indexOf(debris)
-    if (index < 0) {
-      // El debris ya no pertenece a este bioma; solo marcamos
-      debris.removed = true
-      return
-    }
-
-    this.removeDebrisInternal(debris, index)
-  }
-
   private removeDebrisInternal(debris: Debris, index: number): void {
     debris.removed = true
 
@@ -638,35 +717,6 @@ export class BiomeGenerator {
     if (this.debrisList.length === 0) {
       this.pollutionRemaining = 0
     }
-  }
-
-  public getPollutionRatio(): number {
-    return this.pollutionTotal > 0
-      ? this.pollutionRemaining / this.pollutionTotal
-      : 0
-  }
-
-  // Visuals
-
-  public updateVisuals(deltaTime: number): void {
-    const target = this.getPollutionRatio()
-
-    this.visualRatio +=
-      (target - this.visualRatio) *
-      (1 - Math.exp(-VISUAL_SMOOTHING * deltaTime))
-
-    // Solo recalcular niebla/fog si el ratio cambió de forma apreciable
-    if (Math.abs(this.visualRatio - this.lastAppliedRatio) > 0.001) {
-      this.applyVisuals()
-      this.lastAppliedRatio = this.visualRatio
-    }
-
-    // Cáusticas: avanzan con el tiempo y se marcan más cuanto más limpia está el agua
-    this.causticUniforms.uTime.value += deltaTime
-    this.causticUniforms.uStrength.value =
-      this.causticBase * (0.4 + 0.6 * (1 - this.visualRatio))
-
-    this.updateParticles(deltaTime)
   }
 
   private updateParticles(deltaTime: number): void {
@@ -729,55 +779,5 @@ export class BiomeGenerator {
     fog.density =
       this.currentBiome.fogDensity *
       (CLEAN_FOG_FACTOR + (1 - CLEAN_FOG_FACTOR) * ratio)
-  }
-
-  /**
-   * Efectos del volumen de agua. Llamar cada frame, después de mover la cámara.
-   * Con deltaTime = 0 (pausa) la animación se congela pero la cúpula sigue a la cámara.
-   */
-  public updateWater(deltaTime: number, cameraPosition: THREE.Vector3): void {
-    this.water.update(deltaTime, cameraPosition, 1 - this.visualRatio)
-  }
-
-  /* ---------------------------------------------
-     Accesores
-  --------------------------------------------- */
-
-  public getDebrisList(): Debris[] {
-    return this.debrisList
-  }
-
-  public getInitialDebrisCount(): number {
-    return this.initialDebrisCount
-  }
-
-  public getBiome(): BiomeConfig {
-    return this.currentBiome
-  }
-
-  public getBiomeName(): string {
-    return this.currentBiome.name
-  }
-
-  /**
-   * Sol del bioma actual. `darkness` (0..1) indica cuánta luz solar falta;
-   * Game la usa para reforzar las luces de bioluminiscencia.
-   */
-  public getSun(): { intensity: number; color: number; darkness: number } {
-    const sun = SUN[this.currentBiomeKey]
-    return {
-      intensity: sun.intensity,
-      color: sun.color,
-      darkness: 1 - sun.intensity / MAX_SUN_INTENSITY,
-    }
-  }
-
-  /** Libera todos los recursos del bioma actual. Llamar al destruir el juego. */
-  public dispose(): void {
-    this.disposeDebris()
-    this.disposeFloor()
-    this.disposeParticles()
-    this.props.clear()
-    this.water.dispose()
   }
 }

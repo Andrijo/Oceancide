@@ -8,6 +8,8 @@ Toma el control de una tortuga y desciende por las capas del océano recolectand
 
 Además de recolectar desechos directamente, puedes gastar **Conciencia Ecológica** para construir **esferas filtradoras** que atraen y absorben desechos por su cuenta. Y con el **dash de giro** (Q/E) puedes encadenar giros de 360° con un impulso temporal de velocidad.
 
+Al limpiar cada zona eliges una **carta de mejora** (o maldición) que potencia tu tortuga durante el resto de la inmersión, con un toque roguelike: cada run es distinta.
+
 ## Zonas
 
 El juego recorre 10 biomas, desde la superficie hasta las fosas más profundas:
@@ -56,6 +58,30 @@ La Conciencia Ecológica sobrante se guarda como progreso persistente en el **Re
 ### Dash de giro
 
 Con `Q` / `E` la tortuga realiza un giro completo de 360° en menos de un segundo. Al iniciarlo recibe un **impulso temporal de velocidad** (hasta ×1.6) que decae de forma exponencial, y el giro fuerza un avance mínimo aunque sueltes las teclas: úsalo para encadenar giros y desplazarte rápido. El HUD muestra el multiplicador activo como `DASH ×N`.
+
+### Cartas
+
+Cuando completas el **70%** de la limpieza de una zona (y no es la última), antes de descender a la siguiente el juego se detiene y te ofrece **3 cartas** entre las que elegir una. Cada carta aplica una mejora (o maldición) **permanente durante esa run**, y las que vas eligiendo quedan registradas y se muestran en el resumen final.
+
+El reparto es por rareza con pesos (`RARITY_WEIGHTS` en `src/cards/CardPool.ts`): **común 40 · rara 30 · épica 20 · legendaria 8 · maldición 2**. El mazo está en `src/cards/CardPool.ts` y la lógica de reparto en `src/cards/CardManager.ts`. Las cartas se eligen con el clic/toque y se colorean según su rareza.
+
+| Carta                 | Rareza      | Efecto              | Descripción                                          |
+| --------------------- | ----------- | ------------------- | ---------------------------------------------------- |
+| Aletas Ágiles         | Común       | +10% VEL            | Nada más rápido en línea recta                       |
+| Caparazón Denso       | Común       | +5% RES             | Filtra mejor la toxicidad del agua                   |
+| Imán Débil            | Común       | +0.5 RADIO          | Atrae desechos desde un poco más lejos               |
+| Pulmón Extra          | Común       | +1 FILTRO           | Mantiene un filtro más activo a la vez               |
+| Eco Amplificado       | Rara        | +25% ECO            | Cada desecho recogido vale más                       |
+| Dash Potenciado       | Rara        | +0.4 DASH           | El giro de 360° da un impulso más fuerte             |
+| Simbiosis             | Rara        | +1 ECO/S            | Cada filtro activo genera eco por segundo            |
+| Imán Grande           | Rara        | +1.5 RADIO          | Atrae desechos desde muy lejos                       |
+| Filtro Mejorado       | Épica       | +2 FILTROS          | Mantiene dos filtros más a la vez                    |
+| Corazón de Medusa     | Épica       | +1 REVIVIR          | Revives una vez al morir con 50% de toxicidad        |
+| Bioluminiscencia      | Épica       | +30% ECO / +5% VEL  | Brilla en la oscuridad y gana más eco                |
+| Caparazón Espejo      | Legendaria  | -40% TOX            | Repele la mayor parte de la contaminación            |
+| Nado Supersónico      | Legendaria  | +50% VEL            | La tortuga nada como un torpedo                      |
+| Avaricia              | Maldición   | +50% ECO / -20% VEL | Más eco, pero la tortuga se vuelve lenta             |
+| Fragilidad            | Maldición   | +30% VEL / -50% RES | Más rápida, pero mucho más vulnerable a la toxicidad |
 
 ## Controles
 
@@ -110,9 +136,11 @@ El agua no es un simple fondo: hay una capa de efectos (`src/world/WaterEffects.
 
 A medida que limpias un bioma, **el agua se aclara**: sube el brillo, baja la densidad de la niebla y se refuerzan los rayos. Al pasar de zona se reproduce una **transición** en la que una masa negra de borde irregular barre la pantalla y muestra el nombre del nuevo bioma.
 
+El renderizado pasa por un **pipeline de post-proceso** (`src/core/RenderPipeline.ts`): tonemapping neutro y un **bloom dinámico** que solo se activa en las profundidades (cuando el sol se apaga). Cuando el bloom es inapreciable, el pipeline se salta el composer y renderiza directo para ahorrar recursos.
+
 ## Progreso y Refugio
 
-Al terminar cada run se muestra un resumen (zona alcanzada, desechos, duración, semilla y conciencia obtenida) y se actualiza el progreso persistente guardado en `localStorage` bajo la clave `oceancide.meta`:
+Al terminar cada run se muestra un resumen (zona alcanzada, desechos, duración, semilla, cartas elegidas y conciencia obtenida) y se actualiza el progreso persistente guardado en `localStorage` bajo la clave `oceancide.meta`:
 
 - **Conciencia ecológica** total acumulada.
 - **Mejor zona** alcanzada.
@@ -123,7 +151,7 @@ Completar los 10 biomas otorga un **bono del 25%** sobre la conciencia obtenida 
 
 ### Reproducir una run
 
-Cada run usa una semilla aleatoria (que se muestra en el resumen). Puedes fijarla desde la URL para reproducir exactamente la misma disposición de biomas:
+Cada run usa una semilla aleatoria (que se muestra en el resumen). Puedes fijarla desde la URL para reproducir exactamente la misma disposición de biomas (y las mismas cartas ofrecidas):
 
 ```
 http://localhost:5173/?seed=123
@@ -164,6 +192,7 @@ oceancidio/
     ├── styles.css        # @font-face
     ├── core/             # Núcleo y estado global
     │   ├── Game.ts             # Lógica principal, loop, cámara y pantallas
+    │   ├── RenderPipeline.ts   # Tonemapping + bloom dinámico
     │   ├── MetaState.ts        # Progreso persistente (Refugio) y guardado
     │   ├── rng.ts              # Generador pseudoaleatorio con semilla
     │   └── types.ts            # Tipos y configuración de biomas
@@ -181,9 +210,13 @@ oceancidio/
     │   ├── DebrisVisuals.ts    # Aspecto visual de cada tipo de desecho
     │   ├── debrisCatalog.ts    # Catálogo de desechos por bioma
     │   └── BubbleTrail.ts      # Estela de burbujas (instancing)
+    ├── cards/            # Sistema de cartas roguelike
+    │   ├── Card.ts             # Tipos de carta y estado de la run
+    │   ├── CardManager.ts      # Reparto y aplicación de cartas
+    │   └── CardPool.ts         # Mazo de cartas y pesos por rareza
     └── ui/               # Interfaz y controles
         ├── UIManager.ts        # HUD, números flotantes, calavera y mensajes
-        ├── ScreenManager.ts    # Menús (hub, resumen y pausa)
+        ├── ScreenManager.ts    # Menús (hub, resumen, pausa y elección de cartas)
         ├── TouchControls.ts    # Controles táctiles (joysticks)
         └── DevMenu.ts          # Menú de desarrollo (componente, no conectado por defecto)
 ```
@@ -198,9 +231,10 @@ Los imports entre carpetas usan alias configurados en `tsconfig.json` y `vite.co
 | `@world/*`    | `src/world/*`    |
 | `@entities/*` | `src/entities/*` |
 | `@ui/*`       | `src/ui/*`       |
+| `@cards/*`    | `src/cards/*`    |
 | `@/*`         | `src/*`          |
 
-> Reservados para sistemas futuros (aún sin carpeta): `@cards`, `@tycoon`, `@events`, `@relics`, `@drones`, `@bosses`.
+> Reservados para sistemas futuros (aún sin carpeta): `@tycoon`, `@events`, `@relics`, `@drones`, `@bosses`.
 
 ## Tecnologías utilizadas
 

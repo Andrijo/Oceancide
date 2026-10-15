@@ -1,13 +1,20 @@
-// src/StructureManager.ts
+// src/world/StructureManager.ts
+
 import * as THREE from "three"
 import type { BiomeGenerator } from "./BiomeGenerator"
 import type { Debris } from "@entities/Debris"
 import { Structure } from "./Structure"
 import { STRUCTURES, type StructureKey } from "./StructureConfig"
 
+export interface StructureAbsorption {
+  position: THREE.Vector3
+  eco: number
+}
+
 export interface StructureCredit {
   eco: number
   count: number
+  absorptions: StructureAbsorption[]
 }
 
 export class StructureManager {
@@ -22,8 +29,12 @@ export class StructureManager {
     return this.structures.length
   }
 
-  public build(key: StructureKey, position: THREE.Vector3): Structure {
-    const structure = new Structure(STRUCTURES[key], position)
+  public build(
+    key: StructureKey,
+    position: THREE.Vector3,
+    phase: number,
+  ): Structure {
+    const structure = new Structure(STRUCTURES[key], position, phase)
     this.scene.add(structure.group)
     this.structures.push(structure)
     return structure
@@ -31,7 +42,6 @@ export class StructureManager {
 
   public clear(): void {
     for (const s of this.structures) {
-      // Liberar los desechos que iban en camino: vuelven a estar disponibles
       for (const debris of s.inFlight) {
         debris.release()
       }
@@ -48,7 +58,11 @@ export class StructureManager {
     time: number,
     biome: BiomeGenerator,
   ): StructureCredit {
-    const credit: StructureCredit = { eco: 0, count: 0 }
+    const credit: StructureCredit = {
+      eco: 0,
+      count: 0,
+      absorptions: [],
+    }
 
     for (let i = this.structures.length - 1; i >= 0; i--) {
       const s = this.structures[i]
@@ -61,8 +75,16 @@ export class StructureManager {
         } else if (debris.pullArrived) {
           biome.removeDebris(debris)
           s.inFlight.splice(j, 1)
-          credit.eco += Math.round(debris.ecoValue * s.config.yield)
+
+          const eco = Math.round(debris.ecoValue * s.config.yield)
+          credit.eco += eco
           credit.count += 1
+
+          s.triggerAbsorb()
+          credit.absorptions.push({
+            position: s.position.clone(),
+            eco,
+          })
         }
       }
 

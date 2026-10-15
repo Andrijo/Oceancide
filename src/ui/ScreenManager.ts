@@ -216,286 +216,6 @@ export class ScreenManager {
   }
 
   /* ---------------------------------------------
-     Marco de ventana compartido (cuadrícula + fondo)
-  --------------------------------------------- */
-
-  private makeWindowFrame(): {
-    root: HTMLElement
-    content: HTMLElement
-  } {
-    const root = el(
-      "div",
-      `position: absolute;
-      inset: 0;
-      z-index: 1;
-      width: 100%;
-      height: 100%;
-      box-sizing: border-box;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      background:
-        linear-gradient(180deg, rgba(4, 12, 20, 0.30), rgba(2, 8, 16, 0.50));`,
-    )
-
-    const grid = el(
-      "div",
-      `position: absolute;
-      inset: 0;
-      pointer-events: none;
-      background-image:
-        linear-gradient(rgba(220, 245, 255, 0.04) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(220, 245, 255, 0.04) 1px, transparent 1px);
-      background-size: 46px 46px;
-      -webkit-mask-image: radial-gradient(ellipse at 50% 38%, #000 18%, transparent 74%);
-      mask-image: radial-gradient(ellipse at 50% 38%, #000 18%, transparent 74%);`,
-    )
-
-    const glow = el(
-      "div",
-      `position: absolute;
-      top: -180px;
-      left: 50%;
-      width: 780px;
-      height: 460px;
-      transform: translateX(-50%);
-      pointer-events: none;
-      filter: blur(20px);`,
-    )
-
-    const content = el(
-      "div",
-      `position: relative;
-      flex: 1 1 auto;
-      min-height: 0;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: clamp(14px, 2.4vh, 28px);
-      padding: clamp(10px, 2vh, 24px) clamp(18px, 4vw, 56px) clamp(22px, 4vh, 44px);
-      text-align: center;`,
-    )
-
-    root.append(grid, glow, content)
-    return { root, content }
-  }
-
-  // Menú de pausa
-  private makeScreenTitle(text: string, color = "#efffff"): HTMLElement {
-    return el(
-      "div",
-      `width: 100%;
-    overflow: visible;
-    font-family: ${titleFONT};
-    font-size: clamp(28px, 4.6vw, 58px);
-    font-weight: 900;
-    font-stretch: condensed;
-    line-height: 1;
-    letter-spacing: -0.02em;
-    text-align: center;
-    margin-bottom: 40px;
-    color: ${color};
-    text-shadow:
-      0 3px 0 rgba(0, 44, 70, 0.6),
-      0 6px 14px rgba(0, 5, 18, 0.5),
-      0 0 12px ${color}44;
-    max-width: 900px;`,
-      text,
-    )
-  }
-
-  /** Subtítulo pequeño en mayúsculas, al estilo del hub. */
-  private makeScreenSubtitle(text: string): HTMLElement {
-    return el(
-      "div",
-      `max-width: 720px;
-      font-family: ${paragraphFONT};
-      font-size: clamp(6px, 1.5vw, 15px);
-      letter-spacing: 0.16em;
-      color: rgba(214, 236, 240, 0.62);
-      margin-bottom: 30px;
-      text-align: center;`,
-      text,
-    )
-  }
-
-  private makeBentoGrid(
-    items: Array<{
-      label: string
-      value: string
-      sub?: string
-      highlight?: boolean
-    }>,
-  ): HTMLElement {
-    const grid = el(
-      "div",
-      `width: 100%;
-    max-width: 780px;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 10px;`,
-    )
-
-    for (const item of items) {
-      grid.append(
-        this.makeBentoStat(item.label, item.value, item.sub, item.highlight),
-      )
-    }
-
-    return grid
-  }
-
-  private makeBentoStat(
-    label: string,
-    value: string,
-    sub?: string,
-    highlight = false,
-  ): HTMLElement {
-    const card = el(
-      "div",
-      `display: flex;
-    flex-direction: column;
-    gap: 6px;
-    min-width: 0;
-    padding: 12px 14px;
-    text-align: left;
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.045);
-    border: 1px solid rgba(255, 255, 255, 0.09);
-    backdrop-filter: blur(6px);
-    transition: border-color 160ms ease, transform 160ms ease;`,
-    )
-
-    card.addEventListener("mouseenter", () => {
-      card.style.transform = "translateY(-2px)"
-    })
-
-    card.addEventListener("mouseleave", () => {
-      card.style.borderColor = "rgba(255, 255, 255, 0.09)"
-      card.style.transform = "translateY(0)"
-    })
-
-    card.append(
-      el(
-        "div",
-        `min-width: 0;
-      font-size: 10px;
-      letter-spacing: 0.13em;
-      text-transform: uppercase;
-      color: rgba(214, 236, 240, 0.8);`,
-        label,
-      ),
-      el(
-        "div",
-        `font-family: ${titleFONT};
-      font-size: clamp(16px, 1.6vw, 22px);
-      font-weight: 900;
-      line-height: 1.1;
-      text-align: center;
-      overflow-wrap: anywhere;
-      color: ${highlight ? HUB_ACCENT : "#ffffff"};`,
-        value,
-      ),
-    )
-
-    if (sub) {
-      card.append(
-        el("div", `font-size: 11px; color: rgba(214, 236, 240, 0.55);`, sub),
-      )
-    }
-
-    return card
-  }
-
-  /** Botón fantasma unificado: primary (cyan), danger (rojo), neutral (blanco). */
-  private makeGhostAction(
-    label: string,
-    onClick: () => void,
-    variant: ActionVariant = "neutral",
-  ): HTMLButtonElement {
-    const palette = {
-      primary: {
-        color: "rgba(220, 245, 255, 0.92)",
-        border: "rgba(220, 245, 255, 0.28)",
-        hoverBg: "rgba(220, 245, 255, 0.10)",
-        hoverBorder: "rgba(220, 245, 255, 0.55)",
-        hoverColor: "#ffffff",
-        focus: HUB_ACCENT,
-      },
-      danger: {
-        color: "rgba(255, 150, 150, 0.9)",
-        border: "rgba(255, 120, 120, 0.28)",
-        hoverBg: "rgba(255, 90, 90, 0.14)",
-        hoverBorder: "rgba(255, 120, 120, 0.6)",
-        hoverColor: "#ffbaba",
-        focus: "rgba(255, 150, 150, 0.9)",
-      },
-      neutral: {
-        color: "rgba(214, 236, 240, 0.85)",
-        border: "rgba(214, 236, 240, 0.20)",
-        hoverBg: "rgba(214, 236, 240, 0.08)",
-        hoverBorder: "rgba(214, 236, 240, 0.42)",
-        hoverColor: "#ffffff",
-        focus: "rgba(214, 236, 240, 0.6)",
-      },
-    }[variant]
-
-    const btn = el(
-      "button",
-      `display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      width: 100%;
-      min-height: 54px;
-      padding: 12px 22px;
-      border-radius: 12px;
-      cursor: pointer;
-      color: ${palette.color};
-      font: 700 clamp(15px, 1.9vw, 19px) ${titleFONT};
-      letter-spacing: 0.04em;
-      background: rgba(255, 255, 255, 0.02);
-      border: 1.5px solid ${palette.border};
-      backdrop-filter: blur(6px);
-      transition:
-        transform 160ms ease,
-        background 160ms ease,
-        border-color 160ms ease,
-        color 160ms ease;`,
-      label,
-    )
-
-    btn.addEventListener("mouseenter", () => {
-      btn.style.transform = "translateY(-2px)"
-      btn.style.background = palette.hoverBg
-      btn.style.borderColor = palette.hoverBorder
-      btn.style.color = palette.hoverColor
-    })
-
-    btn.addEventListener("mouseleave", () => {
-      btn.style.transform = "translateY(0)"
-      btn.style.background = "rgba(255, 255, 255, 0.02)"
-      btn.style.borderColor = palette.border
-      btn.style.color = palette.color
-    })
-
-    btn.addEventListener("focus", () => {
-      btn.style.outline = `2px solid ${palette.focus}`
-      btn.style.outlineOffset = "4px"
-    })
-
-    btn.addEventListener("blur", () => {
-      btn.style.outline = "none"
-    })
-
-    btn.addEventListener("click", onClick)
-
-    return btn
-  }
-
-  /* ---------------------------------------------
      Pantallas
   --------------------------------------------- */
 
@@ -823,6 +543,286 @@ export class ScreenManager {
     content.append(buttons)
 
     this.open(root, onResume)
+  }
+
+  /* ---------------------------------------------
+     Marco de ventana compartido (cuadrícula + fondo)
+  --------------------------------------------- */
+
+  private makeWindowFrame(): {
+    root: HTMLElement
+    content: HTMLElement
+  } {
+    const root = el(
+      "div",
+      `position: absolute;
+      inset: 0;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(4, 12, 20, 0.30), rgba(2, 8, 16, 0.50));`,
+    )
+
+    const grid = el(
+      "div",
+      `position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(220, 245, 255, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(220, 245, 255, 0.04) 1px, transparent 1px);
+      background-size: 46px 46px;
+      -webkit-mask-image: radial-gradient(ellipse at 50% 38%, #000 18%, transparent 74%);
+      mask-image: radial-gradient(ellipse at 50% 38%, #000 18%, transparent 74%);`,
+    )
+
+    const glow = el(
+      "div",
+      `position: absolute;
+      top: -180px;
+      left: 50%;
+      width: 780px;
+      height: 460px;
+      transform: translateX(-50%);
+      pointer-events: none;
+      filter: blur(20px);`,
+    )
+
+    const content = el(
+      "div",
+      `position: relative;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(14px, 2.4vh, 28px);
+      padding: clamp(10px, 2vh, 24px) clamp(18px, 4vw, 56px) clamp(22px, 4vh, 44px);
+      text-align: center;`,
+    )
+
+    root.append(grid, glow, content)
+    return { root, content }
+  }
+
+  // Menú de pausa
+  private makeScreenTitle(text: string, color = "#efffff"): HTMLElement {
+    return el(
+      "div",
+      `width: 100%;
+    overflow: visible;
+    font-family: ${titleFONT};
+    font-size: clamp(28px, 4.6vw, 58px);
+    font-weight: 900;
+    font-stretch: condensed;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    text-align: center;
+    margin-bottom: 40px;
+    color: ${color};
+    text-shadow:
+      0 3px 0 rgba(0, 44, 70, 0.6),
+      0 6px 14px rgba(0, 5, 18, 0.5),
+      0 0 12px ${color}44;
+    max-width: 900px;`,
+      text,
+    )
+  }
+
+  /** Subtítulo pequeño en mayúsculas, al estilo del hub. */
+  private makeScreenSubtitle(text: string): HTMLElement {
+    return el(
+      "div",
+      `max-width: 720px;
+      font-family: ${paragraphFONT};
+      font-size: clamp(6px, 1.5vw, 15px);
+      letter-spacing: 0.16em;
+      color: rgba(214, 236, 240, 0.62);
+      margin-bottom: 30px;
+      text-align: center;`,
+      text,
+    )
+  }
+
+  private makeBentoGrid(
+    items: Array<{
+      label: string
+      value: string
+      sub?: string
+      highlight?: boolean
+    }>,
+  ): HTMLElement {
+    const grid = el(
+      "div",
+      `width: 100%;
+    max-width: 780px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;`,
+    )
+
+    for (const item of items) {
+      grid.append(
+        this.makeBentoStat(item.label, item.value, item.sub, item.highlight),
+      )
+    }
+
+    return grid
+  }
+
+  private makeBentoStat(
+    label: string,
+    value: string,
+    sub?: string,
+    highlight = false,
+  ): HTMLElement {
+    const card = el(
+      "div",
+      `display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    padding: 12px 14px;
+    text-align: left;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    backdrop-filter: blur(6px);
+    transition: border-color 160ms ease, transform 160ms ease;`,
+    )
+
+    card.addEventListener("mouseenter", () => {
+      card.style.transform = "translateY(-2px)"
+    })
+
+    card.addEventListener("mouseleave", () => {
+      card.style.borderColor = "rgba(255, 255, 255, 0.09)"
+      card.style.transform = "translateY(0)"
+    })
+
+    card.append(
+      el(
+        "div",
+        `min-width: 0;
+      font-size: 10px;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+      color: rgba(214, 236, 240, 0.8);`,
+        label,
+      ),
+      el(
+        "div",
+        `font-family: ${titleFONT};
+      font-size: clamp(16px, 1.6vw, 22px);
+      font-weight: 900;
+      line-height: 1.1;
+      text-align: center;
+      overflow-wrap: anywhere;
+      color: ${highlight ? HUB_ACCENT : "#ffffff"};`,
+        value,
+      ),
+    )
+
+    if (sub) {
+      card.append(
+        el("div", `font-size: 11px; color: rgba(214, 236, 240, 0.55);`, sub),
+      )
+    }
+
+    return card
+  }
+
+  /** Botón fantasma unificado: primary (cyan), danger (rojo), neutral (blanco). */
+  private makeGhostAction(
+    label: string,
+    onClick: () => void,
+    variant: ActionVariant = "neutral",
+  ): HTMLButtonElement {
+    const palette = {
+      primary: {
+        color: "rgba(220, 245, 255, 0.92)",
+        border: "rgba(220, 245, 255, 0.28)",
+        hoverBg: "rgba(220, 245, 255, 0.10)",
+        hoverBorder: "rgba(220, 245, 255, 0.55)",
+        hoverColor: "#ffffff",
+        focus: HUB_ACCENT,
+      },
+      danger: {
+        color: "rgba(255, 150, 150, 0.9)",
+        border: "rgba(255, 120, 120, 0.28)",
+        hoverBg: "rgba(255, 90, 90, 0.14)",
+        hoverBorder: "rgba(255, 120, 120, 0.6)",
+        hoverColor: "#ffbaba",
+        focus: "rgba(255, 150, 150, 0.9)",
+      },
+      neutral: {
+        color: "rgba(214, 236, 240, 0.85)",
+        border: "rgba(214, 236, 240, 0.20)",
+        hoverBg: "rgba(214, 236, 240, 0.08)",
+        hoverBorder: "rgba(214, 236, 240, 0.42)",
+        hoverColor: "#ffffff",
+        focus: "rgba(214, 236, 240, 0.6)",
+      },
+    }[variant]
+
+    const btn = el(
+      "button",
+      `display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      min-height: 54px;
+      padding: 12px 22px;
+      border-radius: 12px;
+      cursor: pointer;
+      color: ${palette.color};
+      font: 700 clamp(15px, 1.9vw, 19px) ${titleFONT};
+      letter-spacing: 0.04em;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1.5px solid ${palette.border};
+      backdrop-filter: blur(6px);
+      transition:
+        transform 160ms ease,
+        background 160ms ease,
+        border-color 160ms ease,
+        color 160ms ease;`,
+      label,
+    )
+
+    btn.addEventListener("mouseenter", () => {
+      btn.style.transform = "translateY(-2px)"
+      btn.style.background = palette.hoverBg
+      btn.style.borderColor = palette.hoverBorder
+      btn.style.color = palette.hoverColor
+    })
+
+    btn.addEventListener("mouseleave", () => {
+      btn.style.transform = "translateY(0)"
+      btn.style.background = "rgba(255, 255, 255, 0.02)"
+      btn.style.borderColor = palette.border
+      btn.style.color = palette.color
+    })
+
+    btn.addEventListener("focus", () => {
+      btn.style.outline = `2px solid ${palette.focus}`
+      btn.style.outlineOffset = "4px"
+    })
+
+    btn.addEventListener("blur", () => {
+      btn.style.outline = "none"
+    })
+
+    btn.addEventListener("click", onClick)
+
+    return btn
   }
 
   /* ---------------------------------------------

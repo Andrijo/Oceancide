@@ -429,11 +429,3 @@ export class BiomeProps {
     this.group.clear()
   }
 }
-
-/** Libera todas las geometrías cacheadas. Llamar al destruir el juego. */
-export function disposeBiomePropsCache(): void {
-  for (const geometry of geometryCache.values()) {
-    geometry.dispose()
-  }
-  geometryCache.clear()
-}

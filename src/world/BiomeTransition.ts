@@ -81,11 +81,6 @@ export class BiomeTransition {
     window.addEventListener("resize", () => this.resize())
   }
 
-  private resize(): void {
-    this.canvas.width = window.innerWidth
-    this.canvas.height = window.innerHeight
-  }
-
   /**
    * Inicia la transición. `onCovered` se ejecuta una sola vez, cuando la pantalla
    * está completamente negra (momento ideal para cambiar de bioma).
@@ -144,6 +139,11 @@ export class BiomeTransition {
     }
 
     this.draw()
+  }
+
+  private resize(): void {
+    this.canvas.width = window.innerWidth
+    this.canvas.height = window.innerHeight
   }
 
   private draw(): void {
