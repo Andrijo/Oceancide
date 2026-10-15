@@ -42,7 +42,6 @@ const RARITY_LABELS: Record<CardRarity, string> = {
   curse: "Maldición",
 }
 
-// Fondos sólidos por rareza. Oscuros para que el texto blanco tenga contraste.
 const RARITY_BACKGROUNDS: Record<CardRarity, string> = {
   common: "#2b3542",
   rare: "#17456b",
@@ -54,6 +53,8 @@ const RARITY_BACKGROUNDS: Record<CardRarity, string> = {
 const HUD_IDS = [
   "ui-overlay",
   "toxicity-skull",
+  "biome-timer",
+  "boost-energy-bar",
   "controls-hint",
   "touch-controls",
   "build-hud",
@@ -61,9 +62,16 @@ const HUD_IDS = [
 ]
 
 const OUTCOME_TITLES: Record<RunOutcome, string> = {
-  died: "¡Se acabó! La toxicidad ganó.",
-  completed: "¡Felicidades, has limpiado el océano!",
-  abandoned: "Has abandonado la run. El océano seguirá su curso.",
+  died: "La toxicidad ganó",
+  completed: "Océano limpio",
+  abandoned: "Inmersión abandonada",
+}
+
+// Color del título según el outcome.
+const OUTCOME_COLORS: Record<RunOutcome, string> = {
+  died: "#ff7a6b",
+  completed: "#7cf7d4",
+  abandoned: "#d9fbff",
 }
 
 const CARD_KEYS: Record<string, number> = {
@@ -73,6 +81,18 @@ const CARD_KEYS: Record<string, number> = {
   Numpad1: 0,
   Numpad2: 1,
   Numpad3: 2,
+}
+
+const HUB_ACCENT = "#a855f7"
+
+const ICONS = {
+  trash: [
+    "M3 6h18",
+    "M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6",
+    "M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2",
+    "M10 11v6",
+    "M14 11v6",
+  ],
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -90,6 +110,28 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node
 }
 
+function icon(paths: string[], size = 20, fill = false): HTMLElement {
+  const span = el(
+    "span",
+    `display: inline-flex;
+    flex: none;
+    width: ${size}px;
+    height: ${size}px;`,
+  )
+
+  span.setAttribute("aria-hidden", "true")
+
+  span.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+    width="${size}" height="${size}"
+    fill="${fill ? "currentColor" : "none"}"
+    stroke="currentColor" stroke-width="2"
+    stroke-linecap="round" stroke-linejoin="round">
+    ${paths.map((d) => `<path d="${d}"/>`).join("")}
+  </svg>`
+
+  return span
+}
+
 function formatTime(seconds: number): string {
   const total = Math.floor(seconds)
   const minutes = Math.floor(total / 60)
@@ -97,6 +139,8 @@ function formatTime(seconds: number): string {
 
   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`
 }
+
+type ActionVariant = "primary" | "danger" | "neutral"
 
 export class ScreenManager {
   private overlay: HTMLElement
@@ -110,7 +154,6 @@ export class ScreenManager {
 
     this.ensureBubbleAnimation()
 
-    // Teclas 1/2/3 para elegir carta. Ignora autorepeat y soporta numpad.
     window.addEventListener("keydown", (e) => {
       if (!this.cardChoiceActive) return
       if (e.repeat) return
@@ -130,26 +173,18 @@ export class ScreenManager {
       display: none;
       align-items: center;
       justify-content: center;
-      padding: 18px;
+      padding: 0;
       box-sizing: border-box;
-      background:
-        radial-gradient(
-          circle at 50% 20%,
-          rgba(24, 121, 156, 0.20),
-          transparent 48%
-        ),
-        rgba(0, 12, 30, 0.46);
+      background: rgba(0, 12, 30, 0.55);
       backdrop-filter: blur(4px);
       font-family: ${paragraphFONT};`,
     )
 
-    // Accesibilidad: anunciar como diálogo modal
     this.overlay.setAttribute("role", "dialog")
     this.overlay.setAttribute("aria-modal", "true")
 
     document.getElementById("game-container")!.appendChild(this.overlay)
 
-    // Enter como acción primaria (Empezar, Reanudar, Nueva inmersión, etc.)
     window.addEventListener("keydown", (event) => {
       if (
         event.code === "Enter" &&
@@ -180,140 +215,478 @@ export class ScreenManager {
     return this.cardChoiceActive
   }
 
-  public showHub(meta: MetaState): void {
-    const bestKey = BIOME_ORDER[meta.bestBiomeIndex]
+  /* ---------------------------------------------
+     Marco de ventana compartido (cuadrícula + fondo)
+  --------------------------------------------- */
 
+  private makeWindowFrame(): {
+    root: HTMLElement
+    content: HTMLElement
+  } {
+    const root = el(
+      "div",
+      `position: absolute;
+      inset: 0;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(4, 12, 20, 0.30), rgba(2, 8, 16, 0.50));`,
+    )
+
+    const grid = el(
+      "div",
+      `position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(220, 245, 255, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(220, 245, 255, 0.04) 1px, transparent 1px);
+      background-size: 46px 46px;
+      -webkit-mask-image: radial-gradient(ellipse at 50% 38%, #000 18%, transparent 74%);
+      mask-image: radial-gradient(ellipse at 50% 38%, #000 18%, transparent 74%);`,
+    )
+
+    const glow = el(
+      "div",
+      `position: absolute;
+      top: -180px;
+      left: 50%;
+      width: 780px;
+      height: 460px;
+      transform: translateX(-50%);
+      pointer-events: none;
+      filter: blur(20px);`,
+    )
+
+    const content = el(
+      "div",
+      `position: relative;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(14px, 2.4vh, 28px);
+      padding: clamp(10px, 2vh, 24px) clamp(18px, 4vw, 56px) clamp(22px, 4vh, 44px);
+      text-align: center;`,
+    )
+
+    root.append(grid, glow, content)
+    return { root, content }
+  }
+
+  // Menú de pausa
+  private makeScreenTitle(text: string, color = "#efffff"): HTMLElement {
+    return el(
+      "div",
+      `width: 100%;
+    overflow: visible;
+    font-family: ${titleFONT};
+    font-size: clamp(28px, 4.6vw, 58px);
+    font-weight: 900;
+    font-stretch: condensed;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    text-align: center;
+    margin-bottom: 40px;
+    color: ${color};
+    text-shadow:
+      0 3px 0 rgba(0, 44, 70, 0.6),
+      0 6px 14px rgba(0, 5, 18, 0.5),
+      0 0 12px ${color}44;
+    max-width: 900px;`,
+      text,
+    )
+  }
+
+  /** Subtítulo pequeño en mayúsculas, al estilo del hub. */
+  private makeScreenSubtitle(text: string): HTMLElement {
+    return el(
+      "div",
+      `max-width: 720px;
+      font-family: ${paragraphFONT};
+      font-size: clamp(6px, 1.5vw, 15px);
+      letter-spacing: 0.16em;
+      color: rgba(214, 236, 240, 0.62);
+      margin-bottom: 30px;
+      text-align: center;`,
+      text,
+    )
+  }
+
+  private makeBentoGrid(
+    items: Array<{
+      label: string
+      value: string
+      sub?: string
+      highlight?: boolean
+    }>,
+  ): HTMLElement {
+    const grid = el(
+      "div",
+      `width: 100%;
+    max-width: 780px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;`,
+    )
+
+    for (const item of items) {
+      grid.append(
+        this.makeBentoStat(item.label, item.value, item.sub, item.highlight),
+      )
+    }
+
+    return grid
+  }
+
+  private makeBentoStat(
+    label: string,
+    value: string,
+    sub?: string,
+    highlight = false,
+  ): HTMLElement {
+    const card = el(
+      "div",
+      `display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    padding: 12px 14px;
+    text-align: left;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    backdrop-filter: blur(6px);
+    transition: border-color 160ms ease, transform 160ms ease;`,
+    )
+
+    card.addEventListener("mouseenter", () => {
+      card.style.transform = "translateY(-2px)"
+    })
+
+    card.addEventListener("mouseleave", () => {
+      card.style.borderColor = "rgba(255, 255, 255, 0.09)"
+      card.style.transform = "translateY(0)"
+    })
+
+    card.append(
+      el(
+        "div",
+        `min-width: 0;
+      font-size: 10px;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+      color: rgba(214, 236, 240, 0.8);`,
+        label,
+      ),
+      el(
+        "div",
+        `font-family: ${titleFONT};
+      font-size: clamp(16px, 1.6vw, 22px);
+      font-weight: 900;
+      line-height: 1.1;
+      text-align: center;
+      overflow-wrap: anywhere;
+      color: ${highlight ? HUB_ACCENT : "#ffffff"};`,
+        value,
+      ),
+    )
+
+    if (sub) {
+      card.append(
+        el("div", `font-size: 11px; color: rgba(214, 236, 240, 0.55);`, sub),
+      )
+    }
+
+    return card
+  }
+
+  /** Botón fantasma unificado: primary (cyan), danger (rojo), neutral (blanco). */
+  private makeGhostAction(
+    label: string,
+    onClick: () => void,
+    variant: ActionVariant = "neutral",
+  ): HTMLButtonElement {
+    const palette = {
+      primary: {
+        color: "rgba(220, 245, 255, 0.92)",
+        border: "rgba(220, 245, 255, 0.28)",
+        hoverBg: "rgba(220, 245, 255, 0.10)",
+        hoverBorder: "rgba(220, 245, 255, 0.55)",
+        hoverColor: "#ffffff",
+        focus: HUB_ACCENT,
+      },
+      danger: {
+        color: "rgba(255, 150, 150, 0.9)",
+        border: "rgba(255, 120, 120, 0.28)",
+        hoverBg: "rgba(255, 90, 90, 0.14)",
+        hoverBorder: "rgba(255, 120, 120, 0.6)",
+        hoverColor: "#ffbaba",
+        focus: "rgba(255, 150, 150, 0.9)",
+      },
+      neutral: {
+        color: "rgba(214, 236, 240, 0.85)",
+        border: "rgba(214, 236, 240, 0.20)",
+        hoverBg: "rgba(214, 236, 240, 0.08)",
+        hoverBorder: "rgba(214, 236, 240, 0.42)",
+        hoverColor: "#ffffff",
+        focus: "rgba(214, 236, 240, 0.6)",
+      },
+    }[variant]
+
+    const btn = el(
+      "button",
+      `display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      min-height: 54px;
+      padding: 12px 22px;
+      border-radius: 12px;
+      cursor: pointer;
+      color: ${palette.color};
+      font: 700 clamp(15px, 1.9vw, 19px) ${titleFONT};
+      letter-spacing: 0.04em;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1.5px solid ${palette.border};
+      backdrop-filter: blur(6px);
+      transition:
+        transform 160ms ease,
+        background 160ms ease,
+        border-color 160ms ease,
+        color 160ms ease;`,
+      label,
+    )
+
+    btn.addEventListener("mouseenter", () => {
+      btn.style.transform = "translateY(-2px)"
+      btn.style.background = palette.hoverBg
+      btn.style.borderColor = palette.hoverBorder
+      btn.style.color = palette.hoverColor
+    })
+
+    btn.addEventListener("mouseleave", () => {
+      btn.style.transform = "translateY(0)"
+      btn.style.background = "rgba(255, 255, 255, 0.02)"
+      btn.style.borderColor = palette.border
+      btn.style.color = palette.color
+    })
+
+    btn.addEventListener("focus", () => {
+      btn.style.outline = `2px solid ${palette.focus}`
+      btn.style.outlineOffset = "4px"
+    })
+
+    btn.addEventListener("blur", () => {
+      btn.style.outline = "none"
+    })
+
+    btn.addEventListener("click", onClick)
+
+    return btn
+  }
+
+  /* ---------------------------------------------
+     Pantallas
+  --------------------------------------------- */
+
+  public showHub(meta: MetaState): void {
+    this.ensureHubAnimation()
+
+    const bestIndex = meta.bestBiomeIndex
+    const bestKey = BIOME_ORDER[bestIndex]
     const bestBiome = bestKey
-      ? `${meta.bestBiomeIndex + 1}. ${BIOMES[bestKey].name}`
+      ? `${bestIndex + 1}. ${BIOMES[bestKey].name}`
       : "—"
 
     const start = () => this.callbacks.onStartRun()
 
+    const reset = () => {
+      if (
+        window.confirm(
+          "¿Está seguro de que desea eliminar todo el progreso guardado?",
+        )
+      ) {
+        this.callbacks.onResetProgress()
+      }
+    }
+
+    const enter = <T extends HTMLElement>(node: T, delayMs: number): T => {
+      node.style.animation = `hubFadeUp 640ms cubic-bezier(0.2, 0.7, 0.2, 1) ${delayMs}ms both`
+      node.dataset.hubAnim = ""
+      return node
+    }
+
+    const { root, content } = this.makeWindowFrame()
+
+    // Barra superior: botón de eliminar progreso
+    const topBar = el(
+      "div",
+      `position: absolute;
+      top: 0;
+      right: 0;
+      z-index: 3;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      padding: 18px 20px;`,
+    )
+    topBar.append(this.makeGhostTrashButton("Eliminar progreso", reset))
+
+    // Logo
     const title = el(
       "div",
       `width: 100%;
-      box-sizing: border-box;
       overflow: visible;
-      margin-bottom: 50px;
       font-family: ${titleFONT};
-      font-size: clamp(68px, 10vw, 142px);
-      font-weight: 900;
+      font-size: clamp(56px, 9.5vw, 132px);
+      font-weight: 500;
       font-stretch: condensed;
-      line-height: 0.72;
+      line-height: 0.8;
       letter-spacing: -0.045em;
-      text-align: center;
       white-space: nowrap;`,
     )
 
-    const ocean = el(
-      "span",
-      `color: #efffff;
-      text-shadow:
-        0 5px 0 rgba(0, 44, 70, 0.72),
-        0 11px 18px rgba(0, 5, 18, 0.65),
-        0 0 14px rgba(220, 252, 255, 0.35);`,
-      "OCEAN",
-    )
-
-    const cide = el(
-      "span",
-      `color: #efffff;
-      background:
-        linear-gradient(
+    title.append(
+      el(
+        "span",
+        `color: #efffff;
+        text-shadow:
+          0 5px 0 rgba(0, 44, 70, 0.72),
+          0 11px 18px rgba(0, 5, 18, 0.65),
+          0 0 14px rgba(220, 252, 255, 0.35);`,
+        "OCEAN",
+      ),
+      el(
+        "span",
+        `color: #efffff;
+        background: linear-gradient(
           180deg,
           #ffffff 0%,
           #d8fbff 25%,
           #7cecff 55%,
           #129ec5 100%
         );
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-fill-color: transparent;
-      text-shadow:
-        0 5px 0 rgba(0, 62, 94, 0.92),
-        0 10px 0 rgba(0, 40, 65, 0.72),
-        0 16px 20px rgba(7, 26, 73, 0.68),
-        0 0 20px rgba(102, 241, 255, 0.42);`,
-      "CIDE",
-    )
-
-    title.append(ocean, cide)
-
-    const card = this.makeCard()
-
-    card.append(
-      title,
-      this.statList([
-        ["Conciencia ecológica", meta.ecoPoints.toLocaleString("es")],
-        ["Mejor zona", bestBiome],
-        [
-          "Runs jugadas",
-          `${meta.runsPlayed} (${meta.runsCompleted} completadas)`,
-        ],
-        ["Desechos recolectados", meta.totalDebris.toLocaleString("es")],
-      ]),
-      this.makeButton("Empezar", start),
-      this.makeButton(
-        "Eliminar progreso",
-        () => {
-          if (
-            window.confirm(
-              "¿Está seguro de que desea eliminar todo el progreso guardado?",
-            )
-          ) {
-            this.callbacks.onResetProgress()
-          }
-        },
-        false,
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-shadow:
+          0 5px 0 rgba(0, 62, 94, 0.92),
+          0 10px 0 rgba(0, 40, 65, 0.72),
+          0 16px 20px rgba(7, 26, 73, 0.68),
+          0 0 20px rgba(102, 241, 255, 0.42);`,
+        "CIDE",
       ),
     )
 
-    this.open(card, start)
+    const tagline = el(
+      "div",
+      `max-width: 760px;
+      font-family: ${titleFONT};
+      font-size: clamp(16px, 3vw, 36px);
+      font-weight: 900;
+      line-height: 1.15;
+      letter-spacing: 0.01em;
+      color: #eaffef;
+      text-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);`,
+    )
+
+    const stats = this.makeBentoGrid([
+      {
+        label: "Conciencia ecológica",
+        value: meta.ecoPoints.toLocaleString("es"),
+        highlight: true,
+      },
+      { label: "Mejor zona", value: bestBiome },
+      {
+        label: "Runs jugadas",
+        value: String(meta.runsPlayed),
+        sub: `${meta.runsCompleted} completadas`,
+      },
+      {
+        label: "Desechos recolectados",
+        value: meta.totalDebris.toLocaleString("es"),
+      },
+    ])
+
+    content.append(
+      enter(title, 0),
+      enter(tagline, 90),
+      enter(stats, 180),
+      enter(this.makeZoneProgress(bestIndex), 280),
+      enter(this.makeHubCta("Empezar", start), 380),
+    )
+
+    root.append(topBar)
+    this.open(root, start)
   }
 
   public showSummary(summary: RunSummary, meta: MetaState): void {
-    const rows: [string, string][] = [
-      ["Zona alcanzada", `${summary.biomeIndex + 1}. ${summary.biomeName}`],
-      ["Desechos recolectados", String(summary.debrisCollected)],
-      ["Tiempo de inmersión", formatTime(summary.durationSeconds)],
-      ["Conciencia ecológica", `+${summary.ecoBase}`],
-    ]
-
-    if (summary.ecoBonus > 0) {
-      rows.push(["Bono por completar", `+${summary.ecoBonus}`])
-    }
-
-    rows.push(["Total en el refugio", meta.ecoPoints.toLocaleString("es")])
-
-    const hasCards = summary.cardsPicked.length > 0
-    if (hasCards) {
-      rows.push(["Cartas elegidas", summary.cardsPicked.length.toString()])
-    }
-
     const again = () => this.callbacks.onStartRun()
 
-    const card = this.makeCard()
+    const { root, content } = this.makeWindowFrame()
 
-    card.append(
-      el(
-        "div",
-        `font-size: clamp(32px, 5vw, 52px);
-        font-weight: bold;
-        text-align: center;
-        line-height: 1.1;
-        font-family: ${titleFONT};
-        color: #d9fbff;`,
-        OUTCOME_TITLES[summary.outcome],
-      ),
-      this.statList(rows),
+    const title = this.makeScreenTitle(
+      OUTCOME_TITLES[summary.outcome],
+      OUTCOME_COLORS[summary.outcome],
     )
 
-    if (hasCards) {
+    const zoneLabel = `${summary.biomeIndex + 1}. ${summary.biomeName}`
+
+    const bentoItems: Array<{
+      label: string
+      value: string
+      sub?: string
+      highlight?: boolean
+    }> = [
+      { label: "Zona alcanzada", value: zoneLabel },
+      {
+        label: "Desechos recolectados",
+        value: summary.debrisCollected.toLocaleString("es"),
+      },
+      {
+        label: "Tiempo de inmersión",
+        value: formatTime(summary.durationSeconds),
+      },
+      {
+        label: "Cartas elegidas",
+        value: String(summary.cardsPicked.length),
+      },
+      {
+        label: "Conciencia ecológica total",
+        value: meta.ecoPoints.toLocaleString("es"),
+      },
+    ]
+
+    // Eco ganado en esta run (con bono si lo hay)
+    const totalEarned = summary.ecoBase + summary.ecoBonus
+    bentoItems.push({
+      label: "Eco ganado",
+      value: `+${totalEarned.toLocaleString("es")}`,
+      sub:
+        summary.ecoBonus > 0
+          ? `Incluye +${summary.ecoBonus} de bono`
+          : undefined,
+      highlight: true,
+    })
+
+    content.append(title, this.makeBentoGrid(bentoItems))
+
+    if (summary.cardsPicked.length > 0) {
       const names = summary.cardsPicked
         .map((id) => CARD_POOL.find((c) => c.id === id)?.name ?? id)
         .join(" · ")
 
-      card.append(
+      content.append(
         el(
           "div",
           `font-size: 13px;
@@ -321,32 +694,49 @@ export class ScreenManager {
           color: #bcebf6;
           text-align: center;
           font-family: ${paragraphFONT};
-          line-height: 1.5;
-          max-width: 640px;`,
+          line-height: 1.6;
+          max-width: 720px;
+          letter-spacing: 0.02em;`,
           names,
         ),
       )
     }
 
-    card.append(
+    const buttons = el(
+      "div",
+      `width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;`,
+    )
+
+    buttons.append(
+      this.makeGhostAction("Nueva inmersión", again, "primary"),
+      this.makeGhostAction(
+        "Volver al inicio",
+        () => this.callbacks.onReturnToHub(),
+        "neutral",
+      ),
+    )
+    content.append(buttons)
+
+    content.append(
       el(
         "div",
-        `font-size: 13px;
-        opacity: 0.78;
+        `font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        opacity: 0.55;
         text-align: center;
         color: #bcebf6;
         font-family: ${paragraphFONT};`,
-        `Semilla: ${summary.seed}`,
-      ),
-      this.makeButton("Nueva inmersión", again),
-      this.makeButton(
-        "Volver al inicio",
-        () => this.callbacks.onReturnToHub(),
-        false,
+        `Semilla · ${summary.seed}`,
       ),
     )
 
-    this.open(card, again)
+    this.open(root, again)
   }
 
   public showCardChoice(cards: Card[], onPick: (card: Card) => void): void {
@@ -363,26 +753,9 @@ export class ScreenManager {
     }
     this.cardChoiceHandler = pick
 
-    const wrapper = el(
-      "div",
-      `display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 28px;
-      max-width: 1100px;
-      width: 100%;`,
-    )
+    const { root, content } = this.makeWindowFrame()
 
-    const title = el(
-      "div",
-      `font-family: ${titleFONT};
-      font-size: clamp(26px, 3.5vw, 38px);
-      color: #d9fbff;
-      text-align: center;
-      letter-spacing: 0.04em;
-      text-shadow: 0 4px 12px rgba(0, 0, 0, 0.7);`,
-      "Elige una mejora",
-    )
+    const title = this.makeScreenTitle("Elige una mejora")
 
     const row = el(
       "div",
@@ -397,10 +770,9 @@ export class ScreenManager {
       row.append(this.makeCardButton(card, i, () => pick(i)))
     })
 
-    wrapper.append(title, row)
+    content.append(title, row)
 
-    // `open` con primary no-op: Enter no debe hacer nada aquí.
-    this.open(wrapper, () => {})
+    this.open(root, () => {})
   }
 
   public showPause(
@@ -408,49 +780,54 @@ export class ScreenManager {
     onAbandon: () => void,
     runInfo?: RunInfo,
   ): void {
-    const card = this.makeCard()
+    const { root, content } = this.makeWindowFrame()
 
-    card.append(
-      el(
-        "div",
-        `font-size: clamp(52px, 8vw, 78px);
-        line-height: 0.9;
-        letter-spacing: 0.12em;
-        text-align: center;
-        font-family: ${titleFONT};
-        color: #d9fbff;
-        text-shadow:
-          0 0 12px rgba(83, 226, 255, 0.55),
-          0 6px 16px rgba(0, 0, 0, 0.75);`,
-        "PAUSA",
-      ),
-      el(
-        "div",
-        `text-align: center;
-        font: 16px ${paragraphFONT};
-        letter-spacing: 0.13em;
-        color: rgba(204, 245, 255, 0.72);`,
-        "El juego está detenido",
-      ),
-    )
+    const title = this.makeScreenTitle("Pausa")
+    const subtitle = this.makeScreenSubtitle("El juego está detenido")
+
+    content.append(title, subtitle)
 
     if (runInfo) {
-      card.append(
-        this.statList([
-          ["Zona actual", `${runInfo.biomeIndex + 1}. ${runInfo.biomeName}`],
-          ["Eco acumulado", runInfo.ecoAwareness.toLocaleString("es")],
-          ["Cartas elegidas", String(runInfo.cardsCount)],
+      const zoneLabel = `${runInfo.biomeIndex + 1}. ${runInfo.biomeName}`
+
+      content.append(
+        this.makeBentoGrid([
+          { label: "Zona actual", value: zoneLabel },
+          {
+            label: "Eco acumulado",
+            value: runInfo.ecoAwareness.toLocaleString("es"),
+            highlight: true,
+          },
+          {
+            label: "Cartas elegidas",
+            value: String(runInfo.cardsCount),
+          },
         ]),
       )
     }
 
-    card.append(
-      this.makeButton("Reanudar", onResume),
-      this.makeButton("Abandonar", onAbandon, false),
+    const buttons = el(
+      "div",
+      `width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;`,
     )
 
-    this.open(card, onResume)
+    buttons.append(
+      this.makeGhostAction("Reanudar", onResume, "primary"),
+      this.makeGhostAction("Abandonar", onAbandon, "danger"),
+    )
+    content.append(buttons)
+
+    this.open(root, onResume)
   }
+
+  /* ---------------------------------------------
+     Helpers de UI
+  --------------------------------------------- */
 
   private ensureBubbleAnimation(): void {
     if (document.getElementById("menu-bubble-animation")) return
@@ -464,15 +841,8 @@ export class ScreenManager {
           transform: translate3d(0, 0, 0) scale(0.92);
           opacity: 0;
         }
-
-        15% {
-          opacity: 0.55;
-        }
-
-        80% {
-          opacity: 0.42;
-        }
-
+        15% { opacity: 0.55; }
+        80% { opacity: 0.42; }
         100% {
           transform: translate3d(18px, -170px, 0) scale(1.12);
           opacity: 0;
@@ -481,6 +851,197 @@ export class ScreenManager {
     `
 
     document.head.appendChild(style)
+  }
+
+  private ensureHubAnimation(): void {
+    if (document.getElementById("menu-hub-animation")) return
+
+    const style = document.createElement("style")
+    style.id = "menu-hub-animation"
+
+    style.textContent = `
+      @keyframes hubFadeUp {
+        from { opacity: 0; transform: translateY(16px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        [data-hub-anim],
+        [data-hub-cta] {
+          animation: none !important;
+        }
+      }
+    `
+
+    document.head.appendChild(style)
+  }
+
+  private makeHubCta(label: string, onClick: () => void): HTMLButtonElement {
+    const btn = el(
+      "button",
+      `display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 22px;
+      border-radius: 12px;
+      cursor: pointer;
+      color: rgba(220, 245, 255, 0.92);
+      font: 700 clamp(15px, 1.9vw, 20px) ${titleFONT};
+      letter-spacing: 0.04em;
+      background: rgba(220, 245, 255, 0.04);
+      border: 1.5px solid rgba(220, 245, 255, 0.28);
+      backdrop-filter: blur(6px);
+      transition:
+        transform 160ms ease,
+        background 160ms ease,
+        border-color 160ms ease,
+        color 160ms ease;`,
+    )
+
+    btn.dataset.hubCta = ""
+
+    const keycap = el(
+      "span",
+      `font: 700 10px ${paragraphFONT};
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(220, 245, 255, 0.28);
+      color: rgba(220, 245, 255, 0.55);`,
+      "Enter",
+    )
+    keycap.setAttribute("aria-hidden", "true")
+
+    btn.append(document.createTextNode(label), keycap)
+
+    btn.addEventListener("mouseenter", () => {
+      btn.style.transform = "translateY(-2px)"
+      btn.style.background = "rgba(220, 245, 255, 0.10)"
+      btn.style.borderColor = "rgba(220, 245, 255, 0.55)"
+      btn.style.color = "#ffffff"
+    })
+
+    btn.addEventListener("mouseleave", () => {
+      btn.style.transform = "translateY(0)"
+      btn.style.background = "rgba(220, 245, 255, 0.04)"
+      btn.style.borderColor = "rgba(220, 245, 255, 0.28)"
+      btn.style.color = "rgba(220, 245, 255, 0.92)"
+    })
+
+    btn.addEventListener("focus", () => {
+      btn.style.outline = `2px solid ${HUB_ACCENT}`
+      btn.style.outlineOffset = "5px"
+    })
+
+    btn.addEventListener("blur", () => {
+      btn.style.outline = "none"
+    })
+
+    btn.addEventListener("click", onClick)
+
+    return btn
+  }
+
+  private makeGhostTrashButton(
+    label: string,
+    onClick: () => void,
+  ): HTMLButtonElement {
+    const btn = el(
+      "button",
+      `display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 14px;
+      border-radius: 12px;
+      cursor: pointer;
+      font: 13px ${paragraphFONT};
+      letter-spacing: 0.04em;
+      color: rgba(255, 150, 150, 0.9);
+      background: transparent;
+      border: 1px solid rgba(255, 120, 120, 0.28);
+      transition: background 150ms ease, border-color 150ms ease;`,
+    )
+
+    btn.append(icon(ICONS.trash, 15), document.createTextNode(label))
+
+    btn.addEventListener("mouseenter", () => {
+      btn.style.background = "rgba(255, 90, 90, 0.12)"
+      btn.style.borderColor = "rgba(255, 120, 120, 0.6)"
+    })
+
+    btn.addEventListener("mouseleave", () => {
+      btn.style.background = "transparent"
+      btn.style.borderColor = "rgba(255, 120, 120, 0.28)"
+    })
+
+    btn.addEventListener("focus", () => {
+      btn.style.outline = "2px solid rgba(255, 150, 150, 0.8)"
+      btn.style.outlineOffset = "3px"
+    })
+
+    btn.addEventListener("blur", () => {
+      btn.style.outline = "none"
+    })
+
+    btn.addEventListener("click", onClick)
+
+    return btn
+  }
+
+  private makeZoneProgress(bestIndex: number): HTMLElement {
+    const total = BIOME_ORDER.length
+    const reached = bestIndex >= 0 && BIOME_ORDER[bestIndex] ? bestIndex + 1 : 0
+
+    const wrap = el(
+      "div",
+      `width: 100%;
+      max-width: 960px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;`,
+    )
+
+    const header = el(
+      "div",
+      `display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      font-size: 11px;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+      color: rgba(214, 236, 240, 0.62);`,
+    )
+
+    header.append(
+      el("span", "", "Progreso de zonas"),
+      el(
+        "span",
+        `color: ${HUB_ACCENT}; font-weight: bold;`,
+        `${reached} / ${total}`,
+      ),
+    )
+
+    const bar = el("div", `display: flex; gap: 6px;`)
+
+    BIOME_ORDER.forEach((key, i) => {
+      const lit = i < reached
+
+      const seg = el(
+        "div",
+        `flex: 1 1 0;
+        height: 8px;
+        border-radius: 999px;
+        background: ${lit ? HUB_ACCENT : "rgba(255, 255, 255, 0.1)"};`,
+      )
+
+      seg.title = `${i + 1}. ${BIOMES[key].name}`
+      bar.append(seg)
+    })
+
+    wrap.append(header, bar)
+    return wrap
   }
 
   private makeCornerBubbles(): HTMLElement {
@@ -506,7 +1067,6 @@ export class ScreenManager {
       { size: 56, left: "65%", bottom: "3%", delay: "-7s", duration: "8s" },
       { size: 48, left: "74%", bottom: "12%", delay: "-1s", duration: "6s" },
       { size: 58, left: "83%", bottom: "-4%", delay: "-5s", duration: "10s" },
-
       { size: 38, right: "6%", bottom: "8%", delay: "-1s", duration: "8s" },
       { size: 56, right: "13%", bottom: "21%", delay: "-3s", duration: "6s" },
     ]
@@ -553,7 +1113,6 @@ export class ScreenManager {
 
   private open(container: HTMLElement, primary: () => void): void {
     this.overlay.replaceChildren(this.makeCornerBubbles(), container)
-
     this.overlay.style.display = "flex"
     this.primaryAction = primary
     this.setHudVisible(false)
@@ -597,7 +1156,6 @@ export class ScreenManager {
         filter 160ms ease;`,
     )
 
-    // Accesibilidad: describir la carta de un vistazo
     btn.setAttribute(
       "aria-label",
       `${label}: ${card.name}. ${card.value}. ${card.description}`,
@@ -624,7 +1182,6 @@ export class ScreenManager {
 
     btn.addEventListener("click", onClick)
 
-    // --- Badge de tecla (1/2/3) en la esquina ---
     const keyBadge = el(
       "div",
       `position: absolute;
@@ -647,7 +1204,6 @@ export class ScreenManager {
     )
     keyBadge.setAttribute("aria-hidden", "true")
 
-    // --- Etiqueta de rareza, centrada arriba ---
     const rarityArea = el(
       "div",
       `padding: 22px 16px 14px;
@@ -672,14 +1228,16 @@ export class ScreenManager {
       "div",
       `width: 60%;
       height: 1px;
-      color: ${RARITY_LABELS}
-      background: ${RARITY_COLORS}
+      background: linear-gradient(
+        90deg,
+        transparent,
+        ${accent},
+        transparent
       );`,
     )
 
     rarityArea.append(rarityLabel, rarityDivider)
 
-    // --- Cuerpo: nombre, valor, descripción ---
     const body = el(
       "div",
       `flex: 1 1 auto;
@@ -726,123 +1284,6 @@ export class ScreenManager {
 
     body.append(name, value, desc)
     btn.append(keyBadge, rarityArea, body)
-
-    return btn
-  }
-
-  private makeCard(): HTMLElement {
-    return el(
-      "div",
-      `position: relative;
-      z-index: 1;
-      width: min(900px, 92vw);
-      max-height: 88dvh;
-      overflow-y: auto;
-      overflow-x: hidden;
-      box-sizing: border-box;
-      padding: clamp(20px, 4vw, 48px);
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
-      color: #f7f7ff;
-      background: transparent;
-      border: none;
-      border-radius: 0;
-      box-shadow: none;
-      backdrop-filter: none;`,
-    )
-  }
-
-  private statList(rows: [string, string][]): HTMLElement {
-    const list = el(
-      "div",
-      `display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px 40px;
-      padding: 12px 0 6px;
-      margin-bottom: 18px;`,
-    )
-
-    for (const [label, value] of rows) {
-      const row = el(
-        "div",
-        `display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: 12px;
-        min-width: 0;
-        font-family: ${paragraphFONT};`,
-      )
-
-      row.append(
-        el(
-          "span",
-          `min-width: 0;
-          font-size: 16px;
-          color: rgba(227, 249, 255, 0.82);`,
-          label,
-        ),
-        el(
-          "span",
-          `min-width: 0;
-          text-align: right;
-          overflow-wrap: anywhere;
-          font-size: 16px;
-          color: #9cf3ff;
-          font-weight: bold;`,
-          value,
-        ),
-      )
-
-      list.append(row)
-    }
-
-    return list
-  }
-
-  private makeButton(
-    label: string,
-    onClick: () => void,
-    primary = true,
-  ): HTMLButtonElement {
-    const btn = el(
-      "button",
-      `width: 100%;
-      min-height: 58px;
-      padding: 12px 22px;
-      border-radius: 30px 60px;
-      cursor: pointer;
-      background: rgba(0, 44, 70, 0.52);
-      font: bold 19px ${titleFONT};
-      letter-spacing: 0.04em;
-      color: ${primary ? "#d9f8ff" : "#d9f8ff"};
-      transition:
-        transform 150ms ease,
-        filter 150ms ease,
-        background 150ms ease;`,
-      label,
-    )
-
-    btn.addEventListener("mouseenter", () => {
-      btn.style.transform = "translateY(-2px)"
-      btn.style.filter = "brightness(1.32)"
-    })
-
-    btn.addEventListener("mouseleave", () => {
-      btn.style.transform = "translateY(0)"
-      btn.style.filter = "brightness(1)"
-    })
-
-    btn.addEventListener("focus", () => {
-      btn.style.outline = "2px solid #baf8ff"
-      btn.style.outlineOffset = "3px"
-    })
-
-    btn.addEventListener("blur", () => {
-      btn.style.outline = "none"
-    })
-
-    btn.addEventListener("click", onClick)
 
     return btn
   }
