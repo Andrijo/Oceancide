@@ -155,10 +155,90 @@ const BIOME_AMBIENCE: Record<BiomeKey, BiomeAmbience> = {
   },
 }
 
+/* ---------------------------------------------
+   Luz solar por bioma
+   El sol se apaga con la profundidad: desde el bioma 5 solo
+   queda luz ambiental y la bioluminiscencia de los puntos de luz.
+--------------------------------------------- */
+
+const MAX_SUN_INTENSITY = 1.3
+
+const SUN: Record<BiomeKey, { intensity: number; color: number }> = {
+  epipelagic_upper: { intensity: 1.3, color: 0xe8fbff },
+  pelagic_mid: { intensity: 0.9, color: 0xbfe8ff },
+  subphotic: { intensity: 0.45, color: 0x9cc8ff },
+  mesopelagic_upper: { intensity: 0.15, color: 0x8888ff },
+  mesopelagic_deep: { intensity: 0, color: 0x000000 },
+  bathypelagic_upper: { intensity: 0, color: 0x000000 },
+  bathypelagic_deep: { intensity: 0, color: 0x000000 },
+  abyssopelagic: { intensity: 0, color: 0x000000 },
+  hadopelagic: { intensity: 0, color: 0x000000 },
+  deepSea: { intensity: 0, color: 0x000000 },
+}
+
+/** Intensidad de las cáusticas sobre el suelo (solo donde llega la luz). */
+const CAUSTICS: Partial<Record<BiomeKey, number>> = {
+  epipelagic_upper: 0.9,
+  pelagic_mid: 0.55,
+  subphotic: 0.2,
+}
+
+/* ---------------------------------------------
+   Ruido de valor (relieve del suelo)
+--------------------------------------------- */
+
+function hash(x: number, z: number): number {
+  let h = Math.imul(x, 374761393) + Math.imul(z, 668265263)
+  h = Math.imul(h ^ (h >>> 13), 1274126177)
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296
+}
+
+/** Devuelve un valor en [-1, 1], continuo y determinista. */
+function valueNoise(x: number, z: number): number {
+  const xi = Math.floor(x)
+  const zi = Math.floor(z)
+  const xf = x - xi
+  const zf = z - zi
+  const u = xf * xf * (3 - 2 * xf)
+  const v = zf * zf * (3 - 2 * zf)
+
+  const a = hash(xi, zi)
+  const b = hash(xi + 1, zi)
+  const c = hash(xi, zi + 1)
+  const d = hash(xi + 1, zi + 1)
+
+  return (a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v) * 2 - 1
+}
+
+/* ---------------------------------------------
+   Sprite circular suave para las partículas
+--------------------------------------------- */
+
+let softDot: THREE.CanvasTexture | null = null
+
+function getSoftDot(): THREE.CanvasTexture {
+  if (softDot) return softDot
+
+  const canvas = document.createElement("canvas")
+  canvas.width = canvas.height = 64
+
+  const ctx = canvas.getContext("2d")!
+  const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32)
+  gradient.addColorStop(0, "rgba(255,255,255,1)")
+  gradient.addColorStop(0.4, "rgba(255,255,255,0.35)")
+  gradient.addColorStop(1, "rgba(255,255,255,0)")
+  ctx.fillStyle = gradient
+  ctx.fillRect(0, 0, 64, 64)
+
+  softDot = new THREE.CanvasTexture(canvas)
+  return softDot
+}
+
 export class BiomeGenerator {
   private scene: THREE.Scene
   private currentBiome: BiomeConfig
   private currentAmbience: BiomeAmbience
+  private currentBiomeKey: BiomeKey = "epipelagic_upper"
   private props: BiomeProps
 
   private debrisList: Debris[] = []
@@ -185,6 +265,13 @@ export class BiomeGenerator {
   // Caché de bounds: se invalida al cambiar de bioma
   private cachedBounds: WorldBounds | null = null
 
+  // Cáusticas: uniforms compartidos con el shader del suelo
+  private causticUniforms = {
+    uTime: { value: 0 },
+    uStrength: { value: 0 },
+  }
+  private causticBase = 0
+
   constructor(scene: THREE.Scene) {
     this.scene = scene
     this.currentBiome = BIOMES.epipelagic_upper
@@ -209,6 +296,8 @@ export class BiomeGenerator {
 
     this.currentBiome = BIOMES[biomeKey]
     this.currentAmbience = BIOME_AMBIENCE[biomeKey]
+    this.currentBiomeKey = biomeKey
+    this.causticBase = CAUSTICS[biomeKey] ?? 0
 
     this.baseColor.setRGB(...this.currentBiome.waterColor)
 
@@ -306,39 +395,75 @@ export class BiomeGenerator {
 
     this.hemisphereLight.intensity = this.currentAmbience.ambientLight * 0.65
     this.hemisphereLight.color.set(this.currentAmbience.lightColor)
+    // El "suelo" de la hemisférica toma el tono del agua en vez de un azul fijo
+    this.hemisphereLight.groundColor.copy(this.baseColor).multiplyScalar(0.25)
   }
 
   // Terreno
 
+  /**
+   * Desplazamiento vertical del relieve respecto a la profundidad base.
+   * Una sola fuente de verdad para la malla y para getFloorHeight().
+   * Con ruido normalizado a [-1, 1], el máximo es amp * (1 + 0.25 * detail),
+   * que es exactamente lo que asume getBounds().
+   */
+  private floorOffset(x: number, z: number): number {
+    const {
+      floorAmplitude: amp,
+      floorFrequency: f,
+      floorDetail: detail,
+    } = this.currentAmbience
+
+    const base =
+      valueNoise(x * f * 0.32, z * f * 0.32) * 0.65 +
+      valueNoise(x * f * 0.7 + 31, z * f * 0.7 - 17) * 0.35
+
+    const fine = valueNoise(x * f * 1.1 - 7, z * f * 1.1 + 53)
+
+    return amp * base + amp * 0.25 * detail * fine
+  }
+
   private generateTerrain(): void {
     this.disposeFloor()
 
-    const { floorAmplitude, floorFrequency, floorDetail } = this.currentAmbience
-
-    const geometry = new THREE.PlaneGeometry(220, 220, 48, 48)
+    const geometry = new THREE.PlaneGeometry(220, 220, 80, 80)
     const positions = geometry.attributes.position.array as Float32Array
+
+    const { floorAmplitude, floorDetail } = this.currentAmbience
+    const maxRise = floorAmplitude * (1 + 0.25 * floorDetail)
+
+    const baseColor = new THREE.Color(...this.currentBiome.floorColor)
+    const tint = new THREE.Color()
+    const colors = new Float32Array(positions.length)
 
     for (let i = 0; i < positions.length; i += 3) {
       const x = positions[i]
-      const z = positions[i + 1]
+      // La malla se rota -π/2 en X: el eje Y local del plano es -Z en el mundo
+      const z = -positions[i + 1]
+      const h = this.floorOffset(x, z)
 
-      positions[i + 2] = this.calculateFloorDisplacement(
-        x,
-        z,
-        floorAmplitude,
-        floorFrequency,
-        floorDetail,
-      )
+      positions[i + 2] = h
+
+      // Valles más oscuros, crestas más claras
+      const t = THREE.MathUtils.clamp((h / maxRise) * 0.5 + 0.5, 0, 1)
+      tint.copy(baseColor).multiplyScalar(0.65 + 0.55 * t)
+      colors[i] = tint.r
+      colors[i + 1] = tint.g
+      colors[i + 2] = tint.b
     }
 
+    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3))
     geometry.computeVertexNormals()
 
     const material = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(...this.currentBiome.floorColor),
+      color: 0xffffff, // el color real viene de los vértices
+      vertexColors: true,
       roughness: 0.95,
       metalness: 0.02,
       flatShading: true,
     })
+
+    this.applyCaustics(material)
 
     this.floor = new THREE.Mesh(geometry, material)
     this.floor.rotation.x = -Math.PI / 2
@@ -347,42 +472,54 @@ export class BiomeGenerator {
     this.scene.add(this.floor)
   }
 
-  private calculateFloorDisplacement(
-    x: number,
-    z: number,
-    amplitude: number,
-    frequency: number,
-    detail: number,
-  ): number {
-    const mainWave =
-      Math.sin(x * frequency) * Math.cos(z * frequency) * amplitude
+  /** Inyecta cáusticas animadas (luz ondulante) en el material del suelo. */
+  private applyCaustics(material: THREE.MeshStandardMaterial): void {
+    material.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = this.causticUniforms.uTime
+      shader.uniforms.uStrength = this.causticUniforms.uStrength
 
-    const secondaryWave =
-      Math.sin(x * frequency * 3.1) *
-      Math.cos(z * frequency * 2.7) *
-      amplitude *
-      0.25 *
-      detail
+      shader.vertexShader = shader.vertexShader
+        .replace("#include <common>", "#include <common>\nvarying vec3 vWPos;")
+        .replace(
+          "#include <begin_vertex>",
+          "#include <begin_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;",
+        )
 
-    return mainWave + secondaryWave
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          "#include <common>",
+          `#include <common>
+          varying vec3 vWPos;
+          uniform float uTime;
+          uniform float uStrength;
+
+          float caustic(vec2 uv, float time) {
+            const float TAU = 6.28318530718;
+            vec2 p = mod(uv * TAU, TAU) - 250.0;
+            vec2 i = p;
+            float c = 1.0;
+            const float inten = 0.005;
+            for (int n = 0; n < 5; n++) {
+              float t = time * (1.0 - (3.5 / float(n + 1)));
+              i = p + vec2(cos(t - i.x) + sin(t + i.y), sin(t - i.y) + cos(t + i.x));
+              c += 1.0 / length(vec2(p.x / (sin(i.x + t) / inten), p.y / (cos(i.y + t) / inten)));
+            }
+            c /= 5.0;
+            c = 1.17 - pow(c, 1.4);
+            return pow(abs(c), 8.0);
+          }`,
+        )
+        .replace(
+          "#include <emissivemap_fragment>",
+          `#include <emissivemap_fragment>
+          totalEmissiveRadiance += vec3(0.65, 0.95, 1.0)
+            * caustic(vWPos.xz * 0.04, uTime * 0.6) * uStrength;`,
+        )
+    }
   }
 
   public getFloorHeight(x: number, z: number): number {
-    const { floorAmplitude, floorFrequency, floorDetail } = this.currentAmbience
-
-    const mainWave =
-      Math.sin(x * floorFrequency) *
-      Math.cos(z * floorFrequency) *
-      floorAmplitude
-
-    const detail =
-      Math.sin(x * floorFrequency * 3.1) *
-      Math.cos(z * floorFrequency * 2.7) *
-      floorAmplitude *
-      0.25 *
-      floorDetail
-
-    return -this.currentBiome.depth + mainWave + detail
+    return -this.currentBiome.depth + this.floorOffset(x, z)
   }
 
   // Particulas
@@ -416,7 +553,8 @@ export class BiomeGenerator {
 
     const material = new THREE.PointsMaterial({
       color: this.currentAmbience.particleColor,
-      size: this.currentAmbience.particleSize,
+      map: getSoftDot(), // sprite circular suave (los puntos por defecto son cuadrados)
+      size: this.currentAmbience.particleSize * 3.5, // con el sprite suave hay que subirlo
       transparent: true,
       opacity: this.currentAmbience.particleOpacity,
       depthWrite: false,
@@ -537,6 +675,11 @@ export class BiomeGenerator {
       this.lastAppliedRatio = this.visualRatio
     }
 
+    // Cáusticas: avanzan con el tiempo y se marcan más cuanto más limpia está el agua
+    this.causticUniforms.uTime.value += deltaTime
+    this.causticUniforms.uStrength.value =
+      this.causticBase * (0.4 + 0.6 * (1 - this.visualRatio))
+
     this.updateParticles(deltaTime)
   }
 
@@ -617,6 +760,19 @@ export class BiomeGenerator {
 
   public getBiomeName(): string {
     return this.currentBiome.name
+  }
+
+  /**
+   * Sol del bioma actual. `darkness` (0..1) indica cuánta luz solar falta;
+   * Game la usa para reforzar las luces de bioluminiscencia.
+   */
+  public getSun(): { intensity: number; color: number; darkness: number } {
+    const sun = SUN[this.currentBiomeKey]
+    return {
+      intensity: sun.intensity,
+      color: sun.color,
+      darkness: 1 - sun.intensity / MAX_SUN_INTENSITY,
+    }
   }
 
   /** Libera todos los recursos del bioma actual. Llamar al destruir el juego. */
