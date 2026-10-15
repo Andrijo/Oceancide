@@ -14,6 +14,7 @@ import { BiomeTransition } from "@world/BiomeTransition"
 import { StructureManager } from "@world/StructureManager"
 import { STRUCTURES, type StructureKey } from "@world/StructureConfig"
 import { ScreenManager } from "@ui/ScreenManager"
+import { RenderPipeline } from "@core/RenderPipeline"
 import {
   SaveManager,
   applyRunToMeta,
@@ -59,6 +60,8 @@ const BUILD_DISTANCE = 4 // las estructuras se colocan delante de la tortuga
 // (darkness = 1). Con luces físicas (decay 2) hacen falta valores altos; ajústalo a gusto.
 const DEEP_POINT_LIGHT_BOOST = 25
 
+const BLOOM_MAX_STRENGTH = 0.5
+
 type Screen = "hub" | "run" | "summary"
 
 /** Permite reproducir una run con ?seed=123 en la URL. */
@@ -78,6 +81,7 @@ export class Game {
   private uiManager: UIManager
   private state: GameState
   private input: InputState
+  private renderPipeline!: RenderPipeline
   private timer: THREE.Timer
   private ambientLight!: THREE.AmbientLight
   private directionalLight!: THREE.DirectionalLight
@@ -112,6 +116,20 @@ export class Game {
       window.innerWidth / window.innerHeight,
       0.1,
       1000,
+    )
+
+    this.renderer = new THREE.WebGLRenderer({ antialias: true })
+    this.renderer.setSize(window.innerWidth, window.innerHeight)
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    document
+      .getElementById("game-container")!
+      .appendChild(this.renderer.domElement)
+
+    // Pipeline de render: tonemapping ACES + bloom (desactivado en móvil)
+    this.renderPipeline = new RenderPipeline(
+      this.renderer,
+      this.scene,
+      this.camera,
     )
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true })
@@ -304,6 +322,7 @@ export class Game {
     this.camera.aspect = window.innerWidth / window.innerHeight
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(window.innerWidth, window.innerHeight)
+    this.renderPipeline.setSize(window.innerWidth, window.innerHeight)
   }
 
   /** Genera un bioma y coloca a la tortuga, las luces y la cámara. */
@@ -316,6 +335,10 @@ export class Game {
     const rng = new Rng(deriveSeed(this.runSeed, index))
     this.biomeGenerator.generateBiome(BIOME_ORDER[index], rng)
     this.applyBiomeLighting()
+
+    // Bloom: solo en biomas oscuros
+    const sun = this.biomeGenerator.getSun()
+    this.renderPipeline.setBloomStrength(sun.darkness * BLOOM_MAX_STRENGTH)
 
     const bounds = this.biomeGenerator.getBounds()
     this.turtle.reset(new THREE.Vector3(0, (bounds.minY + bounds.maxY) / 2, 0))
@@ -746,7 +769,7 @@ export class Game {
 
     // Cúpula, rayos y nieve marina siguen a la cámara (ya colocada en este frame)
     this.biomeGenerator.updateWater(simDelta, this.camera.position)
-
-    this.renderer.render(this.scene, this.camera)
+    this.renderPipeline.update(simDelta)
+    this.renderPipeline.render()
   }
 }
