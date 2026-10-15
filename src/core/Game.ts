@@ -8,6 +8,8 @@ import { BiomeGenerator } from "@world/BiomeGenerator"
 import { SUN_DIRECTION } from "@world/WaterEffects"
 import { UIManager } from "@ui/UIManager"
 import { TouchControls } from "@ui/TouchControls"
+import { CardManager } from "@cards/CardManager"
+import { createRunState, type RunState } from "@cards/Card"
 import { Debris } from "@/entities/Debris"
 import { BubbleTrail } from "@entities/BubbleTrail"
 import { BiomeTransition } from "@world/BiomeTransition"
@@ -87,7 +89,8 @@ export class Game {
   private directionalLight!: THREE.DirectionalLight
   private pointLights: THREE.PointLight[] = []
   private pointLightBoost = 1 // sube en biomas oscuros (ver applyBiomeLighting)
-
+  private cardManager = new CardManager()
+  private runState: RunState = createRunState()
   private biomeIndex = 0
   private collectedInZone = 0
   private godMode = false
@@ -131,13 +134,6 @@ export class Game {
       this.scene,
       this.camera,
     )
-
-    this.renderer = new THREE.WebGLRenderer({ antialias: true })
-    this.renderer.setSize(window.innerWidth, window.innerHeight)
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    document
-      .getElementById("game-container")!
-      .appendChild(this.renderer.domElement)
 
     this.turtle = new Turtle()
     this.scene.add(this.turtle.mesh)
@@ -222,7 +218,11 @@ export class Game {
     // No pausamos si hay una transición en curso: la transición debe
     // terminar sola y luego el usuario decide.
     document.addEventListener("visibilitychange", () => {
-      if (document.hidden && !this.transition.isActive()) {
+      if (
+        document.hidden &&
+        !this.transition.isActive() &&
+        this.screens.isCardChoiceActive()
+      ) {
         this.setPaused(true)
       }
     })
@@ -261,7 +261,7 @@ export class Game {
   private handleKeyDown(e: KeyboardEvent): void {
     // Escape: pausar o continuar.
     if (e.code === "Escape") {
-      if (!e.repeat) this.togglePause()
+      if (!e.repeat && !this.screens.isCardChoiceActive()) this.togglePause()
       return
     }
 
@@ -452,6 +452,12 @@ export class Game {
           this.paused = false
           this.endRun("abandoned")
         },
+        {
+          biomeIndex: this.biomeIndex,
+          biomeName: this.biomeGenerator.getBiomeName(),
+          ecoAwareness: this.state.ecoAwareness,
+          cardsCount: this.runState.cards.length,
+        },
       )
     } else {
       this.paused = false
@@ -497,7 +503,11 @@ export class Game {
     this.screen = "run"
     this.clearInput()
 
-    // Resetear los avisos de "primera vez por run"
+    // Resetear stats de la tortuga y el estado de la run
+    this.turtle.resetStats()
+    this.runState = createRunState()
+
+    // Resetear avisos de "primera vez por run"
     this.uiManager.resetRunHints()
 
     this.screens.hide()
@@ -526,6 +536,7 @@ export class Game {
       ecoBonus: bonus,
       durationSeconds: this.runTime,
       seed: this.runSeed,
+      cardsPicked: this.runState.cards.map((c) => c.id),
     }
 
     applyRunToMeta(this.meta, summary)
@@ -609,6 +620,7 @@ export class Game {
     if (!this.state.isRunning) return
     if (this.transition.blocksGameplay) return
     if (this.paused) return
+    if (this.screens.isCardChoiceActive()) return
 
     // runTime solo cuenta cuando el gameplay está activo.
     // Durante "revealing" el juego no está bloqueado, así que cuenta.
@@ -660,8 +672,16 @@ export class Game {
     // Es la única forma de bajarla (además de los filtros).
     for (const debris of collected) {
       this.state.debrisCollected++
-      this.state.ecoAwareness += debris.ecoValue
+
+      const eco = Math.round(debris.ecoValue * this.runState.ecoMultiplier)
+      this.state.ecoAwareness += eco
       this.collectedInZone++
+
+      const filterCount = this.structures.getActiveCount()
+      if (filterCount > 0 && this.runState.filterEcoPerSecond > 0) {
+        this.state.ecoAwareness +=
+          filterCount * this.runState.filterEcoPerSecond * deltaTime
+      }
 
       // Reducción de toxicidad
       if (!this.godMode) {
@@ -697,7 +717,13 @@ export class Game {
     if (!this.godMode && this.state.toxicity >= 100) {
       this.endRun("died")
     } else if (this.state.zoneProgress >= 100) {
-      this.advanceBiome()
+      // Si hay siguiente bioma, mostrar cartas primero.
+      // Si es el último, ir directo al resumen.
+      if (this.biomeIndex + 1 < BIOME_ORDER.length) {
+        this.openCardChoice()
+      } else {
+        this.endRun("completed")
+      }
     }
 
     this.uiManager.updateUI(this.state)
@@ -706,7 +732,32 @@ export class Game {
     // HUD del boost de giro
     const spinBoost = this.turtle.getSpinBoost()
     const spinBoostActive = this.turtle.isSpinBoosting()
-    this.uiManager.updateSpinBoostHud(spinBoost / 1.6, spinBoostActive)
+    this.uiManager.updateSpinBoostHud(
+      spinBoost / this.turtle.getSpinBoostMultiplier(),
+      spinBoostActive,
+    )
+  }
+
+  // src/core/Game.ts — método nuevo
+
+  private openCardChoice(): void {
+    if (this.screens.isCardChoiceActive()) return
+    if (this.screen !== "run") return
+    if (this.transition.isActive()) return
+    this.clearInput()
+
+    const rng = new Rng(deriveSeed(this.runSeed, this.biomeIndex + 1000))
+    const choices = this.cardManager.rollChoices(3, rng)
+
+    this.screens.showCardChoice(choices, (card) => {
+      this.cardManager.pick(card, {
+        turtle: this.turtle,
+        state: this.state,
+        run: this.runState,
+      })
+      this.uiManager.showMessage(`+ ${card.name}`, 1500)
+      this.advanceBiome()
+    })
   }
 
   private animate(timestamp: number = 0): void {

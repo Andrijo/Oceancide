@@ -20,6 +20,7 @@ export interface RunSummary {
   ecoBonus: number // bono por completar la run
   durationSeconds: number
   seed: number
+  cardsPicked: string[] // ID de cartas elegidas
 }
 
 export interface TurtleStats {
