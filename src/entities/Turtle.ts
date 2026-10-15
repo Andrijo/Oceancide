@@ -5,6 +5,7 @@ import type { InputState, TurtleStats, WorldBounds } from "@core/types"
 export class Turtle {
   public mesh: THREE.Group
   public stats: TurtleStats
+  private baseStats: TurtleStats
 
   private model: THREE.Group
   private body: THREE.Group
@@ -28,7 +29,7 @@ export class Turtle {
 
   // Boost de giro (Q/E)
   private spinBoost = 0
-  private readonly spinBoostMultiplier = 1.6
+  private spinBoostMultiplier = 1.6
   private readonly spinBoostDecay = 4
 
   constructor() {
@@ -52,6 +53,7 @@ export class Turtle {
       toxicityResistance: 0.05,
       filterCapacity: 5,
     }
+    this.baseStats = { ...this.stats }
   }
 
   private createTurtleModel(): {
@@ -194,6 +196,10 @@ export class Turtle {
       },
       tail,
     }
+  }
+
+  public resetStats(): void {
+    this.stats = { ...this.baseStats }
   }
 
   public trigger360Spin(direction: "left" | "right" = "left"): void {
@@ -371,6 +377,16 @@ export class Turtle {
     this.body.scale.x += (targetScaleX - this.body.scale.x) * scaleSmoothing
     this.body.scale.y += (targetScaleY - this.body.scale.y) * scaleSmoothing
     this.body.scale.z += (targetScaleZ - this.body.scale.z) * scaleSmoothing
+  }
+
+  /** Suma un delta al multiplicador del boost de giro. */
+  public addSpinBoostMultiplier(delta: number): void {
+    this.spinBoostMultiplier += delta
+  }
+
+  /** Multiplicador actual del boost de giro (para HUD y tests). */
+  public getSpinBoostMultiplier(): number {
+    return this.spinBoostMultiplier
   }
 
   public getSpeed(): number {

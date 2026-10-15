@@ -1,4 +1,4 @@
-// src/ScreenManager.ts
+// src/ui/ScreenManager.ts
 import {
   BIOME_ORDER,
   BIOMES,
@@ -6,6 +6,8 @@ import {
   type RunSummary,
 } from "@core/types"
 import type { MetaState } from "@core/MetaState"
+import type { Card, CardRarity } from "@cards/Card"
+import { CARD_POOL } from "@cards/CardPool"
 
 export interface ScreenCallbacks {
   onStartRun(): void
@@ -13,12 +15,45 @@ export interface ScreenCallbacks {
   onResetProgress(): void
 }
 
+/** Info de la run actual, para mostrarla en el menú de pausa. */
+export interface RunInfo {
+  biomeIndex: number
+  biomeName: string
+  ecoAwareness: number
+  cardsCount: number
+}
+
 const titleFONT = '"Pogonia", Tahoma, Geneva, Verdana, sans-serif'
 const paragraphFONT = '"Geist-SemiBold", Tahoma, Geneva, Verdana, sans-serif'
 
+const RARITY_COLORS: Record<CardRarity, string> = {
+  common: "#94a3b8",
+  rare: "#38bdf8",
+  epic: "#a855f7",
+  legendary: "#fbbf24",
+  curse: "#ef4444",
+}
+
+const RARITY_LABELS: Record<CardRarity, string> = {
+  common: "Común",
+  rare: "Rara",
+  epic: "Épica",
+  legendary: "Legendaria",
+  curse: "Maldición",
+}
+
+// Fondos sólidos por rareza. Oscuros para que el texto blanco tenga contraste.
+const RARITY_BACKGROUNDS: Record<CardRarity, string> = {
+  common: "#2b3542",
+  rare: "#17456b",
+  epic: "#4a1f6e",
+  legendary: "#6e4a10",
+  curse: "#6e1c1c",
+}
+
 const HUD_IDS = [
   "ui-overlay",
-  "toxicity-bar",
+  "toxicity-skull",
   "controls-hint",
   "touch-controls",
   "build-hud",
@@ -29,6 +64,15 @@ const OUTCOME_TITLES: Record<RunOutcome, string> = {
   died: "¡Se acabó! La toxicidad ganó.",
   completed: "¡Felicidades, has limpiado el océano!",
   abandoned: "Has abandonado la run. El océano seguirá su curso.",
+}
+
+const CARD_KEYS: Record<string, number> = {
+  Digit1: 0,
+  Digit2: 1,
+  Digit3: 2,
+  Numpad1: 0,
+  Numpad2: 1,
+  Numpad3: 2,
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -58,11 +102,25 @@ export class ScreenManager {
   private overlay: HTMLElement
   private callbacks: ScreenCallbacks
   private primaryAction: (() => void) | null = null
+  private cardChoiceActive = false
+  private cardChoiceHandler: ((index: number) => void) | null = null
 
   constructor(callbacks: ScreenCallbacks) {
     this.callbacks = callbacks
 
     this.ensureBubbleAnimation()
+
+    // Teclas 1/2/3 para elegir carta. Ignora autorepeat y soporta numpad.
+    window.addEventListener("keydown", (e) => {
+      if (!this.cardChoiceActive) return
+      if (e.repeat) return
+
+      const idx = CARD_KEYS[e.code]
+      if (idx === undefined) return
+
+      e.preventDefault()
+      this.cardChoiceHandler?.(idx)
+    })
 
     this.overlay = el(
       "div",
@@ -85,8 +143,13 @@ export class ScreenManager {
       font-family: ${paragraphFONT};`,
     )
 
+    // Accesibilidad: anunciar como diálogo modal
+    this.overlay.setAttribute("role", "dialog")
+    this.overlay.setAttribute("aria-modal", "true")
+
     document.getElementById("game-container")!.appendChild(this.overlay)
 
+    // Enter como acción primaria (Empezar, Reanudar, Nueva inmersión, etc.)
     window.addEventListener("keydown", (event) => {
       if (
         event.code === "Enter" &&
@@ -104,11 +167,17 @@ export class ScreenManager {
     this.overlay.style.display = "none"
     this.overlay.replaceChildren()
     this.primaryAction = null
+    this.cardChoiceActive = false
+    this.cardChoiceHandler = null
     this.setHudVisible(true)
 
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur()
     }
+  }
+
+  public isCardChoiceActive(): boolean {
+    return this.cardChoiceActive
   }
 
   public showHub(meta: MetaState): void {
@@ -216,6 +285,11 @@ export class ScreenManager {
 
     rows.push(["Total en el refugio", meta.ecoPoints.toLocaleString("es")])
 
+    const hasCards = summary.cardsPicked.length > 0
+    if (hasCards) {
+      rows.push(["Cartas elegidas", summary.cardsPicked.length.toString()])
+    }
+
     const again = () => this.callbacks.onStartRun()
 
     const card = this.makeCard()
@@ -232,6 +306,29 @@ export class ScreenManager {
         OUTCOME_TITLES[summary.outcome],
       ),
       this.statList(rows),
+    )
+
+    if (hasCards) {
+      const names = summary.cardsPicked
+        .map((id) => CARD_POOL.find((c) => c.id === id)?.name ?? id)
+        .join(" · ")
+
+      card.append(
+        el(
+          "div",
+          `font-size: 13px;
+          opacity: 0.85;
+          color: #bcebf6;
+          text-align: center;
+          font-family: ${paragraphFONT};
+          line-height: 1.5;
+          max-width: 640px;`,
+          names,
+        ),
+      )
+    }
+
+    card.append(
       el(
         "div",
         `font-size: 13px;
@@ -252,7 +349,65 @@ export class ScreenManager {
     this.open(card, again)
   }
 
-  public showPause(onResume: () => void, onAbandon: () => void): void {
+  public showCardChoice(cards: Card[], onPick: (card: Card) => void): void {
+    this.cardChoiceActive = true
+
+    const pick = (index: number) => {
+      if (!this.cardChoiceActive) return
+
+      const card = cards[index]
+      if (!card) return
+
+      this.hide()
+      onPick(card)
+    }
+    this.cardChoiceHandler = pick
+
+    const wrapper = el(
+      "div",
+      `display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 28px;
+      max-width: 1100px;
+      width: 100%;`,
+    )
+
+    const title = el(
+      "div",
+      `font-family: ${titleFONT};
+      font-size: clamp(26px, 3.5vw, 38px);
+      color: #d9fbff;
+      text-align: center;
+      letter-spacing: 0.04em;
+      text-shadow: 0 4px 12px rgba(0, 0, 0, 0.7);`,
+      "Elige una mejora",
+    )
+
+    const row = el(
+      "div",
+      `display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+      justify-content: center;
+      width: 100%;`,
+    )
+
+    cards.forEach((card, i) => {
+      row.append(this.makeCardButton(card, i, () => pick(i)))
+    })
+
+    wrapper.append(title, row)
+
+    // `open` con primary no-op: Enter no debe hacer nada aquí.
+    this.open(wrapper, () => {})
+  }
+
+  public showPause(
+    onResume: () => void,
+    onAbandon: () => void,
+    runInfo?: RunInfo,
+  ): void {
     const card = this.makeCard()
 
     card.append(
@@ -277,6 +432,19 @@ export class ScreenManager {
         color: rgba(204, 245, 255, 0.72);`,
         "El juego está detenido",
       ),
+    )
+
+    if (runInfo) {
+      card.append(
+        this.statList([
+          ["Zona actual", `${runInfo.biomeIndex + 1}. ${runInfo.biomeName}`],
+          ["Eco acumulado", runInfo.ecoAwareness.toLocaleString("es")],
+          ["Cartas elegidas", String(runInfo.cardsCount)],
+        ]),
+      )
+    }
+
+    card.append(
       this.makeButton("Reanudar", onResume),
       this.makeButton("Abandonar", onAbandon, false),
     )
@@ -319,10 +487,10 @@ export class ScreenManager {
     const layer = el(
       "div",
       `position: absolute;
-    inset: 0;
-    z-index: 0;
-    overflow: hidden;
-    pointer-events: none;`,
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      pointer-events: none;`,
     )
 
     const bubbles = [
@@ -353,28 +521,28 @@ export class ScreenManager {
       const node = el(
         "div",
         `position: absolute;
-      ${position}
-      width: ${bubble.size}px;
-      height: ${bubble.size}px;
-      border-radius: 50%;
-      box-sizing: border-box;
-      opacity: 0.55;
-      background:
-        radial-gradient(
-          circle at 30% 25%,
-          rgba(255, 255, 255, 0.95) 0%,
-          rgba(23, 75, 164, 0.28) 18%,
-          rgba(71, 211, 238, 0.12) 48%,
-          rgba(6, 107, 144, 0.05) 72%,
-          transparent 73%
-        );
-      border: 1px solid rgba(196, 250, 255, 0.72);
-      box-shadow:
-        inset -3px -4px 7px rgba(0, 77, 110, 0.22),
-        inset 2px 2px 5px rgba(255, 255, 255, 0.35),
-        0 0 12px rgba(91, 236, 255, 0.28);
-      animation:
-        menuBubbleFloat ${bubble.duration} ease-in-out ${bubble.delay} infinite;`,
+        ${position}
+        width: ${bubble.size}px;
+        height: ${bubble.size}px;
+        border-radius: 50%;
+        box-sizing: border-box;
+        opacity: 0.55;
+        background:
+          radial-gradient(
+            circle at 30% 25%,
+            rgba(255, 255, 255, 0.95) 0%,
+            rgba(23, 75, 164, 0.28) 18%,
+            rgba(71, 211, 238, 0.12) 48%,
+            rgba(6, 107, 144, 0.05) 72%,
+            transparent 73%
+          );
+        border: 1px solid rgba(196, 250, 255, 0.72);
+        box-shadow:
+          inset -3px -4px 7px rgba(0, 77, 110, 0.22),
+          inset 2px 2px 5px rgba(255, 255, 255, 0.35),
+          0 0 12px rgba(91, 236, 255, 0.28);
+        animation:
+          menuBubbleFloat ${bubble.duration} ease-in-out ${bubble.delay} infinite;`,
       )
 
       layer.append(node)
@@ -399,6 +567,167 @@ export class ScreenManager {
         node.style.display = visible ? "" : "none"
       }
     }
+  }
+
+  private makeCardButton(
+    card: Card,
+    index: number,
+    onClick: () => void,
+  ): HTMLElement {
+    const accent = RARITY_COLORS[card.rarity]
+    const bg = RARITY_BACKGROUNDS[card.rarity]
+    const label = RARITY_LABELS[card.rarity]
+
+    const btn = el(
+      "button",
+      `position: relative;
+      flex: 0 1 clamp(170px, 26vw, 240px);
+      height: clamp(260px, 38vw, 320px);
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      cursor: pointer;
+      background: ${bg};
+      border: 6px solid ${accent};
+      border-radius: 16px;
+      overflow: hidden;
+      transition:
+        transform 160ms ease,
+        box-shadow 160ms ease,
+        filter 160ms ease;`,
+    )
+
+    // Accesibilidad: describir la carta de un vistazo
+    btn.setAttribute(
+      "aria-label",
+      `${label}: ${card.name}. ${card.value}. ${card.description}`,
+    )
+
+    btn.addEventListener("mouseenter", () => {
+      btn.style.transform = "translateY(-6px) scale(1.02)"
+      btn.style.filter = "brightness(1.15)"
+      btn.style.boxShadow = `
+        0 14px 32px rgba(0, 0, 0, 0.65),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+        0 0 24px ${accent}66
+      `
+    })
+
+    btn.addEventListener("mouseleave", () => {
+      btn.style.transform = "translateY(0) scale(1)"
+      btn.style.filter = "brightness(1)"
+      btn.style.boxShadow = `
+        0 6px 20px rgba(0, 0, 0, 0.55),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.06)
+      `
+    })
+
+    btn.addEventListener("click", onClick)
+
+    // --- Badge de tecla (1/2/3) en la esquina ---
+    const keyBadge = el(
+      "div",
+      `position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 26px;
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: ${titleFONT};
+      font-size: 12px;
+      font-weight: 900;
+      color: ${accent};
+      background: none;
+      border: 1.5px solid ${accent};
+      border-radius: 6px;
+      z-index: 2;`,
+      `${index + 1}`,
+    )
+    keyBadge.setAttribute("aria-hidden", "true")
+
+    // --- Etiqueta de rareza, centrada arriba ---
+    const rarityArea = el(
+      "div",
+      `padding: 22px 16px 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;`,
+    )
+
+    const rarityLabel = el(
+      "div",
+      `font-family: ${titleFONT};
+      font-size: 16px;
+      font-weight: 900;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: ${accent};`,
+      label,
+    )
+
+    const rarityDivider = el(
+      "div",
+      `width: 60%;
+      height: 1px;
+      color: ${RARITY_LABELS}
+      background: ${RARITY_COLORS}
+      );`,
+    )
+
+    rarityArea.append(rarityLabel, rarityDivider)
+
+    // --- Cuerpo: nombre, valor, descripción ---
+    const body = el(
+      "div",
+      `flex: 1 1 auto;
+      padding: 0 18px 22px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 12px;`,
+    )
+
+    const name = el(
+      "div",
+      `font-family: ${titleFONT};
+      font-size: 20px;
+      font-weight: 900;
+      line-height: 1.1;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      color: #ffffff;`,
+      card.name,
+    )
+
+    const value = el(
+      "div",
+      `font-family: ${titleFONT};
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: 0.02em;
+      color: #4ade80;`,
+      card.value,
+    )
+
+    const desc = el(
+      "div",
+      `font-family: ${paragraphFONT};
+      font-size: 12px;
+      line-height: 1.4;
+      color: rgba(220, 235, 250, 0.75);
+      margin-top: 4px;`,
+      card.description,
+    )
+
+    body.append(name, value, desc)
+    btn.append(keyBadge, rarityArea, body)
+
+    return btn
   }
 
   private makeCard(): HTMLElement {
@@ -431,8 +760,7 @@ export class ScreenManager {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 12px 40px;
       padding: 12px 0 6px;
-      margin-bottom: 18px;
-      `,
+      margin-bottom: 18px;`,
     )
 
     for (const [label, value] of rows) {
@@ -484,7 +812,7 @@ export class ScreenManager {
       padding: 12px 22px;
       border-radius: 30px 60px;
       cursor: pointer;
-       background:  rgba(0, 44, 70, 0.52);
+      background: rgba(0, 44, 70, 0.52);
       font: bold 19px ${titleFONT};
       letter-spacing: 0.04em;
       color: ${primary ? "#d9f8ff" : "#d9f8ff"};
