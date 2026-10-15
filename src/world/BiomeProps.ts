@@ -10,7 +10,7 @@ type BiomePropConfig = {
   factories: PropFactory[]
 }
 
-const PROP_HALF_SIZE = 100
+const PROP_HALF_SIZE = 85
 
 function randomColor(rng: Rng, base: number, variation = 0.08): THREE.Color {
   const color = new THREE.Color(base)
@@ -24,9 +24,7 @@ function randomColor(rng: Rng, base: number, variation = 0.08): THREE.Color {
   return color
 }
 
-/* ---------------------------------------------
-   Caché de geometrías compartidas
---------------------------------------------- */
+// Caché de geometrías compartidas
 
 const geometryCache = new Map<string, THREE.BufferGeometry>()
 
@@ -42,9 +40,7 @@ function cachedGeometry(
   return geometry
 }
 
-/* ---------------------------------------------
-   Fábricas de props
---------------------------------------------- */
+// Fabricación de props
 
 function createRock(rng: Rng): THREE.Object3D {
   const geometry = new THREE.DodecahedronGeometry(1 + rng.range(0, 2), 0)

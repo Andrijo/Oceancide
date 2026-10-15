@@ -53,6 +53,11 @@ const CAMERA_OFFSET = new THREE.Vector3(0, 5, -12) // Posición de la cámara re
 const UP = new THREE.Vector3(0, 1, 0)
 const BUILD_DISTANCE = 4 // las estructuras se colocan delante de la tortuga
 
+// Luz: en las zonas sin sol, las luces puntuales de bioluminiscencia pasan a ser
+// la luz principal. Multiplicador máximo de su intensidad cuando no hay sol
+// (darkness = 1). Con luces físicas (decay 2) hacen falta valores altos; ajústalo a gusto.
+const DEEP_POINT_LIGHT_BOOST = 25
+
 type Screen = "hub" | "run" | "summary"
 
 /** Permite reproducir una run con ?seed=123 en la URL. */
@@ -76,6 +81,7 @@ export class Game {
   private ambientLight!: THREE.AmbientLight
   private directionalLight!: THREE.DirectionalLight
   private pointLights: THREE.PointLight[] = []
+  private pointLightBoost = 1 // sube en biomas oscuros (ver applyBiomeLighting)
 
   private biomeIndex = 0
   private collectedInZone = 0
@@ -170,11 +176,15 @@ export class Game {
   }
 
   private setupLighting(): void {
-    this.ambientLight = new THREE.AmbientLight(0x404040, 0.5)
+    // Ambiental mínima: BiomeGenerator ya añade su propia ambiental/hemisférica
+    // por bioma, así que esta solo evita negros absolutos.
+    this.ambientLight = new THREE.AmbientLight(0x404040, 0.1)
     this.scene.add(this.ambientLight)
 
+    // "Sol": su intensidad y color los fija applyBiomeLighting() según la profundidad.
+    // Casi vertical, como la luz que baja desde la superficie.
     this.directionalLight = new THREE.DirectionalLight(0xffffff, 0.8)
-    this.directionalLight.position.set(50, 100, 50)
+    this.directionalLight.position.set(30, 100, 20)
     this.scene.add(this.directionalLight)
 
     for (let i = 0; i < 5; i++) {
@@ -304,6 +314,7 @@ export class Game {
     // Cada bioma de una run usa su propia semilla derivada de la semilla de la run
     const rng = new Rng(deriveSeed(this.runSeed, index))
     this.biomeGenerator.generateBiome(BIOME_ORDER[index], rng)
+    this.applyBiomeLighting()
 
     const bounds = this.biomeGenerator.getBounds()
     this.turtle.reset(new THREE.Vector3(0, (bounds.minY + bounds.maxY) / 2, 0))
@@ -322,6 +333,18 @@ export class Game {
     this.structures.clear()
     this.lookBackApplied = this.lookBack
     this.snapCamera()
+  }
+
+  /**
+   * Ajusta el sol y las luces de bioluminiscencia al bioma actual.
+   * No se alterna `visible` en la luz (cambiaría el nº de luces y recompilaría
+   * todos los materiales); basta con llevar la intensidad a 0.
+   */
+  private applyBiomeLighting(): void {
+    const sun = this.biomeGenerator.getSun()
+    this.directionalLight.intensity = sun.intensity
+    this.directionalLight.color.setHex(sun.color)
+    this.pointLightBoost = 1 + sun.darkness * DEEP_POINT_LIGHT_BOOST
   }
 
   private getCameraTarget(): THREE.Vector3 {
@@ -671,7 +694,13 @@ export class Game {
 
     this.update(deltaTime, time)
 
-    if (this.screen !== "run") this.orbitCamera(time)
+    if (this.screen !== "run") {
+      this.orbitCamera(time)
+
+      // Fuera de la run, update() no se ejecuta: se mantiene viva el agua del
+      // refugio y del resumen (partículas, cáusticas) para que no quede congelada.
+      if (!this.paused) this.biomeGenerator.updateVisuals(deltaTime)
+    }
 
     // La transición NO avanza si el juego está pausado
     if (!this.paused) {
@@ -711,7 +740,7 @@ export class Game {
     )
 
     this.pointLights.forEach((light, i) => {
-      light.intensity = 0.3 + Math.sin(time + i) * 0.2
+      light.intensity = (0.3 + Math.sin(time + i) * 0.2) * this.pointLightBoost
     })
 
     this.renderer.render(this.scene, this.camera)
