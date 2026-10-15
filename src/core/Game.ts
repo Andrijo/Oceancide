@@ -5,6 +5,7 @@
 import * as THREE from "three"
 import { Turtle } from "@entities/Turtle"
 import { BiomeGenerator } from "@world/BiomeGenerator"
+import { SUN_DIRECTION } from "@world/WaterEffects"
 import { UIManager } from "@ui/UIManager"
 import { TouchControls } from "@ui/TouchControls"
 import { Debris } from "@/entities/Debris"
@@ -184,7 +185,7 @@ export class Game {
     // "Sol": su intensidad y color los fija applyBiomeLighting() según la profundidad.
     // Casi vertical, como la luz que baja desde la superficie.
     this.directionalLight = new THREE.DirectionalLight(0xffffff, 0.8)
-    this.directionalLight.position.set(30, 100, 20)
+    this.directionalLight.position.copy(SUN_DIRECTION).multiplyScalar(100)
     this.scene.add(this.directionalLight)
 
     for (let i = 0; i < 5; i++) {
@@ -742,6 +743,9 @@ export class Game {
     this.pointLights.forEach((light, i) => {
       light.intensity = (0.3 + Math.sin(time + i) * 0.2) * this.pointLightBoost
     })
+
+    // Cúpula, rayos y nieve marina siguen a la cámara (ya colocada en este frame)
+    this.biomeGenerator.updateWater(simDelta, this.camera.position)
 
     this.renderer.render(this.scene, this.camera)
   }

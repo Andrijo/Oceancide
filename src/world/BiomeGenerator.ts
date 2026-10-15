@@ -7,6 +7,7 @@ import {
   type WorldBounds,
 } from "@core/types"
 import { BiomeProps } from "./BiomeProps"
+import { WaterEffects, getSoftDot } from "./WaterEffects"
 import { Debris } from "@entities/Debris"
 import type { Rng } from "@core/rng"
 
@@ -210,36 +211,13 @@ function valueNoise(x: number, z: number): number {
   return (a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v) * 2 - 1
 }
 
-/* ---------------------------------------------
-   Sprite circular suave para las partículas
---------------------------------------------- */
-
-let softDot: THREE.CanvasTexture | null = null
-
-function getSoftDot(): THREE.CanvasTexture {
-  if (softDot) return softDot
-
-  const canvas = document.createElement("canvas")
-  canvas.width = canvas.height = 64
-
-  const ctx = canvas.getContext("2d")!
-  const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32)
-  gradient.addColorStop(0, "rgba(255,255,255,1)")
-  gradient.addColorStop(0.4, "rgba(255,255,255,0.35)")
-  gradient.addColorStop(1, "rgba(255,255,255,0)")
-  ctx.fillStyle = gradient
-  ctx.fillRect(0, 0, 64, 64)
-
-  softDot = new THREE.CanvasTexture(canvas)
-  return softDot
-}
-
 export class BiomeGenerator {
   private scene: THREE.Scene
   private currentBiome: BiomeConfig
   private currentAmbience: BiomeAmbience
   private currentBiomeKey: BiomeKey = "epipelagic_upper"
   private props: BiomeProps
+  private water: WaterEffects
 
   private debrisList: Debris[] = []
   private debrisGroup: THREE.Group
@@ -277,6 +255,7 @@ export class BiomeGenerator {
     this.currentBiome = BIOMES.epipelagic_upper
     this.currentAmbience = BIOME_AMBIENCE.epipelagic_upper
     this.props = new BiomeProps(scene)
+    this.water = new WaterEffects(scene)
 
     this.debrisGroup = new THREE.Group()
     scene.add(this.debrisGroup)
@@ -319,6 +298,13 @@ export class BiomeGenerator {
     this.cachedBounds = null
 
     const bounds = this.getBounds()
+
+    this.water.setBiome({
+      sunNorm: SUN[biomeKey].intensity / MAX_SUN_INTENSITY,
+      snowColor: this.currentAmbience.particleColor,
+      snowOpacity: this.currentAmbience.particleOpacity,
+      topY: bounds.maxY + 25,
+    })
 
     this.initialDebrisCount = Math.floor(
       DEBRIS_BASE_COUNT * this.currentBiome.debrisDensity,
@@ -737,9 +723,20 @@ export class BiomeGenerator {
       this.scene.background = this.waterColor.clone()
     }
 
+    // La cúpula, la viñeta y la niebla comparten el mismo color de agua
+    this.water.setWaterColor(this.waterColor)
+
     fog.density =
       this.currentBiome.fogDensity *
       (CLEAN_FOG_FACTOR + (1 - CLEAN_FOG_FACTOR) * ratio)
+  }
+
+  /**
+   * Efectos del volumen de agua. Llamar cada frame, después de mover la cámara.
+   * Con deltaTime = 0 (pausa) la animación se congela pero la cúpula sigue a la cámara.
+   */
+  public updateWater(deltaTime: number, cameraPosition: THREE.Vector3): void {
+    this.water.update(deltaTime, cameraPosition, 1 - this.visualRatio)
   }
 
   /* ---------------------------------------------
@@ -781,5 +778,6 @@ export class BiomeGenerator {
     this.disposeFloor()
     this.disposeParticles()
     this.props.clear()
+    this.water.dispose()
   }
 }
