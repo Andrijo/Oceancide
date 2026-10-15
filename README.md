@@ -25,7 +25,37 @@ El juego recorre 10 biomas, desde la superficie hasta las fosas más profundas:
 | Hadopelágico          | 0.95     | 0.85              | 8000 m      |
 | Mar Profundo          | 1.0      | 1.00              | 11000 m     |
 
-Cada bioma tiene su propio catálogo de desechos (botellas, redes fantasma, microplásticos, vertidos de petróleo...) con aspecto y toxicidad propios.
+La columna **Desechos** es la densidad relativa con la que se generan (sobre una base de 200 por zona) y **Tasa de toxicidad** multiplica la subida pasiva de toxicidad del bioma.
+
+Cada bioma tiene su propio catálogo de desechos (botellas, redes fantasma, microplásticos, barriles, vertidos de petróleo...) con aspecto, valor ecológico y toxicidad propios. El catálogo completo está en `src/entities/debrisCatalog.ts`.
+
+## Sistemas de juego
+
+### Toxicidad
+
+La toxicidad es la barra de peligro de la run (0 a 100) y se muestra como una **calavera que se va llenando** en la parte superior de la pantalla:
+
+- **Sube sola** mientras haya desechos en el bioma, a un ritmo proporcional a la contaminación restante y a la tasa de toxicidad de la zona.
+- **Baja** cada vez que recoges un desecho (más cuanto más contaminante sea) o cuando una esfera filtradora absorbe uno.
+- Al **cambiar de bioma** se reduce a la mitad (no se reinicia).
+- Si llega al **100%**, la run termina ("¡Se acabó! La toxicidad ganó.").
+
+La calavera cambia de color y acelera su pulso según el nivel: verde (bajo), amarillo, naranja y rojo (crítico). Cuando la toxicidad baja hay un **destello verde** de "limpieza", y la primera vez que aparece en cada run se muestra un aviso explicativo.
+
+### Conciencia Ecológica y esferas filtradoras
+
+Cada desecho tiene un **valor ecológico** (derivado de su toxicidad) que se suma a tu Conciencia Ecológica al recogerlo. Con ella puedes pagar **esferas filtradoras** (tecla `B` o botón táctil):
+
+- Se colocan justo delante de la tortuga.
+- Atraen al desecho más cercano dentro de su radio de alcance cada cierto tiempo.
+- Cada esfera absorbe un número limitado de desechos y luego desaparece.
+- Solo puedes tener unas pocas activas a la vez.
+
+La Conciencia Ecológica sobrante se guarda como progreso persistente en el **Refugio**.
+
+### Dash de giro
+
+Con `Q` / `E` la tortuga realiza un giro completo de 360° en menos de un segundo. Al iniciarlo recibe un **impulso temporal de velocidad** (hasta ×1.6) que decae de forma exponencial, y el giro fuerza un avance mínimo aunque sueltes las teclas: úsalo para encadenar giros y desplazarte rápido. El HUD muestra el multiplicador activo como `DASH ×N`.
 
 ## Controles
 
@@ -54,14 +84,50 @@ Cada bioma tiene su propio catálogo de desechos (botellas, redes fantasma, micr
 - **Botón de filtro**: construye una esfera filtradora.
 - **Botón de vista trasera** (mantener): cámara mirando hacia atrás.
 
-## Conciencia Ecológica y Refugio
+Los controles táctiles aparecen al detectar el primer toque y se colocan donde apoyes el dedo.
 
-Cada desecho recolectado (o absorbido por un filtro) otorga **Conciencia Ecológica**, que sirve para:
+## HUD
 
-- Construir esferas filtradoras durante la inmersión.
-- Acumularse como progreso persistente en el **Refugio** (menú inicial), guardado en `localStorage` bajo la clave `oceancide.meta`.
+- **Desechos recolectados**, **Conciencia Ecológica** y **Progreso de zona** (porcentaje necesario para avanzar).
+- **Calavera de toxicidad**: se llena y colorea según el nivel de toxicidad (ver más arriba).
+- **Números flotantes**: al recoger un desecho aparece un `+N` sobre su posición en pantalla. El tamaño y el color crecen con el valor (cian → verde → dorado).
+- **HUD de construcción**: indica el coste de la esfera filtradora y cuántas tienes activas (se tiñe de rojo si no puedes construir).
+- **HUD de dash**: muestra el multiplicador del boost de giro mientras está activo.
+- **Botón de pausa** en la esquina superior derecha.
 
-Al terminar cada run se muestra un resumen (zona alcanzada, desechos, duración y conciencia obtenida) y se actualiza el progreso global: mejor zona, runs jugadas/completadas y total de desechos.
+## Visuales y ambientación
+
+El agua no es un simple fondo: hay una capa de efectos (`src/world/WaterEffects.ts`) que simula el medio marino y que se adapta a cada bioma.
+
+- **Cúpula con gradiente** (horizonte, cenit y nadir) con el brillo del sol, que sigue a la cámara.
+- **Niebla con absorción por canal**: el rojo se pierde antes que el azul, como en el agua real.
+- **Rayos de luz** (god rays) que cuelgan desde la superficie mientras llega el sol.
+- **Nieve marina**: partículas cercanas a la cámara que dan sensación de volumen y parallax.
+- **Viñeta** tintada con el color del agua.
+- **Cáusticas animadas** sobre el fondo en las zonas donde llega la luz.
+- **Bioluminiscencia**: en las zonas profundas (sin sol) las luces puntuales de color de acento pasan a ser la iluminación principal.
+- **Props por bioma**: rocas, corales, conchas, algas, esponjas y montículos de arrecife, con más relieve y detalle cuanto más profundo.
+
+A medida que limpias un bioma, **el agua se aclara**: sube el brillo, baja la densidad de la niebla y se refuerzan los rayos. Al pasar de zona se reproduce una **transición** en la que una masa negra de borde irregular barre la pantalla y muestra el nombre del nuevo bioma.
+
+## Progreso y Refugio
+
+Al terminar cada run se muestra un resumen (zona alcanzada, desechos, duración, semilla y conciencia obtenida) y se actualiza el progreso persistente guardado en `localStorage` bajo la clave `oceancide.meta`:
+
+- **Conciencia ecológica** total acumulada.
+- **Mejor zona** alcanzada.
+- **Runs jugadas / completadas**.
+- **Total de desechos** recolectados.
+
+Completar los 10 biomas otorga un **bono del 25%** sobre la conciencia obtenida en la run. Desde el Refugio puedes empezar una nueva inmersión o eliminar el progreso guardado.
+
+### Reproducir una run
+
+Cada run usa una semilla aleatoria (que se muestra en el resumen). Puedes fijarla desde la URL para reproducir exactamente la misma disposición de biomas:
+
+```
+http://localhost:5173/?seed=123
+```
 
 ## Instalación y ejecución
 
@@ -85,7 +151,7 @@ bun run preview
 
 ```
 oceancidio/
-├── index.html            # Entry point, HUD, estilos base y controles táctiles
+├── index.html            # Entry point, HUD, estilos base y calavera de toxicidad (SVG)
 ├── package.json
 ├── tsconfig.json
 ├── vite.config.ts        # Config de Vite (alias de importación)
@@ -97,7 +163,7 @@ oceancidio/
     ├── main.ts           # Bootstrap del juego
     ├── styles.css        # @font-face
     ├── core/             # Núcleo y estado global
-    │   ├── Game.ts             # Lógica principal, loop y cámara
+    │   ├── Game.ts             # Lógica principal, loop, cámara y pantallas
     │   ├── MetaState.ts        # Progreso persistente (Refugio) y guardado
     │   ├── rng.ts              # Generador pseudoaleatorio con semilla
     │   └── types.ts            # Tipos y configuración de biomas
@@ -105,6 +171,7 @@ oceancidio/
     │   ├── BiomeGenerator.ts   # Generación de biomas, terreno, partículas y desechos
     │   ├── BiomeProps.ts       # Props decorativos por bioma
     │   ├── BiomeTransition.ts  # Transición animada entre biomas
+    │   ├── WaterEffects.ts     # Cúpula, niebla con absorción, rayos y nieve marina
     │   ├── Structure.ts        # Esfera filtradora colocada en el agua
     │   ├── StructureConfig.ts  # Configuración de estructuras
     │   └── StructureManager.ts # Ciclo de vida de las estructuras
@@ -115,10 +182,10 @@ oceancidio/
     │   ├── debrisCatalog.ts    # Catálogo de desechos por bioma
     │   └── BubbleTrail.ts      # Estela de burbujas (instancing)
     └── ui/               # Interfaz y controles
-        ├── UIManager.ts        # HUD y mensajes
+        ├── UIManager.ts        # HUD, números flotantes, calavera y mensajes
         ├── ScreenManager.ts    # Menús (hub, resumen y pausa)
         ├── TouchControls.ts    # Controles táctiles (joysticks)
-        └── DevMenu.ts          # Menú de desarrollo
+        └── DevMenu.ts          # Menú de desarrollo (componente, no conectado por defecto)
 ```
 
 ## Alias de importación
