@@ -14,6 +14,10 @@ export class UIManager {
   private biomeTimerEl: HTMLElement
   private boostBarEl: HTMLElement
   private boostBarFillEl: HTMLElement
+  private toxicityTrendEl: HTMLElement
+  private toxicityTrend = 0
+  private trendHoldUntil = 0
+  private lastTrendClass = ""
 
   private buildHudEl: HTMLElement
   private spinBoostHudEl: HTMLElement
@@ -43,28 +47,41 @@ export class UIManager {
       "#toxicity-skull-fill",
     )!
 
-    // Timer del bioma (arriba izquierda)
+    // Cluster de peligro (arriba centro): temporizador arriba y calavera debajo, las dos señales de supervivencia.
+    const dangerCluster = document.createElement("div")
+    dangerCluster.id = "danger-cluster"
+
+    // Timer del bioma (anclado al borde superior, comparte el lenguaje visual del HUD)
     this.biomeTimerEl = document.createElement("div")
     this.biomeTimerEl.id = "biome-timer"
     this.biomeTimerEl.style.cssText = `
-      position: absolute;
-      top: calc(12px + env(safe-area-inset-top, 0px));
-      left: calc(12px + env(safe-area-inset-left, 0px));
-      padding: 6px 14px;
+      position: relative;
+      padding: 4px 12px;
       font-family: "Geist-Semibold", sans-serif;
-      font-size: 20px;
+      font-size: 16px;
       font-weight: bold;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.06em;
       color: #f7f7ff;
       background: rgba(0, 0, 0, 0.55);
       border: 2px solid rgba(255, 255, 255, 0.35);
       border-radius: 10px;
       pointer-events: none;
-      z-index: 150;
       text-shadow: 0 0 10px rgba(0, 0, 0, 0.9);
       transition: color 0.3s ease, border-color 0.3s ease;
     `
-    document.getElementById("game-container")!.appendChild(this.biomeTimerEl)
+    dangerCluster.appendChild(this.biomeTimerEl)
+
+    // Calavera de toxicidad (emerge bajo el timer cuando la toxicidad amenaza)
+    const skull = document.getElementById("toxicity-skull")!
+    dangerCluster.appendChild(skull)
+
+    // Chevron de tendencia dentro de la calavera
+    this.toxicityTrendEl = document.createElement("div")
+    this.toxicityTrendEl.id = "toxicity-trend"
+    this.toxicityTrendEl.className = "toxicity-trend"
+    skull.appendChild(this.toxicityTrendEl)
+
+    document.getElementById("game-container")!.appendChild(dangerCluster)
 
     // Barra de energía del boost (centro inferior)
     this.boostBarEl = document.createElement("div")
@@ -212,12 +229,18 @@ export class UIManager {
   }
 
   public updateBiomeTimer(remaining: number, limit: number): void {
-    const secs = Math.ceil(remaining)
-    const text = `${secs}s`
+    const empty = remaining <= 0
+    const text = empty ? "PRESIÓN" : `${Math.ceil(remaining)}s`
 
     if (text !== this.lastBiomeTimerText) {
       this.biomeTimerEl.textContent = text
       this.lastBiomeTimerText = text
+    }
+
+    if (empty) {
+      this.biomeTimerEl.style.color = "#ef4444"
+      this.biomeTimerEl.style.borderColor = "rgba(239, 68, 68, 0.9)"
+      return
     }
 
     const ratio = remaining / limit
@@ -239,6 +262,10 @@ export class UIManager {
     this.zoneProgressEl.textContent = `${Math.round(state.zoneProgress)}%`
 
     const toxicity = Math.min(state.toxicity, 100)
+
+    // Tendencia suavizada (derivada) para el chevron de la calavera
+    const toxicityDelta = toxicity - this.lastToxicity
+    this.toxicityTrend += (toxicityDelta - this.toxicityTrend) * 0.2
 
     if (!this.toxicityHintShownThisRun && toxicity > 0.5) {
       this.showToxicityHint()
@@ -282,6 +309,29 @@ export class UIManager {
       if (level) this.toxicitySkullEl.classList.add(level)
       this.lastToxicityLevel = level
     }
+
+    this.updateToxicityTrend(visible)
+  }
+
+  /** Actualiza el chevron ▲/▼ según si la toxicidad sube o baja (▼ se retiene un instante tras limpiar). */
+  private updateToxicityTrend(visible: boolean): void {
+    const threshold = 0.02
+    const now = performance.now()
+    let cls = ""
+    if (visible && this.toxicityTrend > threshold) {
+      cls = "up"
+    } else if (visible && this.toxicityTrend < -threshold) {
+      cls = "down"
+      this.trendHoldUntil = now + 400
+    } else if (now < this.trendHoldUntil) {
+      cls = "down"
+    }
+    if (cls === this.lastTrendClass) return
+    this.lastTrendClass = cls
+    this.toxicityTrendEl.classList.remove("up", "down")
+    if (cls) this.toxicityTrendEl.classList.add(cls)
+    this.toxicityTrendEl.textContent =
+      cls === "up" ? "▲" : cls === "down" ? "▼" : ""
   }
 
   public resetRunHints(): void {
@@ -290,6 +340,11 @@ export class UIManager {
     this.lastToxicity = 0
     this.lastToxicityLevel = null
     this.lastToxicityVisible = false
+    this.toxicityTrend = 0
+    this.trendHoldUntil = 0
+    this.lastTrendClass = ""
+    this.toxicityTrendEl.classList.remove("up", "down")
+    this.toxicityTrendEl.textContent = ""
     this.toxicitySkullEl.classList.remove(
       "active",
       "level-low",

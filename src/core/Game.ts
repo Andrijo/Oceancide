@@ -35,9 +35,11 @@ const MAX_DELTA = 0.1
 
 const TOXICITY_SCALE = 3
 const TOXICITY_REDUCTION_BASE = 0.4
-const TOXICITY_REDUCTION_PER_POLLUTION = 1.6
+const TOXICITY_REDUCTION_PER_POLLUTION = 1.0
 const FILTER_TOXICITY_REDUCTION =
   TOXICITY_REDUCTION_BASE + 0.5 * TOXICITY_REDUCTION_PER_POLLUTION
+const TOXICITY_CARRYOVER = 0.5
+const TOXICITY_FLOOR_SCALE = 30
 
 const ZONE_COMPLETION_RATIO = 0.7
 const CAMERA_OFFSET = new THREE.Vector3(0, 5, -12)
@@ -46,11 +48,17 @@ const BUILD_DISTANCE = 4
 const DEEP_POINT_LIGHT_BOOST = 25
 const BLOOM_MAX_STRENGTH = 0.5
 
-// Timer por bioma: 90s base, bajando 4s por bioma profundo.
-// Bioma 0: 90s, bioma 9: 54s. Nunca menos de 40s.
+// Timer por bioma: 120s base, bajando 2s por bioma. Nunca menos de 80s.
+// Al agotarse no mata: multiplica la subida pasiva de toxicidad.
 const BIOME_TIME_BASE = 120
 const BIOME_TIME_DECAY = 2
 const BIOME_TIME_MIN = 80
+const BIOME_TIME_PRESSURE = 4
+
+// Revives: la toxicidad a la que revives sube con cada revive gastado.
+const REVIVE_TOXICITY_BASE = 50
+const REVIVE_TOXICITY_STEP = 10
+const REVIVE_TOXICITY_MAX = 90
 
 type Screen = "hub" | "run" | "summary"
 
@@ -96,6 +104,7 @@ export class Game {
   // Timer por bioma
   private biomeTimeRemaining = 0
   private biomeTimeLimit = 0
+  private revivesUsed = 0
 
   private saveManager = new SaveManager()
   private meta: MetaState
@@ -350,6 +359,12 @@ export class Game {
     this.biomeGenerator.generateBiome(biomeKey, rng, this.loop)
     this.applyBiomeLighting()
 
+    // La toxicidad se arrastra a la mitad y nunca baja del suelo del bioma.
+    this.state.toxicity = Math.max(
+      this.state.toxicity * TOXICITY_CARRYOVER,
+      this.biomeGenerator.getBiome().toxicityRate * TOXICITY_FLOOR_SCALE,
+    )
+
     const sun = this.biomeGenerator.getSun()
     this.renderPipeline.setBloomStrength(sun.darkness * BLOOM_MAX_STRENGTH)
 
@@ -470,6 +485,7 @@ export class Game {
         {
           biomeIndex: this.biomeIndex,
           biomeName: this.biomeGenerator.getBiomeName(),
+          depth: this.biomeGenerator.getBiome().depth,
           ecoAwareness: this.state.ecoAwareness,
           cardsCount: this.runState.cards.length,
         },
@@ -522,12 +538,13 @@ export class Game {
 
     this.turtle.resetStats()
     this.runState = createRunState()
+    this.revivesUsed = 0
 
     this.uiManager.resetRunHints()
 
     this.screens.hide()
     this.loadBiome(0)
-    this.uiManager.showMessage(this.biomeGenerator.getBiomeName())
+    this.uiManager.showMessage(this.biomeBanner())
   }
 
   private endRun(outcome: RunOutcome): void {
@@ -585,14 +602,19 @@ export class Game {
     }
 
     const started = this.transition.play(() => {
-      this.state.toxicity *= 0.5
       this.loadBiome(next)
-      this.uiManager.showMessage(this.biomeGenerator.getBiomeName())
+      this.uiManager.showMessage(this.biomeBanner())
     })
 
     if (!started) {
       this.pendingAdvance = true
     }
+  }
+
+  /** Texto del cambio de bioma: nombre + profundidad actual. */
+  private biomeBanner(): string {
+    const depth = this.biomeGenerator.getBiome().depth
+    return `${this.biomeGenerator.getBiomeName()} · ${depth} m`
   }
 
   private goToBiome(index: number): void {
@@ -663,12 +685,11 @@ export class Game {
 
     this.runTime += deltaTime
 
-    // --- Timer por bioma ---
+    // --- Timer por bioma: al agotarse no mata, presuriza la toxicidad ---
     this.biomeTimeRemaining -= deltaTime
-    if (this.biomeTimeRemaining <= 0) {
-      this.biomeTimeRemaining = 0
-      if (!this.tryKill()) return
-    }
+    if (this.biomeTimeRemaining < 0) this.biomeTimeRemaining = 0
+    const timePressure =
+      this.biomeTimeRemaining <= 0 ? 1 + BIOME_TIME_PRESSURE : 1
     this.uiManager.updateBiomeTimer(
       this.biomeTimeRemaining,
       this.biomeTimeLimit,
@@ -704,7 +725,10 @@ export class Game {
     const pollution = this.biomeGenerator.getPollutionRatio()
     const base = this.biomeGenerator.getBiome().toxicityRate * TOXICITY_SCALE
     const passiveRate =
-      base * pollution * (1 - this.turtle.stats.toxicityResistance)
+      base *
+      pollution *
+      (1 - this.turtle.stats.toxicityResistance) *
+      timePressure
 
     if (!this.godMode) {
       this.state.toxicity = Math.max(
@@ -815,13 +839,18 @@ export class Game {
     })
   }
 
-  /** Intenta matar al jugador: consume un revive (toxicity al 50%) o termina la run; true si sigue viva. */
+  /** Intenta matar al jugador: consume un revive (toxicidad escalada) o termina la run; true si sigue viva. */
   private tryKill(): boolean {
     if (this.godMode) return true
 
     if (this.runState.reviveCharges > 0) {
       this.runState.reviveCharges--
-      this.state.toxicity = 50
+      const reviveToxicity = Math.min(
+        REVIVE_TOXICITY_MAX,
+        REVIVE_TOXICITY_BASE + this.revivesUsed * REVIVE_TOXICITY_STEP,
+      )
+      this.revivesUsed++
+      this.state.toxicity = reviveToxicity
       this.biomeTimeRemaining = Math.max(this.biomeTimeRemaining, 20)
       this.uiManager.showMessage("¡Revives!", 1800)
       return true
