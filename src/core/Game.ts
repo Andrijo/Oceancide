@@ -5,6 +5,7 @@ import { Turtle } from "@entities/Turtle"
 import { BiomeGenerator } from "@world/BiomeGenerator"
 import { SUN_DIRECTION } from "@world/WaterEffects"
 import { UIManager } from "@ui/UIManager"
+import { DevMenu } from "@ui/DevMenu"
 import { TouchControls } from "@ui/TouchControls"
 import { CardManager } from "@cards/CardManager"
 import { createRunState, type RunState } from "@cards/Card"
@@ -47,9 +48,9 @@ const BLOOM_MAX_STRENGTH = 0.5
 
 // Timer por bioma: 90s base, bajando 4s por bioma profundo.
 // Bioma 0: 90s, bioma 9: 54s. Nunca menos de 40s.
-const BIOME_TIME_BASE = 90
-const BIOME_TIME_DECAY = 4
-const BIOME_TIME_MIN = 40
+const BIOME_TIME_BASE = 120
+const BIOME_TIME_DECAY = 2
+const BIOME_TIME_MIN = 80
 
 type Screen = "hub" | "run" | "summary"
 
@@ -96,6 +97,7 @@ export class Game {
   private saveManager = new SaveManager()
   private meta: MetaState
   private screens: ScreenManager
+  private devMenu?: DevMenu
   private screen: Screen = "hub"
   private runSeed = randomSeed()
   private runTime = 0
@@ -175,6 +177,27 @@ export class Game {
     this.setupEventListeners()
     this.showHub()
 
+    if (
+      import.meta.env.DEV ||
+      new URLSearchParams(location.search).has("dev")
+    ) {
+      this.devMenu = new DevMenu({
+        getBiomeIndex: () => this.biomeIndex,
+        goToBiome: (i) => this.goToBiome(i),
+        isGodMode: () => this.godMode,
+        setGodMode: (v) => {
+          this.godMode = v
+        },
+        clearToxicity: () => {
+          this.state.toxicity = 0
+        },
+        completeZone: () => {
+          this.collectedInZone = Number.MAX_SAFE_INTEGER
+        },
+        restartRun: () => this.restartRun(),
+      })
+    }
+
     this.animate()
   }
 
@@ -249,6 +272,18 @@ export class Game {
       if (!e.repeat && !e.defaultPrevented && !this.paused) {
         this.setPaused(true)
         e.preventDefault()
+      }
+      return
+    }
+
+    // Forzar elección de cartas
+    if (e.code === "KeyK") {
+      if (
+        !e.repeat &&
+        this.screen === "run" &&
+        !this.transition.blocksGameplay
+      ) {
+        this.openCardChoice()
       }
       return
     }
@@ -336,6 +371,7 @@ export class Game {
     this.structures.clear()
     this.lookBackApplied = this.lookBack
     this.snapCamera()
+    this.devMenu?.refresh()
   }
 
   private applyBiomeLighting(): void {
@@ -554,6 +590,28 @@ export class Game {
     }
   }
 
+  private goToBiome(index: number): void {
+    if (index < 0 || index >= BIOME_ORDER.length) return
+
+    this.transition.cancel()
+    this.pendingAdvance = false
+    this.paused = false
+
+    if (this.screen !== "run") {
+      this.screen = "run"
+      this.state.isRunning = true
+      this.screens.hide()
+    }
+
+    this.loadBiome(index)
+    this.devMenu?.refresh()
+  }
+
+  private restartRun(): void {
+    this.startRun()
+    this.devMenu?.refresh()
+  }
+
   private projectToScreen(
     worldPosition: THREE.Vector3,
   ): { x: number; y: number } | null {
@@ -604,10 +662,7 @@ export class Game {
     this.biomeTimeRemaining -= deltaTime
     if (this.biomeTimeRemaining <= 0) {
       this.biomeTimeRemaining = 0
-      if (!this.godMode) {
-        this.endRun("died")
-        return
-      }
+      if (!this.tryKill()) return
     }
     this.uiManager.updateBiomeTimer(
       this.biomeTimeRemaining,
@@ -698,23 +753,24 @@ export class Game {
       this.showFloatingEcoAt(absorption.position, value)
     }
 
+    if (this.state.toxicity >= 100 && !this.tryKill()) return
+
     this.state.zoneProgress = Math.min(
       100,
       (this.collectedInZone / required) * 100,
     )
 
-    if (!this.godMode && this.state.toxicity >= 100) {
-      this.endRun("died")
-    } else if (this.state.zoneProgress >= 100) {
+    this.uiManager.updateUI(this.state)
+    this.updateBuildHud()
+
+    if (this.state.zoneProgress >= 100) {
       if (this.biomeIndex + 1 < BIOME_ORDER.length) {
         this.openCardChoice()
       } else {
         this.endRun("completed")
       }
+      return
     }
-
-    this.uiManager.updateUI(this.state)
-    this.updateBuildHud()
 
     this.uiManager.updateSpinBoostHud(
       this.turtle.getSpinBoost() / this.turtle.getSpinBoostMultiplier(),
@@ -745,6 +801,26 @@ export class Game {
       this.uiManager.showMessage(`+ ${card.name}`, 1500)
       this.advanceBiome()
     })
+  }
+
+  /**
+   * Intenta matar al jugador. Si tiene revives disponibles, consume uno y
+   * resetea la toxicidad al 50%. Si no, termina la run.
+   * Devuelve true si la run sigue viva (se revivió), false si murió.
+   */
+  private tryKill(): boolean {
+    if (this.godMode) return true
+
+    if (this.runState.reviveCharges > 0) {
+      this.runState.reviveCharges--
+      this.state.toxicity = 50
+      this.biomeTimeRemaining = Math.max(this.biomeTimeRemaining, 20)
+      this.uiManager.showMessage("¡Revives!", 1800)
+      return true
+    }
+
+    this.endRun("died")
+    return false
   }
 
   private animate(timestamp: number = 0): void {

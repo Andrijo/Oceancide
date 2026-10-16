@@ -1,5 +1,3 @@
-// src/DevMenu.ts
-
 import { BIOME_ORDER, BIOMES } from "@core/types"
 
 export interface DevApi {

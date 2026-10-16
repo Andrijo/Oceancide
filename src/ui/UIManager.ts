@@ -235,7 +235,7 @@ export class UIManager {
 
   public updateUI(state: GameState): void {
     this.debrisCountEl.textContent = state.debrisCollected.toString()
-    this.ecoAwarenessEl.textContent = state.ecoAwareness.toString()
+    this.ecoAwarenessEl.textContent = Math.floor(state.ecoAwareness).toString()
     this.zoneProgressEl.textContent = `${Math.round(state.zoneProgress)}%`
 
     const toxicity = Math.min(state.toxicity, 100)

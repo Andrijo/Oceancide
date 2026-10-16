@@ -4,9 +4,7 @@
 import type { Card, CardRarity } from "./Card"
 
 export const CARD_POOL: Card[] = [
-  // ---------------------------------------------
   // Comunes
-  // ---------------------------------------------
   {
     id: "fins_agiles",
     name: "Aletas Ágiles",
@@ -51,9 +49,7 @@ export const CARD_POOL: Card[] = [
     },
   },
 
-  // ---------------------------------------------
   // Raras
-  // ---------------------------------------------
   {
     id: "eco_amp",
     name: "Eco Amplificado",
@@ -95,9 +91,7 @@ export const CARD_POOL: Card[] = [
     },
   },
 
-  // ---------------------------------------------
-  // Épicas
-  // ---------------------------------------------
+  // Epicas
   {
     id: "advanced_filter",
     name: "Filtro Mejorado",
@@ -111,7 +105,8 @@ export const CARD_POOL: Card[] = [
   {
     id: "medusa_heart",
     name: "Corazón de Medusa",
-    description: "Revives una vez al morir con 50% de toxicidad.",
+    description:
+      "Revives una vez al morir con 50% de toxicidad y 20s de gracia.",
     rarity: "epic",
     value: "+1 REVIVIR",
     apply: ({ run }) => {
@@ -130,9 +125,7 @@ export const CARD_POOL: Card[] = [
     },
   },
 
-  // ---------------------------------------------
   // Legendarias
-  // ---------------------------------------------
   {
     id: "mirror_shell",
     name: "Caparazón Espejo",
@@ -157,9 +150,7 @@ export const CARD_POOL: Card[] = [
     },
   },
 
-  // ---------------------------------------------
   // Maldiciones
-  // ---------------------------------------------
   {
     id: "greed",
     name: "Avaricia",
