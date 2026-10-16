@@ -20,6 +20,7 @@ export interface ScreenCallbacks {
 export interface RunInfo {
   biomeIndex: number
   biomeName: string
+  depth: number
   ecoAwareness: number
   cardsCount: number
 }
@@ -569,6 +570,7 @@ export class ScreenManager {
       content.append(
         this.makeBentoGrid([
           { label: "Zona actual", value: zoneLabel },
+          { label: "Profundidad", value: `${runInfo.depth} m` },
           {
             label: "Eco acumulado",
             value: runInfo.ecoAwareness.toLocaleString("es"),

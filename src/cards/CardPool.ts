@@ -19,10 +19,7 @@ export const CARD_POOL: Card[] = [
     rarity: "common",
     value: "+5% RES",
     apply: ({ turtle }) => {
-      turtle.stats.toxicityResistance = Math.min(
-        0.9,
-        turtle.stats.toxicityResistance + 0.05,
-      )
+      turtle.addToxicityResistance(0.05)
     },
   },
   {
@@ -62,10 +59,7 @@ export const CARD_POOL: Card[] = [
     rarity: "common",
     value: "+4% RES",
     apply: ({ turtle }) => {
-      turtle.stats.toxicityResistance = Math.min(
-        0.9,
-        turtle.stats.toxicityResistance + 0.04,
-      )
+      turtle.addToxicityResistance(0.04)
     },
   },
   {
@@ -116,10 +110,7 @@ export const CARD_POOL: Card[] = [
     rarity: "common",
     value: "+3% RES / +0.3 RADIO",
     apply: ({ turtle }) => {
-      turtle.stats.toxicityResistance = Math.min(
-        0.9,
-        turtle.stats.toxicityResistance + 0.03,
-      )
+      turtle.addToxicityResistance(0.03)
       turtle.stats.collectionRadius += 0.3
     },
   },
@@ -152,10 +143,7 @@ export const CARD_POOL: Card[] = [
     value: "+3% VEL / +3% RES",
     apply: ({ turtle }) => {
       turtle.stats.speed *= 1.03
-      turtle.stats.toxicityResistance = Math.min(
-        0.9,
-        turtle.stats.toxicityResistance + 0.03,
-      )
+      turtle.addToxicityResistance(0.03)
     },
   },
   {
@@ -175,10 +163,7 @@ export const CARD_POOL: Card[] = [
     rarity: "common",
     value: "+2% RES / +5% ECO",
     apply: ({ turtle, run }) => {
-      turtle.stats.toxicityResistance = Math.min(
-        0.9,
-        turtle.stats.toxicityResistance + 0.02,
-      )
+      turtle.addToxicityResistance(0.02)
       run.ecoMultiplier *= 1.05
     },
   },
@@ -231,10 +216,7 @@ export const CARD_POOL: Card[] = [
     rarity: "rare",
     value: "+15% RES",
     apply: ({ turtle }) => {
-      turtle.stats.toxicityResistance = Math.min(
-        0.9,
-        turtle.stats.toxicityResistance + 0.15,
-      )
+      turtle.addToxicityResistance(0.15)
     },
   },
   {
@@ -304,10 +286,7 @@ export const CARD_POOL: Card[] = [
     rarity: "rare",
     value: "+15% RES / +5% VEL",
     apply: ({ turtle }) => {
-      turtle.stats.toxicityResistance = Math.min(
-        0.9,
-        turtle.stats.toxicityResistance + 0.15,
-      )
+      turtle.addToxicityResistance(0.15)
       turtle.stats.speed *= 1.05
     },
   },
@@ -326,8 +305,7 @@ export const CARD_POOL: Card[] = [
   {
     id: "medusa_heart",
     name: "Corazón de Medusa",
-    description:
-      "Revives una vez al morir con 50% de toxicidad y 20s de gracia.",
+    description: "Revives una vez al morir, con 20s de gracia.",
     rarity: "epic",
     value: "+1 REVIVIR",
     apply: ({ run }) => {
@@ -353,10 +331,7 @@ export const CARD_POOL: Card[] = [
     value: "+2 FILTROS / +8% RES",
     apply: ({ turtle }) => {
       turtle.stats.filterCapacity += 2
-      turtle.stats.toxicityResistance = Math.min(
-        0.9,
-        turtle.stats.toxicityResistance + 0.08,
-      )
+      turtle.addToxicityResistance(0.08)
     },
   },
   {
@@ -387,10 +362,7 @@ export const CARD_POOL: Card[] = [
     rarity: "epic",
     value: "+25% RES",
     apply: ({ turtle }) => {
-      turtle.stats.toxicityResistance = Math.min(
-        0.9,
-        turtle.stats.toxicityResistance + 0.25,
-      )
+      turtle.addToxicityResistance(0.25)
     },
   },
   {
@@ -412,10 +384,7 @@ export const CARD_POOL: Card[] = [
     value: "+1 REVIVIR / +5% RES",
     apply: ({ turtle, run }) => {
       run.reviveCharges += 1
-      turtle.stats.toxicityResistance = Math.min(
-        0.9,
-        turtle.stats.toxicityResistance + 0.05,
-      )
+      turtle.addToxicityResistance(0.05)
     },
   },
   {
@@ -437,10 +406,7 @@ export const CARD_POOL: Card[] = [
     rarity: "legendary",
     value: "+40% RES",
     apply: ({ turtle }) => {
-      turtle.stats.toxicityResistance = Math.min(
-        0.95,
-        turtle.stats.toxicityResistance + 0.4,
-      )
+      turtle.addToxicityResistance(0.4)
     },
   },
   {
@@ -460,10 +426,7 @@ export const CARD_POOL: Card[] = [
     rarity: "legendary",
     value: "+15% RES / +2 FILTROS",
     apply: ({ turtle }) => {
-      turtle.stats.toxicityResistance = Math.min(
-        0.95,
-        turtle.stats.toxicityResistance + 0.15,
-      )
+      turtle.addToxicityResistance(0.15)
       turtle.stats.filterCapacity += 2
     },
   },
@@ -508,10 +471,7 @@ export const CARD_POOL: Card[] = [
     value: "+30% VEL / -50% RES",
     apply: ({ turtle }) => {
       turtle.stats.speed *= 1.3
-      turtle.stats.toxicityResistance = Math.max(
-        0,
-        turtle.stats.toxicityResistance - 0.5,
-      )
+      turtle.reduceToxicityResistance(0.5)
     },
   },
   {
@@ -533,10 +493,7 @@ export const CARD_POOL: Card[] = [
     value: "+50% VEL / -30% RES",
     apply: ({ turtle }) => {
       turtle.stats.speed *= 1.5
-      turtle.stats.toxicityResistance = Math.max(
-        0,
-        turtle.stats.toxicityResistance - 0.3,
-      )
+      turtle.reduceToxicityResistance(0.3)
     },
   },
 

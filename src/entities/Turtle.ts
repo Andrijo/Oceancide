@@ -8,6 +8,9 @@ const BASE_RIM_COLOR = 0xf0c053
 
 const GLOW_WHITE = new THREE.Color(0xffffff)
 
+/** Tope duro de resistencia a la toxicidad (nunca inmunidad total). */
+const TOXICITY_RESISTANCE_CAP = 0.9
+
 /** Fases de bioluminiscencia: de apagada (t = 0) a blanco puro (t = 1). */
 type GlowKeyframe = {
   t: number
@@ -237,6 +240,24 @@ export class Turtle {
 
   public getGlow(): number {
     return this.glowLevel
+  }
+
+  /** Suma resistencia con rendimientos decrecientes: cada punto adicional vale menos. */
+  public addToxicityResistance(amount: number): void {
+    if (amount <= 0) return
+    const current = this.stats.toxicityResistance
+    this.stats.toxicityResistance = Math.min(
+      TOXICITY_RESISTANCE_CAP,
+      1 - (1 - current) * (1 - amount),
+    )
+  }
+
+  /** Reduce la resistencia (maldiciones), sin bajar de 0. */
+  public reduceToxicityResistance(amount: number): void {
+    this.stats.toxicityResistance = Math.max(
+      0,
+      this.stats.toxicityResistance - amount,
+    )
   }
 
   public update(

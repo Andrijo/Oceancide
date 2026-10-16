@@ -39,23 +39,23 @@ La toxicidad es la barra de peligro de la run (0 a 100) y se muestra como una **
 
 - **Sube sola** mientras haya desechos en el bioma, a un ritmo proporcional a la contaminación restante y a la tasa de toxicidad de la zona.
 - **Baja** cada vez que recoges un desecho (más cuanto más contaminante sea) o cuando una esfera filtradora absorbe uno.
-- Al **cambiar de bioma** se reduce a la mitad (no se reinicia).
+- Al **cambiar de bioma** se arrastra la mitad, pero nunca baja del **suelo de contaminación** del bioma (a más profundidad, más alto).
 - Si llega al **100%**, la run termina ("¡Se acabó! La toxicidad ganó.").
 
-La calavera cambia de color y acelera su pulso según el nivel: verde (bajo), amarillo, naranja y rojo (crítico). Cuando la toxicidad baja hay un **destello verde** de "limpieza", y la primera vez que aparece en cada run se muestra un aviso explicativo.
+La calavera se va llenando de **lodo tóxico** y cambia de color y de ritmo de pulso según el nivel: verde pantano (bajo), oliva, óxido y sangre (crítico). Un pequeño **chevron** indica la tendencia: ▲ cuando sube, ▼ cuando estás limpiando. Cuando la toxicidad baja hay un **destello verde** de "limpieza", y la primera vez que aparece en cada run se muestra un aviso explicativo.
 
 ### Tiempo por bioma
 
-Cada bioma tiene además un **límite de tiempo**: si se agota antes de completar el 70% de la limpieza, la tortuga muere igual que si la toxicidad llegara al 100%. El límite parte de **120 s** y baja **2 s por bioma**, con un mínimo de **80 s**.
+Cada bioma tiene además un **límite de tiempo**: al agotarse, el bioma entra en **presión** y la subida pasiva de toxicidad se multiplica (×5). No mata por sí solo, pero te envenena rápido si no limpias. El límite parte de **120 s** y baja **2 s por bioma**, con un mínimo de **80 s**.
 
-El HUD muestra un **temporizador de bioma** en la parte superior izquierda que cambia de blanco a naranja (cuando queda menos del 30%) y a rojo en los últimos 10 segundos. Al revivir con una carta de revivir se garantizan al menos **20 s** en el bioma actual para continuar.
+El HUD muestra un **temporizador** en el cluster de peligro que cambia de blanco a naranja (cuando queda menos del 30%) y a rojo en los últimos 10 segundos; al agotarse pasa a mostrar **PRESIÓN**. Al revivir se garantizan al menos **20 s** en el bioma actual.
 
 ### Conciencia Ecológica y esferas filtradoras
 
 Cada desecho tiene un **valor ecológico** (derivado de su toxicidad) que se suma a tu Conciencia Ecológica al recogerlo. Con ella puedes pagar **esferas filtradoras** (tecla `B` o botón táctil):
 
 - Se colocan justo delante de la tortuga.
-- Atraen al desecho más cercano dentro de su radio de alcance cada cierto tiempo.
+- Atraen al desecho **más contaminante** dentro de su radio de alcance cada cierto tiempo (a igual contaminación, el más cercano).
 - Cada esfera absorbe un número limitado de desechos y luego desaparece.
 - Solo puedes tener unas pocas activas a la vez.
 
@@ -70,6 +70,8 @@ Con `Q` / `E` la tortuga realiza un giro completo de 360° en menos de un segund
 Cuando completas el **70%** de la limpieza de una zona (y no es la última), antes de descender a la siguiente el juego se detiene y te ofrece **3 cartas** entre las que elegir una. Cada carta aplica una mejora (o maldición) **permanente durante esa run**, y las que vas eligiendo quedan registradas y se muestran en el resumen final.
 
 El mazo tiene **50 cartas** repartidas en 6 rarezas: **común, rara, épica, legendaria, maldición y ultra legendaria**. El reparto es por rareza con pesos (`RARITY_WEIGHTS` en `src/cards/CardPool.ts`): **común 40 · rara 30 · épica 20 · legendaria 7 · maldición 2 · ultra legendaria 1**. El mazo está en `src/cards/CardPool.ts` y la lógica de reparto en `src/cards/CardManager.ts`. Las cartas se eligen con clic/toque o con las teclas `1` / `2` / `3`, y se colorean según su rareza (la ultra legendaria destaca con un brillo especial).
+
+La **resistencia a la toxicidad** de las cartas se acumula con **rendimientos decrecientes**: cada punto adicional vale menos que el anterior, así que apilar caparazones nunca te vuelve inmune.
 
 | Carta                     | Rareza           | Efecto                            | Descripción                                                |
 | ------------------------- | ---------------- | --------------------------------- | ---------------------------------------------------------- |
@@ -102,7 +104,7 @@ El mazo tiene **50 cartas** repartidas en 6 rarezas: **común, rara, épica, leg
 | Pulmón de Hierro          | Rara             | +2 FILTROS                        | Dos filtros más activos a la vez                           |
 | Resistencia Marina        | Rara             | +15% RES / +5% VEL                | Resistente y rápida a la vez                               |
 | Filtro Mejorado           | Épica            | +2 FILTROS                        | Puedes mantener dos filtros más a la vez                   |
-| Corazón de Medusa         | Épica            | +1 REVIVIR                        | Revives una vez al morir con 50% de toxicidad y 20s gracia |
+| Corazón de Medusa         | Épica            | +1 REVIVIR                        | Revives una vez al morir, con 20s de gracia                |
 | Bioluminiscencia          | Épica            | +30% ECO                          | Brillas en la oscuridad y ganas más eco                    |
 | Caparazón Reforzado       | Épica            | +2 FILTROS / +8% RES              | Más filtros y mejor resistencia                            |
 | Mente Colmena             | Épica            | +2 ECO/S                          | Los filtros trabajan en perfecta sincronía                 |
@@ -166,11 +168,11 @@ Los controles táctiles aparecen al detectar el primer toque y se colocan donde 
 ## HUD
 
 - **Desechos recolectados**, **Conciencia Ecológica** y **Progreso de zona** (porcentaje necesario para avanzar).
-- **Calavera de toxicidad**: se llena y colorea según el nivel de toxicidad (ver más arriba).
+- **Calavera de toxicidad**: se llena de **lodo tóxico** y cambia de color según el nivel (verde pantano → oliva → óxido → sangre); un chevron marca la tendencia (▲ sube, ▼ limpiando).
 - **Números flotantes**: al recoger un desecho aparece un `+N` sobre su posición en pantalla. El tamaño y el color crecen con el valor (cian → verde → dorado).
 - **HUD de construcción**: indica el coste de la esfera filtradora y cuántas tienes activas (se tiñe de rojo si no puedes construir).
 - **HUD de dash**: muestra el multiplicador del boost de giro mientras está activo.
-- **Temporizador de bioma** (arriba a la izquierda): los segundos que quedan para completar el bioma; pasa de blanco a naranja y a rojo cuando se agota.
+- **Cluster de peligro** (arriba al centro): agrupa la **calavera de toxicidad** y el **temporizador de bioma** para que las señales de supervivencia no compitan con los recursos. El temporizador pasa de blanco a naranja y a rojo, y muestra **PRESIÓN** al agotarse.
 - **Barra de energía del impulso** (abajo, centrada): energía disponible para el impulso; se oculta cuando está llena y se tiñe de naranja o rojo al agotarse.
 - **Botón de pausa** en la esquina superior derecha.
 
@@ -188,7 +190,7 @@ El agua no es un simple fondo: hay una capa de efectos (`src/world/WaterEffects.
 - **Brillo de la tortuga**: la carta *Bioluminiscencia* enciende un glow propio en la tortuga que sube en 5 fases (color propio → saturación → blanqueo → blanco puro), con un pulso biológico y una luz puntual que pasa de cian a blanco puro; cada carta adicional intensifica el brillo.
 - **Props por bioma**: rocas, corales, conchas, algas, esponjas y montículos de arrecife, con más relieve y detalle cuanto más profundo.
 
-A medida que limpias un bioma, **el agua se aclara**: sube el brillo, baja la densidad de la niebla y se refuerzan los rayos. Al pasar de zona se reproduce una **transición** en la que una masa negra de borde irregular barre la pantalla y muestra el nombre del nuevo bioma.
+A medida que limpias un bioma, **el agua se aclara**: sube el brillo, baja la densidad de la niebla y se refuerzan los rayos. Al pasar de zona se reproduce una **transición** en la que una masa negra de borde irregular barre la pantalla y muestra el nombre del nuevo bioma y su **profundidad**.
 
 El renderizado pasa por un **pipeline de post-proceso** (`src/core/RenderPipeline.ts`): tonemapping neutro y un **bloom dinámico** que solo se activa en las profundidades (cuando el sol se apaga). Cuando el bloom es inapreciable, el pipeline se salta el composer y renderiza directo para ahorrar recursos.
 

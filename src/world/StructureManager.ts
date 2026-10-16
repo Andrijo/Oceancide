@@ -115,13 +115,16 @@ export class StructureManager {
 
   private findTarget(s: Structure, debrisList: Debris[]): Debris | null {
     let best: Debris | null = null
-    let bestDist = s.config.radius
+    let bestScore = -Infinity
     for (const debris of debrisList) {
       if (debris.claimed || debris.removed) continue
       const dist = debris.mesh.position.distanceTo(s.position)
-      if (dist < bestDist) {
+      if (dist > s.config.radius) continue
+      // Prioriza lo más contaminante; a igual contaminación, lo más cercano.
+      const score = debris.pollution * s.config.radius - dist
+      if (score > bestScore) {
         best = debris
-        bestDist = dist
+        bestScore = score
       }
     }
     return best

@@ -74,14 +74,24 @@
         pointer-events: none;
       }
 
-      .toxicity-skull {
+      /* Cluster de peligro (arriba centro): toxicidad + temporizador, sin competir con recursos ni pausa. */
+      #danger-cluster {
         position: absolute;
-        top: 16px;
+        top: calc(12px + env(safe-area-inset-top, 0px));
         left: 50%;
         transform: translateX(-50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        z-index: 150;
+        pointer-events: none;
+      }
+
+      .toxicity-skull {
+        position: relative;
         width: 76px;
         height: 92px;
-        z-index: 150;
         pointer-events: none;
         opacity: 0;
         transition: opacity 0.4s ease;
@@ -116,29 +126,57 @@
         fill: rgba(10, 6, 6, 0.95);
       }
 
+      /* El relleno es lodo tóxico: verde pantano → oliva → óxido → sangre (el verde brillante queda para limpiar). */
       .skull-fill {
-        fill: #2ecc71;
+        fill: #22331f;
         /* Vacío: desplazado 120px hacia abajo (altura del viewBox) */
         transform: translateY(120px);
         transition: fill 0.3s ease;
       }
 
       .toxicity-skull.level-low .skull-fill {
-        fill: #2ecc71;
+        fill: #2e4a29;
       }
       .toxicity-skull.level-mid .skull-fill {
-        fill: #facc15;
+        fill: #5c6b22;
       }
       .toxicity-skull.level-high .skull-fill {
-        fill: #f97316;
+        fill: #8a5a17;
       }
       .toxicity-skull.level-crit .skull-fill {
-        fill: #ef4444;
+        fill: #8e1b1b;
       }
 
       .toxicity-skull.level-crit .skull-shape {
         stroke: rgba(255, 80, 80, 0.95);
         filter: drop-shadow(0 0 8px rgba(255, 60, 60, 0.7));
+      }
+
+      /* Chevron de tendencia: ▲ subiendo (empeora), ▼ bajando (limpiando) */
+      .toxicity-trend {
+        position: absolute;
+        right: -12px;
+        bottom: 4px;
+        font-size: 15px;
+        font-weight: bold;
+        line-height: 1;
+        opacity: 0;
+        transform: scale(0.8);
+        transition:
+          opacity 0.2s ease,
+          transform 0.2s ease,
+          color 0.2s ease;
+        text-shadow: 0 0 8px rgba(0, 0, 0, 0.9);
+      }
+      .toxicity-trend.up {
+        opacity: 1;
+        transform: scale(1);
+        color: #ff6b6b;
+      }
+      .toxicity-trend.down {
+        opacity: 1;
+        transform: scale(1);
+        color: #4ade80;
       }
 
       .toxicity-skull.level-low {
@@ -167,10 +205,10 @@
       @keyframes skullPulse {
         0%,
         100% {
-          transform: translateX(-50%) scale(1);
+          transform: scale(1);
         }
         50% {
-          transform: translateX(-50%) scale(1.08);
+          transform: scale(1.08);
         }
       }
 
@@ -388,7 +426,6 @@
         }
 
         .toxicity-skull {
-          top: 60px;
           width: 56px;
           height: 68px;
         }
