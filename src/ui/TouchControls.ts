@@ -3,7 +3,14 @@
 import type { InputState } from "@core/types"
 
 const EDGE_MARGIN = 10
-const DEADZONE = 0.3
+
+// Zona muerta de los sticks analógicos (proporción del radio)
+const MOVE_DEADZONE = 0.12
+const DEPTH_DEADZONE = 0.12
+
+// Gesto de "flick": deslizar rápido en horizontal dispara el dash
+const FLICK_DISTANCE = 44 // px desde el punto de apoyo
+const FLICK_TIME = 0.25 // segundos
 
 // Joystick de movimiento (mitad izquierda)
 const BASE_SIZE = 140 // debe coincidir con #joystick-base en el CSS
@@ -14,10 +21,14 @@ const DEPTH_W = 70 // debe coincidir con #depth-base en el CSS
 const DEPTH_H = 160
 const DEPTH_RANGE = 50
 
+/** Dirección del giro de 360°. */
+export type DashDirection = "left" | "right"
+
 /** Acciones puntuales (no mantenidas) que dispara la interfaz táctil. */
 export interface TouchActions {
   onBuild(): void
   onLookBack(active: boolean): void // true mientras se mantiene pulsado
+  onDash(direction: DashDirection): void
 }
 
 /** Controles táctiles de doble stick flotante; los sticks nacen donde pongas el dedo. */
@@ -33,6 +44,8 @@ export class TouchControls {
   private moveKnob: HTMLElement
   private movePointer: number | null = null
   private moveCenter = { x: 0, y: 0 }
+  private moveStart = { x: 0, y: 0, time: 0 }
+  private moveFlicked = false
 
   // Stick derecho
   private depthZone: HTMLElement
@@ -40,6 +53,9 @@ export class TouchControls {
   private depthKnob: HTMLElement
   private depthPointer: number | null = null
   private depthCenterY = 0
+
+  // Botón de dash: alterna el sentido del giro en cada pulsación
+  private dashFlip = false
 
   constructor(input: InputState, actions: TouchActions) {
     this.input = input
@@ -81,6 +97,16 @@ export class TouchControls {
           <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
         </svg>
       </button>
+
+      <button id="dash-btn" class="touch-btn" aria-label="Giro de 360° (dash)"
+        style="position: absolute; left: calc(36px + env(safe-area-inset-left, 0px)); bottom: calc(var(--touch-bottom, 50px) + 180px);">
+        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+          <path d="M20 4.5V9h-4.5" />
+          <path d="M12 8v4l2.5 1.5" />
+        </svg>
+      </button>
     `
     container.appendChild(this.root)
 
@@ -96,6 +122,7 @@ export class TouchControls {
     this.setupBoostButton()
     this.setupBuildButton()
     this.setupLookBackButton()
+    this.setupDashButton()
 
     this.root.addEventListener("contextmenu", (e) => e.preventDefault())
     window.addEventListener("touchstart", () => this.show(), {
@@ -140,6 +167,9 @@ export class TouchControls {
       this.moveBase.style.bottom = "auto"
       this.moveBase.classList.add("active")
 
+      this.moveStart = { x: e.clientX, y: e.clientY, time: performance.now() }
+      this.moveFlicked = false
+
       this.moveStick(e)
     })
 
@@ -161,6 +191,8 @@ export class TouchControls {
       this.input.backward = false
       this.input.left = false
       this.input.right = false
+      this.input.moveX = 0
+      this.input.moveY = 0
     }
     this.moveZone.addEventListener("pointerup", release)
     this.moveZone.addEventListener("pointercancel", release)
@@ -181,10 +213,42 @@ export class TouchControls {
     const x = dx / STICK_RADIUS
     const y = -dy / STICK_RADIUS // arriba = adelante
 
-    this.input.forward = y > DEADZONE
-    this.input.backward = y < -DEADZONE
-    this.input.left = x < -DEADZONE
-    this.input.right = x > DEADZONE
+    // Ejes analógicos con zona muerta reescalada (aprovecha todo el recorrido)
+    const mag = Math.hypot(x, y)
+    let ax = 0
+    let ay = 0
+    if (mag > MOVE_DEADZONE) {
+      const scaled = (mag - MOVE_DEADZONE) / (1 - MOVE_DEADZONE)
+      ax = (x / mag) * scaled
+      ay = (y / mag) * scaled
+    }
+
+    this.input.moveX = ax
+    this.input.moveY = ay
+    this.input.forward = ay > 0
+    this.input.backward = ay < 0
+    this.input.left = ax < 0
+    this.input.right = ax > 0
+
+    this.detectFlick(e)
+  }
+
+  /** Deslizamiento rápido en horizontal = giro de 360° (una vez por apoyo). */
+  private detectFlick(e: PointerEvent): void {
+    if (this.moveFlicked) return
+
+    const elapsed = (performance.now() - this.moveStart.time) / 1000
+    const dx = e.clientX - this.moveStart.x
+    const dy = e.clientY - this.moveStart.y
+
+    if (
+      elapsed <= FLICK_TIME &&
+      Math.abs(dx) >= FLICK_DISTANCE &&
+      Math.abs(dx) > Math.abs(dy) * 1.5
+    ) {
+      this.moveFlicked = true
+      this.actions.onDash(dx > 0 ? "right" : "left")
+    }
   }
 
   // ---------- Stick vertical de profundidad ----------
@@ -234,6 +298,7 @@ export class TouchControls {
 
       this.input.up = false
       this.input.down = false
+      this.input.vertical = 0
     }
     this.depthZone.addEventListener("pointerup", release)
     this.depthZone.addEventListener("pointercancel", release)
@@ -248,8 +313,17 @@ export class TouchControls {
     this.depthKnob.style.transform = `translate(-50%, calc(-50% + ${dy}px))`
 
     const y = -dy / DEPTH_RANGE // arriba = subir
-    this.input.up = y > DEADZONE
-    this.input.down = y < -DEADZONE
+
+    const mag = Math.abs(y)
+    let v = 0
+    if (mag > DEPTH_DEADZONE) {
+      const scaled = (mag - DEPTH_DEADZONE) / (1 - DEPTH_DEADZONE)
+      v = Math.sign(y) * scaled
+    }
+
+    this.input.vertical = v
+    this.input.up = v > 0
+    this.input.down = v < 0
   }
 
   // ---------- Botón de construir ----------
@@ -299,6 +373,23 @@ export class TouchControls {
       btn.classList.remove("active")
       this.input.boost = false
     }
+    btn.addEventListener("pointerup", release)
+    btn.addEventListener("pointercancel", release)
+  }
+
+  // ---------- Botón de dash (giro de 360°) ----------
+
+  private setupDashButton(): void {
+    const btn = this.root.querySelector<HTMLButtonElement>("#dash-btn")!
+
+    btn.addEventListener("pointerdown", (e) => {
+      btn.setPointerCapture(e.pointerId)
+      btn.classList.add("active")
+      const direction = this.dashFlip ? "left" : "right"
+      this.dashFlip = !this.dashFlip
+      this.actions.onDash(direction)
+    })
+    const release = () => btn.classList.remove("active")
     btn.addEventListener("pointerup", release)
     btn.addEventListener("pointercancel", release)
   }

@@ -157,11 +157,12 @@ El resumen de una inmersión sin fin es propio: muestra los **biomas sobrevivido
 
 ### Táctil (móvil)
 
-- **Joystick izquierdo** (mitad izquierda de la pantalla): movimiento y giro.
-- **Stick vertical derecho** (mitad derecha): subir / bajar.
+- **Joystick izquierdo** (mitad izquierda de la pantalla): movimiento y giro **analógicos** (la inclinación regula velocidad y giro, con curva fina cerca del centro).
+- **Stick vertical derecho** (mitad derecha): subir / bajar (también analógico).
 - **Botón de impulso**: aumenta la velocidad.
 - **Botón de filtro**: construye una esfera filtradora.
 - **Botón de vista trasera** (mantener): cámara mirando hacia atrás.
+- **Dash de giro (360°)**: botón dedicado (alterna el sentido en cada pulsación) o **deslizando rápido el joystick en horizontal** (flick).
 
 Los controles táctiles aparecen al detectar el primer toque y se colocan donde apoyes el dedo.
 
