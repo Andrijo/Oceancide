@@ -40,6 +40,10 @@ export interface InputState {
   up: boolean
   down: boolean
   boost: boolean
+  // Ejes analógicos (-1..1) de los sticks táctiles; 0 = sin input (teclado usa los booleanos).
+  moveX: number
+  moveY: number
+  vertical: number
 }
 
 export interface WorldBounds {

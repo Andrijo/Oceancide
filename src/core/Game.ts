@@ -174,6 +174,9 @@ export class Game {
       up: false,
       down: false,
       boost: false,
+      moveX: 0,
+      moveY: 0,
+      vertical: 0,
     }
 
     new TouchControls(this.input, {
@@ -181,6 +184,7 @@ export class Game {
       onLookBack: (active) => {
         this.lookBack = active
       },
+      onDash: (direction) => this.tryDash(direction),
     })
 
     this.timer = new THREE.Timer()
@@ -309,17 +313,8 @@ export class Game {
     }
 
     if (e.code === "KeyQ" || e.code === "KeyE") {
-      if (
-        !e.repeat &&
-        this.screen === "run" &&
-        !this.transition.blocksGameplay
-      ) {
-        const direction = e.code === "KeyQ" ? "left" : "right"
-        this.turtle.trigger360Spin(direction)
-
-        if (!this.turtle.isSpinBoosting()) {
-          this.uiManager.showMessage("¡DASH!", 700)
-        }
+      if (!e.repeat) {
+        this.tryDash(e.code === "KeyQ" ? "left" : "right")
       }
       return
     }
@@ -415,6 +410,17 @@ export class Game {
     return (hash / 0xffffffff) * Math.PI * 2
   }
 
+  private tryDash(direction: "left" | "right"): void {
+    if (this.screen !== "run" || this.transition.blocksGameplay) return
+
+    this.turtle.trigger360Spin(direction)
+    navigator.vibrate?.(15)
+
+    if (!this.turtle.isSpinBoosting()) {
+      this.uiManager.showMessage("¡DASH!", 700)
+    }
+  }
+
   private tryBuild(key: StructureKey): void {
     if (this.screen !== "run" || this.transition.blocksGameplay) return
 
@@ -505,6 +511,9 @@ export class Game {
     this.input.up = false
     this.input.down = false
     this.input.boost = false
+    this.input.moveX = 0
+    this.input.moveY = 0
+    this.input.vertical = 0
   }
 
   private showHub(): void {
@@ -538,6 +547,7 @@ export class Game {
 
     this.turtle.resetStats()
     this.runState = createRunState()
+    this.cardManager.resetPity()
     this.revivesUsed = 0
 
     this.uiManager.resetRunHints()

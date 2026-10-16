@@ -11,6 +11,11 @@ const GLOW_WHITE = new THREE.Color(0xffffff)
 /** Tope duro de resistencia a la toxicidad (nunca inmunidad total). */
 const TOXICITY_RESISTANCE_CAP = 0.9
 
+/** Curva de respuesta del stick: más resolución cerca del centro, lineal en el teclado. */
+function inputCurve(v: number): number {
+  return Math.sign(v) * Math.pow(Math.abs(v), 1.6)
+}
+
 /** Fases de bioluminiscencia: de apagada (t = 0) a blanco puro (t = 1). */
 type GlowKeyframe = {
   t: number
@@ -296,11 +301,30 @@ export class Turtle {
     const totalBoost = inputBoost * (1 + this.spinBoost)
     const maxSpeed = this.stats.speed * totalBoost
 
+    // Ejes analógicos si el stick está activo; si no, booleanos del teclado.
+    const throttle =
+      input.moveY !== 0
+        ? inputCurve(input.moveY)
+        : input.forward
+          ? 1
+          : input.backward
+            ? -1
+            : 0
+    const steer =
+      input.moveX !== 0
+        ? -inputCurve(input.moveX)
+        : (input.left ? 1 : 0) - (input.right ? 1 : 0)
+
     let targetSpeed = 0
-    if (input.forward || (isBoosting && !input.backward)) {
-      targetSpeed = maxSpeed
-    } else if (input.backward) {
-      targetSpeed = -maxSpeed * 0.5
+    if (throttle > 0) {
+      targetSpeed = throttle * maxSpeed
+    } else if (throttle < 0) {
+      targetSpeed = throttle * maxSpeed * 0.5
+    }
+
+    // El impulso garantiza velocidad máxima hacia adelante.
+    if (isBoosting && throttle >= 0) {
+      targetSpeed = Math.max(targetSpeed, maxSpeed)
     }
 
     if (this.isSpinning && targetSpeed === 0) {
@@ -309,8 +333,7 @@ export class Turtle {
 
     this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-4 * deltaTime))
 
-    const turn = (input.left ? 1 : 0) - (input.right ? 1 : 0)
-    this.mesh.rotation.y += turn * this.turnSpeed * deltaTime
+    this.mesh.rotation.y += steer * this.turnSpeed * deltaTime
 
     let extraRollAngle = 0
 
@@ -336,7 +359,10 @@ export class Turtle {
     this.mesh.position.x += Math.sin(yaw) * this.speed * deltaTime
     this.mesh.position.z += Math.cos(yaw) * this.speed * deltaTime
 
-    const vertical = (input.up ? 1 : 0) - (input.down ? 1 : 0)
+    const vertical =
+      input.vertical !== 0
+        ? input.vertical
+        : (input.up ? 1 : 0) - (input.down ? 1 : 0)
     this.mesh.position.y += vertical * this.stats.speed * 0.7 * deltaTime
 
     const position = this.mesh.position
@@ -352,7 +378,7 @@ export class Turtle {
     )
     position.y = THREE.MathUtils.clamp(position.y, bounds.minY, bounds.maxY)
 
-    this.animateSwimming(deltaTime, turn, vertical, extraRollAngle)
+    this.animateSwimming(deltaTime, steer, vertical, extraRollAngle)
     this.updateGlow(deltaTime)
   }
 
