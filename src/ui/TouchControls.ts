@@ -20,14 +20,7 @@ export interface TouchActions {
   onLookBack(active: boolean): void // true mientras se mantiene pulsado
 }
 
-/**
- * Controles táctiles de doble stick flotante:
- * - Mitad izquierda: joystick de movimiento (adelante/atrás/giro).
- * - Mitad derecha: stick vertical de profundidad (arrastrar arriba = subir, abajo = bajar).
- * - Botón de impulso fijo (icono de velocímetro) para el impulso.
- * Los sticks nacen donde pongas el dedo. Aparecen al detectar el primer toque
- * y escriben directamente sobre el objeto `input` del juego.
- */
+/** Controles táctiles de doble stick flotante; los sticks nacen donde pongas el dedo. */
 export class TouchControls {
   private root: HTMLElement
   private input: InputState

@@ -8,7 +8,7 @@ Toma el control de una tortuga y desciende por las capas del océano recolectand
 
 Además de recolectar desechos directamente, puedes gastar **Conciencia Ecológica** para construir **esferas filtradoras** que atraen y absorben desechos por su cuenta. Y con el **dash de giro** (Q/E) puedes encadenar giros de 360° con un impulso temporal de velocidad.
 
-Al limpiar cada zona eliges una **carta de mejora** (o maldición) que potencia tu tortuga durante el resto de la inmersión, con un toque roguelike: cada run es distinta.
+Al limpiar cada zona eliges una **carta de mejora** (o maldición) que potencia tu tortuga durante el resto de la inmersión, con un toque roguelike: cada run es distinta. Si lo prefieres, puedes lanzar una **Inmersión sin fin** y ver cuánto aguantas con la dificultad subiendo en cada vuelta.
 
 ## Zonas
 
@@ -44,6 +44,12 @@ La toxicidad es la barra de peligro de la run (0 a 100) y se muestra como una **
 
 La calavera cambia de color y acelera su pulso según el nivel: verde (bajo), amarillo, naranja y rojo (crítico). Cuando la toxicidad baja hay un **destello verde** de "limpieza", y la primera vez que aparece en cada run se muestra un aviso explicativo.
 
+### Tiempo por bioma
+
+Cada bioma tiene además un **límite de tiempo**: si se agota antes de completar el 70% de la limpieza, la tortuga muere igual que si la toxicidad llegara al 100%. El límite parte de **120 s** y baja **2 s por bioma**, con un mínimo de **80 s**.
+
+El HUD muestra un **temporizador de bioma** en la parte superior izquierda que cambia de blanco a naranja (cuando queda menos del 30%) y a rojo en los últimos 10 segundos. Al revivir con una carta de revivir se garantizan al menos **20 s** en el bioma actual para continuar.
+
 ### Conciencia Ecológica y esferas filtradoras
 
 Cada desecho tiene un **valor ecológico** (derivado de su toxicidad) que se suma a tu Conciencia Ecológica al recogerlo. Con ella puedes pagar **esferas filtradoras** (tecla `B` o botón táctil):
@@ -63,25 +69,70 @@ Con `Q` / `E` la tortuga realiza un giro completo de 360° en menos de un segund
 
 Cuando completas el **70%** de la limpieza de una zona (y no es la última), antes de descender a la siguiente el juego se detiene y te ofrece **3 cartas** entre las que elegir una. Cada carta aplica una mejora (o maldición) **permanente durante esa run**, y las que vas eligiendo quedan registradas y se muestran en el resumen final.
 
-El reparto es por rareza con pesos (`RARITY_WEIGHTS` en `src/cards/CardPool.ts`): **común 40 · rara 30 · épica 20 · legendaria 8 · maldición 2**. El mazo está en `src/cards/CardPool.ts` y la lógica de reparto en `src/cards/CardManager.ts`. Las cartas se eligen con el clic/toque y se colorean según su rareza.
+El mazo tiene **50 cartas** repartidas en 6 rarezas: **común, rara, épica, legendaria, maldición y ultra legendaria**. El reparto es por rareza con pesos (`RARITY_WEIGHTS` en `src/cards/CardPool.ts`): **común 40 · rara 30 · épica 20 · legendaria 7 · maldición 2 · ultra legendaria 1**. El mazo está en `src/cards/CardPool.ts` y la lógica de reparto en `src/cards/CardManager.ts`. Las cartas se eligen con clic/toque o con las teclas `1` / `2` / `3`, y se colorean según su rareza (la ultra legendaria destaca con un brillo especial).
 
-| Carta                 | Rareza      | Efecto              | Descripción                                          |
-| --------------------- | ----------- | ------------------- | ---------------------------------------------------- |
-| Aletas Ágiles         | Común       | +10% VEL            | Nada más rápido en línea recta                       |
-| Caparazón Denso       | Común       | +5% RES             | Filtra mejor la toxicidad del agua                   |
-| Imán Débil            | Común       | +0.5 RADIO          | Atrae desechos desde un poco más lejos               |
-| Pulmón Extra          | Común       | +1 FILTRO           | Mantiene un filtro más activo a la vez               |
-| Eco Amplificado       | Rara        | +25% ECO            | Cada desecho recogido vale más                       |
-| Dash Potenciado       | Rara        | +0.4 DASH           | El giro de 360° da un impulso más fuerte             |
-| Simbiosis             | Rara        | +1 ECO/S            | Cada filtro activo genera eco por segundo            |
-| Imán Grande           | Rara        | +1.5 RADIO          | Atrae desechos desde muy lejos                       |
-| Filtro Mejorado       | Épica       | +2 FILTROS          | Mantiene dos filtros más a la vez                    |
-| Corazón de Medusa     | Épica       | +1 REVIVIR          | Revives una vez al morir con 50% de toxicidad        |
-| Bioluminiscencia      | Épica       | +30% ECO / +5% VEL  | Brilla en la oscuridad y gana más eco                |
-| Caparazón Espejo      | Legendaria  | -40% TOX            | Repele la mayor parte de la contaminación            |
-| Nado Supersónico      | Legendaria  | +50% VEL            | La tortuga nada como un torpedo                      |
-| Avaricia              | Maldición   | +50% ECO / -20% VEL | Más eco, pero la tortuga se vuelve lenta             |
-| Fragilidad            | Maldición   | +30% VEL / -50% RES | Más rápida, pero mucho más vulnerable a la toxicidad |
+| Carta                     | Rareza           | Efecto                            | Descripción                                                |
+| ------------------------- | ---------------- | --------------------------------- | ---------------------------------------------------------- |
+| Aletas Ágiles             | Común            | +10% VEL                          | La tortuga nada más rápido en línea recta                  |
+| Caparazón Denso           | Común            | +5% RES                           | El caparazón filtra mejor la toxicidad del agua            |
+| Imán Débil                | Común            | +0.5 RADIO                        | Atrae desechos desde un poco más lejos                     |
+| Pulmón Extra              | Común            | +1 FILTRO                         | Puedes mantener un filtro más activo a la vez              |
+| Aletas Cortas             | Común            | +6% VEL                           | Pequeñas mejoras en las aletas traseras                    |
+| Piel Gruesa               | Común            | +4% RES                           | La piel se endurece, resistiendo mejor el agua             |
+| Instinto                  | Común            | +0.4 RADIO                        | Un sexto sentido para encontrar desechos                   |
+| Válvula Extra             | Común            | +1 FILTRO                         | Un filtro adicional en el caparazón                        |
+| Eco Menor                 | Común            | +8% ECO                           | Cada desecho resuena un poco más                           |
+| Reflejos                  | Común            | +5% VEL / +0.3 RADIO              | Reacciona más rápido y detecta mejor                       |
+| Caparazón Rizado          | Común            | +3% RES / +0.3 RADIO              | La forma curva repele un poco la toxicidad                 |
+| Turbo Débil               | Común            | +0.2 DASH                         | Un pequeño impulso adicional en el giro                    |
+| Colector                  | Común            | +1 FILTRO / +0.3 RADIO            | Un filtro más y algo de radio extra                        |
+| Adaptación                | Común            | +3% VEL / +3% RES                 | La tortuga se adapta al medio hostil                       |
+| Ojo de Pez                | Común            | +0.6 RADIO                        | Visión panorámica del entorno                              |
+| Respiración               | Común            | +2% RES / +5% ECO                 | Respira mejor y vive en armonía con el océano              |
+| Eco Amplificado           | Rara             | +25% ECO                          | Cada desecho recogido vale más                             |
+| Dash Potenciado           | Rara             | +0.4 DASH                         | El giro de 360° da un impulso más fuerte                   |
+| Simbiosis                 | Rara             | +1 ECO/S                          | Cada filtro activo genera eco por segundo                  |
+| Imán Grande               | Rara             | +1.5 RADIO                        | Atrae desechos desde muy lejos                             |
+| Caparazón Filtro          | Rara             | +15% RES                          | El caparazón absorbe mejor los tóxicos                     |
+| Turbo                     | Rara             | +0.6 DASH                         | Impulso de giro notablemente más fuerte                    |
+| Colonia de Filtros        | Rara             | +1.5 ECO/S                        | Los filtros generan más eco por segundo                    |
+| Eco Mayor                 | Rara             | +35% ECO                          | El eco resuena con fuerza                                  |
+| Aleta Doble               | Rara             | +20% VEL                          | Aletas extendidas, mucha más velocidad                     |
+| Super Imán                | Rara             | +2 RADIO                          | Atrae desechos desde puntos lejanos                        |
+| Pulmón de Hierro          | Rara             | +2 FILTROS                        | Dos filtros más activos a la vez                           |
+| Resistencia Marina        | Rara             | +15% RES / +5% VEL                | Resistente y rápida a la vez                               |
+| Filtro Mejorado           | Épica            | +2 FILTROS                        | Puedes mantener dos filtros más a la vez                   |
+| Corazón de Medusa         | Épica            | +1 REVIVIR                        | Revives una vez al morir con 50% de toxicidad y 20s gracia |
+| Bioluminiscencia          | Épica            | +30% ECO                          | Brillas en la oscuridad y ganas más eco                    |
+| Caparazón Reforzado       | Épica            | +2 FILTROS / +8% RES              | Más filtros y mejor resistencia                            |
+| Mente Colmena             | Épica            | +2 ECO/S                          | Los filtros trabajan en perfecta sincronía                 |
+| Nado Elegante             | Épica            | +15% VEL / +0.5 RADIO             | Desplazamiento fluido y mayor alcance                      |
+| Reflejo Tóxico            | Épica            | +25% RES                          | El caparazón refleja gran parte de la toxicidad            |
+| Simbiosis Mayor           | Épica            | +2 ECO/S / +1 FILTRO              | Los filtros generan más eco y tienes uno extra             |
+| Escudo de Coral           | Épica            | +1 REVIVIR / +5% RES              | Un revivir adicional y algo de resistencia                 |
+| Carga Ecológica           | Épica            | +50% ECO                          | El eco se acumula rápidamente                              |
+| Caparazón Espejo          | Legendaria       | +40% RES                          | El caparazón repele la mayor parte de la contaminación     |
+| Nado Supersónico          | Legendaria       | +50% VEL                          | La tortuga es la reencarnación de Flash                    |
+| Caparazón del Titán       | Legendaria       | +15% RES / +2 FILTROS             | Un caparazón colosal con filtros y resistencia             |
+| Torbellino                | Legendaria       | +1.0 DASH                         | El giro genera un vórtice devastador                       |
+| Amplificador              | Legendaria       | +75% ECO                          | Todo el eco que generas se multiplica                      |
+| Avaricia                  | Maldición        | +50% ECO / -20% VEL               | Más eco, pero la tortuga se vuelve lenta                   |
+| Fragilidad                | Maldición        | +30% VEL / -50% RES               | Más rápida, pero mucho más vulnerable a la toxicidad       |
+| Codicia Extrema           | Maldición        | +100% ECO / -30% VEL              | Mucho más eco, pero nadar cansa                            |
+| Ruptura                   | Maldición        | +50% VEL / -30% RES               | Velocidad extrema con un caparazón frágil                  |
+| Marea Primigenia          | Ultra Legendaria | +80% VEL / +5 FILTROS             | Sobrecarga de energía ancestral: velocidad y filtros       |
+| Corazón del Océano        | Ultra Legendaria | +100% ECO / +3 ECO/S              | Sientes el pulso del mar; el eco fluye hacia ti            |
+| Furia Abisal              | Ultra Legendaria | +1.2 DASH / +30% VEL / +1 REVIVIR | Una criatura ancestral se manifiesta a través del caparazón |
+
+### Modo sin fin
+
+Desde el Refugio puedes lanzar una **Inmersión sin fin** en lugar de la run normal. No termina al limpiar los 10 biomas: al llegar al fondo vuelve a empezar desde el primero en un nuevo **loop**, y la dificultad escala en cada vuelta (`BiomeGenerator.generateBiome(biomeKey, rng, loop)`):
+
+- La **tasa de toxicidad** se multiplica por `1 + loop`.
+- La **densidad de niebla** se multiplica por `1 + 0.2 · loop`.
+- La **densidad de desechos** se multiplica por `1 + 0.3 · loop`.
+
+El resumen de una inmersión sin fin es propio: muestra los **biomas sobrevividos** y el loop alcanzado, y el botón principal pasa a ser "Otra inmersión sin fin".
 
 ## Controles
 
@@ -119,6 +170,8 @@ Los controles táctiles aparecen al detectar el primer toque y se colocan donde 
 - **Números flotantes**: al recoger un desecho aparece un `+N` sobre su posición en pantalla. El tamaño y el color crecen con el valor (cian → verde → dorado).
 - **HUD de construcción**: indica el coste de la esfera filtradora y cuántas tienes activas (se tiñe de rojo si no puedes construir).
 - **HUD de dash**: muestra el multiplicador del boost de giro mientras está activo.
+- **Temporizador de bioma** (arriba a la izquierda): los segundos que quedan para completar el bioma; pasa de blanco a naranja y a rojo cuando se agota.
+- **Barra de energía del impulso** (abajo, centrada): energía disponible para el impulso; se oculta cuando está llena y se tiñe de naranja o rojo al agotarse.
 - **Botón de pausa** en la esquina superior derecha.
 
 ## Visuales y ambientación
@@ -132,6 +185,7 @@ El agua no es un simple fondo: hay una capa de efectos (`src/world/WaterEffects.
 - **Viñeta** tintada con el color del agua.
 - **Cáusticas animadas** sobre el fondo en las zonas donde llega la luz.
 - **Bioluminiscencia**: en las zonas profundas (sin sol) las luces puntuales de color de acento pasan a ser la iluminación principal.
+- **Brillo de la tortuga**: la carta *Bioluminiscencia* enciende un glow propio en la tortuga que sube en 5 fases (color propio → saturación → blanqueo → blanco puro), con un pulso biológico y una luz puntual que pasa de cian a blanco puro; cada carta adicional intensifica el brillo.
 - **Props por bioma**: rocas, corales, conchas, algas, esponjas y montículos de arrecife, con más relieve y detalle cuanto más profundo.
 
 A medida que limpias un bioma, **el agua se aclara**: sube el brillo, baja la densidad de la niebla y se refuerzan los rayos. Al pasar de zona se reproduce una **transición** en la que una masa negra de borde irregular barre la pantalla y muestra el nombre del nuevo bioma.

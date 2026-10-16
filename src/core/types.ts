@@ -21,6 +21,8 @@ export interface RunSummary {
   durationSeconds: number
   seed: number
   cardsPicked: string[] // ID de cartas elegidas
+  endless: boolean
+  loopsCompleted: number
 }
 
 export interface TurtleStats {

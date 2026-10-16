@@ -11,6 +11,7 @@ import { CARD_POOL } from "@cards/CardPool"
 
 export interface ScreenCallbacks {
   onStartRun(): void
+  onStartEndless(): void
   onReturnToHub(): void
   onResetProgress(): void
 }
@@ -32,6 +33,7 @@ const RARITY_COLORS: Record<CardRarity, string> = {
   epic: "#a855f7",
   legendary: "#fbbf24",
   curse: "#ef4444",
+  ultra_legendary: "#0a9396",
 }
 
 const RARITY_LABELS: Record<CardRarity, string> = {
@@ -40,6 +42,7 @@ const RARITY_LABELS: Record<CardRarity, string> = {
   epic: "Épica",
   legendary: "Legendaria",
   curse: "Maldición",
+  ultra_legendary: "Ultra Legendaria",
 }
 
 const RARITY_BACKGROUNDS: Record<CardRarity, string> = {
@@ -48,6 +51,7 @@ const RARITY_BACKGROUNDS: Record<CardRarity, string> = {
   epic: "#4a1f6e",
   legendary: "#6e4a10",
   curse: "#6e1c1c",
+  ultra_legendary: "#003d4d",
 }
 
 const HUD_IDS = [
@@ -153,6 +157,7 @@ export class ScreenManager {
     this.callbacks = callbacks
 
     this.ensureBubbleAnimation()
+    this.ensureUltraGlowAnimation()
 
     window.addEventListener("keydown", (e) => {
       if (!this.cardChoiceActive) return
@@ -215,9 +220,7 @@ export class ScreenManager {
     return this.cardChoiceActive
   }
 
-  /* ---------------------------------------------
-     Pantallas
-  --------------------------------------------- */
+  // Pantallas
 
   public showHub(meta: MetaState): void {
     this.ensureHubAnimation()
@@ -338,12 +341,43 @@ export class ScreenManager {
       },
     ])
 
+    const endless = () => this.callbacks.onStartEndless()
+    const endlessWrap = el("div", `display: flex; justify-content: center;`)
+    endlessWrap.append(
+      this.makeGhostAction("Inmersión sin fin", endless, "neutral"),
+    )
+
+    // Fila de botones: primario al 65%, secundario al 35%
+    const actionsRow = el(
+      "div",
+      `display: flex;
+  align-items: stretch;
+  gap: 12px;
+  width: 100%;
+  max-width: 640px;`,
+    )
+
+    const primary = this.makeHubCta("Empezar", start, true)
+    primary.style.flex = "65 1 0"
+    primary.style.width = "auto"
+
+    const secondary = this.makeGhostAction(
+      "Inmersión sin fin",
+      endless,
+      "neutral",
+      true,
+    )
+    secondary.style.flex = "35 1 0"
+    secondary.style.width = "auto"
+
+    actionsRow.append(secondary, primary)
+
     content.append(
       enter(title, 0),
       enter(tagline, 90),
       enter(stats, 180),
       enter(this.makeZoneProgress(bestIndex), 280),
-      enter(this.makeHubCta("Empezar", start), 380),
+      enter(actionsRow, 380),
     )
 
     root.append(topBar)
@@ -355,12 +389,20 @@ export class ScreenManager {
 
     const { root, content } = this.makeWindowFrame()
 
-    const title = this.makeScreenTitle(
-      OUTCOME_TITLES[summary.outcome],
-      OUTCOME_COLORS[summary.outcome],
-    )
+    // Título: distinto si es endless
+    const titleText = summary.endless
+      ? "Fin de la inmersión"
+      : OUTCOME_TITLES[summary.outcome]
 
-    const zoneLabel = `${summary.biomeIndex + 1}. ${summary.biomeName}`
+    const titleColor = summary.endless
+      ? "#7cf7d4"
+      : OUTCOME_COLORS[summary.outcome]
+
+    const title = this.makeScreenTitle(titleText, titleColor)
+
+    const zoneLabel = summary.endless
+      ? `Bioma ${summary.biomeIndex + 1} (loop ${summary.loopsCompleted + 1})`
+      : `${summary.biomeIndex + 1}. ${summary.biomeName}`
 
     const bentoItems: Array<{
       label: string
@@ -368,7 +410,10 @@ export class ScreenManager {
       sub?: string
       highlight?: boolean
     }> = [
-      { label: "Zona alcanzada", value: zoneLabel },
+      {
+        label: summary.endless ? "Biomas sobrevividos" : "Zona alcanzada",
+        value: summary.endless ? String(summary.biomeIndex + 1) : zoneLabel,
+      },
       {
         label: "Desechos recolectados",
         value: summary.debrisCollected.toLocaleString("es"),
@@ -387,7 +432,6 @@ export class ScreenManager {
       },
     ]
 
-    // Eco ganado en esta run (con bono si lo hay)
     const totalEarned = summary.ecoBase + summary.ecoBonus
     bentoItems.push({
       label: "Eco ganado",
@@ -425,21 +469,33 @@ export class ScreenManager {
     const buttons = el(
       "div",
       `width: 100%;
-  max-width: 380px;
+  max-width: 640px;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 12px;
   margin-top: 4px;`,
     )
 
-    buttons.append(
-      this.makeGhostAction("Nueva inmersión", again, "primary"),
-      this.makeGhostAction(
-        "Volver al inicio",
-        () => this.callbacks.onReturnToHub(),
-        "neutral",
-      ),
+    const againBtn = this.makeGhostAction(
+      summary.endless ? "Otra inmersión sin fin" : "Nueva inmersión",
+      again,
+      "primary",
+      true,
     )
+    againBtn.style.flex = "65 1 0"
+    againBtn.style.width = "auto"
+
+    const hubBtn = this.makeGhostAction(
+      "Volver al inicio",
+      () => this.callbacks.onReturnToHub(),
+      "neutral",
+      true,
+    )
+    hubBtn.style.flex = "35 1 0"
+    hubBtn.style.width = "auto"
+
+    buttons.append(hubBtn, againBtn)
     content.append(buttons)
 
     content.append(
@@ -529,25 +585,39 @@ export class ScreenManager {
     const buttons = el(
       "div",
       `width: 100%;
-  max-width: 380px;
+  max-width: 640px;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 12px;
   margin-top: 4px;`,
     )
 
-    buttons.append(
-      this.makeGhostAction("Reanudar", onResume, "primary"),
-      this.makeGhostAction("Abandonar", onAbandon, "danger"),
+    const resumeBtn = this.makeGhostAction(
+      "Reanudar",
+      onResume,
+      "primary",
+      true,
     )
+    resumeBtn.style.flex = "65 1 0"
+    resumeBtn.style.width = "auto"
+
+    const abandonBtn = this.makeGhostAction(
+      "Abandonar",
+      onAbandon,
+      "danger",
+      true,
+    )
+    abandonBtn.style.flex = "35 1 0"
+    abandonBtn.style.width = "auto"
+
+    buttons.append(abandonBtn, resumeBtn)
     content.append(buttons)
 
     this.open(root, onResume)
   }
 
-  /* ---------------------------------------------
-     Marco de ventana compartido (cuadrícula + fondo)
-  --------------------------------------------- */
+  // Marco de ventana compartido (cuadrícula + fondo)
 
   private makeWindowFrame(): {
     root: HTMLElement
@@ -651,6 +721,7 @@ export class ScreenManager {
     )
   }
 
+  /** Layout panal: filas alternando 2 y 3 items (2+3+2...), centradas, con efecto zigzag. */
   private makeBentoGrid(
     items: Array<{
       label: string
@@ -659,22 +730,80 @@ export class ScreenManager {
       highlight?: boolean
     }>,
   ): HTMLElement {
-    const grid = el(
+    const wrap = el(
       "div",
-      `width: 100%;
-    max-width: 780px;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 10px;`,
+      `display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    max-width: 780px;`,
     )
 
-    for (const item of items) {
-      grid.append(
-        this.makeBentoStat(item.label, item.value, item.sub, item.highlight),
-      )
+    // --- Chunking tipo panal ---
+    const rows: Array<typeof items> = []
+    let i = 0
+    let target = 2
+
+    while (i < items.length) {
+      const remaining = items.length - i
+
+      // Si solo queda 1, agregarlo a la última fila (evita huérfanos)
+      if (remaining === 1 && rows.length > 0) {
+        rows[rows.length - 1].push(items[i])
+        i += 1
+        break
+      }
+
+      // Si quedan 3 y veníamos buscando 2, hacer fila de 3
+      // (evita 2 + 1 cuando con 3 cierra mejor)
+      if (remaining === 3 && target === 2 && rows.length > 0) {
+        rows.push(items.slice(i, i + 3))
+        i += 3
+        break
+      }
+
+      const size = Math.min(target, remaining)
+      rows.push(items.slice(i, i + size))
+      i += size
+
+      // Alternar 2 → 3 → 2 → 3...
+      target = target === 2 ? 3 : 2
     }
 
-    return grid
+    // --- Render de cada fila ---
+    for (const row of rows) {
+      const rowEl = el(
+        "div",
+        `display: flex;
+      gap: 14px;
+      justify-content: center;
+      align-items: stretch;
+      width: 100%;`,
+      )
+
+      // Las filas de 2 son más anchas por tarjeta que las de 3.
+      // Esto refuerza el efecto panal: los items de la fila superior
+      // son ligeramente más grandes que los de la fila inferior.
+      const widthPct =
+        row.length === 1 ? "60%" : row.length === 2 ? "40%" : "30%"
+
+      for (const item of row) {
+        const stat = this.makeBentoStat(
+          item.label,
+          item.value,
+          item.sub,
+          item.highlight,
+        )
+        stat.style.flex = `0 1 ${widthPct}`
+        stat.style.minWidth = "0"
+        rowEl.append(stat)
+      }
+
+      wrap.append(rowEl)
+    }
+
+    return wrap
   }
 
   private makeBentoStat(
@@ -714,6 +843,7 @@ export class ScreenManager {
       font-size: 10px;
       letter-spacing: 0.13em;
       text-transform: uppercase;
+      margin-bottom: 2px;
       color: rgba(214, 236, 240, 0.8);`,
         label,
       ),
@@ -723,7 +853,7 @@ export class ScreenManager {
       font-size: clamp(16px, 1.6vw, 22px);
       font-weight: 900;
       line-height: 1.1;
-      text-align: center;
+      text-align: left;
       overflow-wrap: anywhere;
       color: ${highlight ? HUB_ACCENT : "#ffffff"};`,
         value,
@@ -744,6 +874,7 @@ export class ScreenManager {
     label: string,
     onClick: () => void,
     variant: ActionVariant = "neutral",
+    fullWidth = true,
   ): HTMLButtonElement {
     const palette = {
       primary: {
@@ -778,7 +909,7 @@ export class ScreenManager {
       align-items: center;
       justify-content: center;
       gap: 10px;
-      width: 100%;
+      ${fullWidth ? "width: 100%;" : "width: auto;"}
       min-height: 54px;
       padding: 12px 22px;
       border-radius: 12px;
@@ -825,9 +956,68 @@ export class ScreenManager {
     return btn
   }
 
-  /* ---------------------------------------------
-     Helpers de UI
-  --------------------------------------------- */
+  // Helpers de UI
+  private ensureUltraGlowAnimation(): void {
+    if (document.getElementById("menu-ultra-glow")) return
+
+    const style = document.createElement("style")
+    style.id = "menu-ultra-glow"
+
+    style.textContent = `
+    @keyframes ultraGlow {
+      0% {
+        border-color: #94a3b8;
+        box-shadow:
+          0 0 14px rgba(148, 163, 184, 0.7),
+          inset 0 0 12px rgba(148, 163, 184, 0.3);
+      }
+      17% {
+        border-color: #38bdf8;
+        box-shadow:
+          0 0 18px rgba(56, 189, 248, 0.85),
+          inset 0 0 14px rgba(56, 189, 248, 0.4);
+      }
+      33% {
+        border-color: #a855f7;
+        box-shadow:
+          0 0 22px rgba(168, 85, 247, 0.9),
+          inset 0 0 16px rgba(168, 85, 247, 0.45);
+      }
+      50% {
+        border-color: #fbbf24;
+        box-shadow:
+          0 0 26px rgba(251, 191, 36, 1),
+          inset 0 0 18px rgba(251, 191, 36, 0.5);
+      }
+      67% {
+        border-color: #ef4444;
+        box-shadow:
+          0 0 22px rgba(239, 68, 68, 0.9),
+          inset 0 0 16px rgba(239, 68, 68, 0.45);
+      }
+      83% {
+        border-color: #0a9396;
+        box-shadow:
+          0 0 20px rgba(10, 147, 150, 0.9),
+          inset 0 0 14px rgba(10, 147, 150, 0.4);
+      }
+      100% {
+        border-color: #94a3b8;
+        box-shadow:
+          0 0 14px rgba(148, 163, 184, 0.7),
+          inset 0 0 12px rgba(148, 163, 184, 0.3);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .card-ultra-legendary {
+        animation: none !important;
+      }
+    }
+  `
+
+    document.head.appendChild(style)
+  }
 
   private ensureBubbleAnimation(): void {
     if (document.getElementById("menu-bubble-animation")) return
@@ -876,26 +1066,32 @@ export class ScreenManager {
     document.head.appendChild(style)
   }
 
-  private makeHubCta(label: string, onClick: () => void): HTMLButtonElement {
+  private makeHubCta(
+    label: string,
+    onClick: () => void,
+    fullWidth = false,
+  ): HTMLButtonElement {
     const btn = el(
       "button",
       `display: inline-flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px 22px;
-      border-radius: 12px;
-      cursor: pointer;
-      color: rgba(220, 245, 255, 0.92);
-      font: 700 clamp(15px, 1.9vw, 20px) ${titleFONT};
-      letter-spacing: 0.04em;
-      background: rgba(220, 245, 255, 0.04);
-      border: 1.5px solid rgba(220, 245, 255, 0.28);
-      backdrop-filter: blur(6px);
-      transition:
-        transform 160ms ease,
-        background 160ms ease,
-        border-color 160ms ease,
-        color 160ms ease;`,
+    align-items: center;
+    justify-content: ${fullWidth ? "center" : "flex-start"};
+    gap: 12px;
+    ${fullWidth ? "width: 100%;" : "width: auto;"}
+    padding: 12px 22px;
+    border-radius: 12px;
+    cursor: pointer;
+    color: rgba(220, 245, 255, 0.92);
+    font: 700 clamp(15px, 1.9vw, 20px) ${titleFONT};
+    letter-spacing: 0.04em;
+    background: #013f52;
+    border: 1.5px solid rgba(220, 245, 255, 0.28);
+    backdrop-filter: blur(6px);
+    transition:
+      transform 160ms ease,
+      background 160ms ease,
+      border-color 160ms ease,
+      color 160ms ease;`,
     )
 
     btn.dataset.hubCta = ""
@@ -917,14 +1113,14 @@ export class ScreenManager {
 
     btn.addEventListener("mouseenter", () => {
       btn.style.transform = "translateY(-2px)"
-      btn.style.background = "rgba(220, 245, 255, 0.10)"
+      btn.style.background = "#013f58"
       btn.style.borderColor = "rgba(220, 245, 255, 0.55)"
       btn.style.color = "#ffffff"
     })
 
     btn.addEventListener("mouseleave", () => {
       btn.style.transform = "translateY(0)"
-      btn.style.background = "rgba(220, 245, 255, 0.04)"
+      btn.style.background = "#013f52"
       btn.style.borderColor = "rgba(220, 245, 255, 0.28)"
       btn.style.color = "rgba(220, 245, 255, 0.92)"
     })
@@ -1137,24 +1333,30 @@ export class ScreenManager {
     const bg = RARITY_BACKGROUNDS[card.rarity]
     const label = RARITY_LABELS[card.rarity]
 
+    const isUltra = card.rarity === "ultra_legendary"
+
     const btn = el(
       "button",
       `position: relative;
-      flex: 0 1 clamp(170px, 26vw, 240px);
-      height: clamp(260px, 38vw, 320px);
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      cursor: pointer;
-      background: ${bg};
-      border: 6px solid ${accent};
-      border-radius: 16px;
-      overflow: hidden;
-      transition:
-        transform 160ms ease,
-        box-shadow 160ms ease,
-        filter 160ms ease;`,
+    flex: 0 1 clamp(170px, 26vw, 240px);
+    height: clamp(260px, 38vw, 320px);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
+    background: ${isUltra ? "#0f0f14" : bg};
+    border: 6px solid ${isUltra ? "#94a3b8" : accent};
+    border-radius: 16px;
+    overflow: hidden;
+    transition:
+      transform 160ms ease,
+      filter 160ms ease;`,
     )
+
+    if (isUltra) {
+      btn.classList.add("card-ultra-legendary")
+      btn.style.animation = "ultraGlow 3s infinite ease-in-out"
+    }
 
     btn.setAttribute(
       "aria-label",
@@ -1185,21 +1387,21 @@ export class ScreenManager {
     const keyBadge = el(
       "div",
       `position: absolute;
-      top: 12px;
-      right: 12px;
-      width: 26px;
-      height: 26px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: ${titleFONT};
-      font-size: 12px;
-      font-weight: 900;
-      color: ${accent};
-      background: none;
-      border: 1.5px solid ${accent};
-      border-radius: 6px;
-      z-index: 2;`,
+  top: 12px;
+  right: 12px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: ${titleFONT};
+  font-size: 12px;
+  font-weight: 900;
+  color: ${isUltra ? "#ffffff" : accent};
+  background: ${isUltra ? "rgba(0, 0, 0, 0.5)" : "none"};
+  border: 1.5px solid ${isUltra ? "#ffffff" : accent};
+  border-radius: 6px;
+  z-index: 2;`,
       `${index + 1}`,
     )
     keyBadge.setAttribute("aria-hidden", "true")
@@ -1216,24 +1418,23 @@ export class ScreenManager {
     const rarityLabel = el(
       "div",
       `font-family: ${titleFONT};
-      font-size: 16px;
-      font-weight: 900;
-      letter-spacing: 0.28em;
-      text-transform: uppercase;
-      color: ${accent};`,
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: ${isUltra ? "#ffffff" : accent};`,
       label,
     )
 
     const rarityDivider = el(
       "div",
       `width: 60%;
-      height: 1px;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        ${accent},
-        transparent
-      );`,
+  height: 1px;
+  background: ${
+    isUltra
+      ? "linear-gradient(90deg, transparent, #ffffff, transparent)"
+      : `linear-gradient(90deg, transparent, ${accent}, transparent)`
+  };`,
     )
 
     rarityArea.append(rarityLabel, rarityDivider)
@@ -1265,10 +1466,10 @@ export class ScreenManager {
     const value = el(
       "div",
       `font-family: ${titleFONT};
-      font-size: 22px;
-      font-weight: 900;
-      letter-spacing: 0.02em;
-      color: #4ade80;`,
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  color: ${isUltra ? "#ffffff" : "#4ade80"};`,
       card.value,
     )
 

@@ -76,9 +76,7 @@ export class BubbleTrail {
     this.mesh.instanceMatrix.needsUpdate = true
   }
 
-  /**
-   * @param intensity 0 = sin boost, 1 = boost máximo. Multiplica la emisión.
-   */
+  /** @param intensity 0 = sin boost, 1 = boost máximo. Multiplica la emisión. */
   public update(
     deltaTime: number,
     emitter: THREE.Vector3,

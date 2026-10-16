@@ -300,6 +300,13 @@ export class UIManager {
     )
   }
 
+  public hideToxicityHint(): void {
+    window.clearTimeout(this.toxicityHintTimeout)
+    this.toxicityHintTimeout = undefined
+    this.toxicityHintEl?.remove()
+    this.toxicityHintEl = undefined
+  }
+
   private triggerCleansing(): void {
     this.toxicitySkullEl.classList.add("cleansing")
     window.clearTimeout(this.cleansingTimeout)
@@ -356,13 +363,6 @@ export class UIManager {
       if (this.toxicityHintEl === hint) this.toxicityHintEl = undefined
       this.toxicityHintTimeout = undefined
     }, TOXICITY_HINT_DURATION)
-  }
-
-  public hideToxicityHint(): void {
-    window.clearTimeout(this.toxicityHintTimeout)
-    this.toxicityHintTimeout = undefined
-    this.toxicityHintEl?.remove()
-    this.toxicityHintEl = undefined
   }
 
   public showMessage(message: string, duration: number = 2000): void {

@@ -409,10 +409,7 @@ export class BiomeProps {
     }
   }
 
-  /**
-   * Limpia los props. Las geometrías compartidas se conservan en caché;
-   * solo se liberan los materiales únicos creados por prop.
-   */
+  /** Limpia los props: conserva geometrías compartidas y libera solo los materiales únicos. */
   public clear(): void {
     this.group.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return

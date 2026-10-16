@@ -31,6 +31,12 @@ export class CardManager {
     return chosen
   }
 
+  /** Aplica la carta y la guarda en el RunState. */
+  public pick(card: Card, ctx: CardContext): void {
+    card.apply(ctx)
+    ctx.run.cards.push(card)
+  }
+
   private rollOne(rng: Rng): Card {
     // Suma total de pesos
     let total = 0
@@ -46,11 +52,5 @@ export class CardManager {
 
     // Fallback por si algo va mal
     return this.pool[0]
-  }
-
-  /** Aplica la carta y la guarda en el RunState. */
-  public pick(card: Card, ctx: CardContext): void {
-    card.apply(ctx)
-    ctx.run.cards.push(card)
   }
 }

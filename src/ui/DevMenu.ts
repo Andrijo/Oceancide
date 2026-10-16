@@ -68,15 +68,15 @@ export class DevMenu {
     this.render()
   }
 
+  /** Vuelve a pintar el panel (si está abierto), p. ej. tras cambiar de bioma. */
+  public refresh(): void {
+    if (this.open) this.render()
+  }
+
   private setOpen(open: boolean): void {
     this.open = open
     this.panel.style.display = open ? "block" : "none"
     if (open) this.render()
-  }
-
-  /** Vuelve a pintar el panel (si está abierto), p. ej. tras cambiar de bioma. */
-  public refresh(): void {
-    if (this.open) this.render()
   }
 
   private makeButton(

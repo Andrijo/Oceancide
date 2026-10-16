@@ -15,11 +15,7 @@ function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
 }
 
-/**
- * Perfil irregular del borde, valores en [-1, 1]: ondulación suave + ruido fino +
- * zarcillos afilados. `spikeSign` decide hacia dónde apuntan los zarcillos
- * (+1 = se adelantan al cubrir, -1 = se quedan rezagados al retirarse).
- */
+/** Perfil irregular del borde [-1, 1]: ondulación + ruido fino + zarcillos; los spikes apuntan hacia spikeSign. */
 function makeShape(spikeSign: 1 | -1): Float32Array {
   const shape = new Float32Array(SEGMENTS + 1)
 
@@ -81,11 +77,7 @@ export class BiomeTransition {
     window.addEventListener("resize", () => this.resize())
   }
 
-  /**
-   * Inicia la transición. `onCovered` se ejecuta una sola vez, cuando la pantalla
-   * está completamente negra (momento ideal para cambiar de bioma).
-   * Devuelve false si ya hay una transición en curso.
-   */
+  /** Inicia la transición; `onCovered` se ejecuta con la pantalla negra. Devuelve false si ya hay una en curso. */
   public play(onCovered: () => void): boolean {
     if (this.phase !== "idle") return false
 

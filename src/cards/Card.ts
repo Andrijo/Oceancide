@@ -4,12 +4,10 @@
 import type { Turtle } from "@entities/Turtle"
 import type { GameState } from "@core/types"
 
-export type CardRarity = "common" | "rare" | "epic" | "legendary" | "curse"
+export type CardRarity =
+  "common" | "rare" | "epic" | "legendary" | "curse" | "ultra_legendary"
 
-/**
- * Estado de la run que las cartas pueden modificar.
- * Vive en Game y se reinicia al empezar una run.
- */
+/** Estado de la run que las cartas pueden modificar; vive en Game y se reinicia al empezar una run. */
 export interface RunState {
   /** Cartas elegidas en esta run, en orden. */
   cards: Card[]
@@ -33,10 +31,7 @@ export function createRunState(): RunState {
   }
 }
 
-/**
- * Contexto que recibe una carta al aplicarse.
- * Las cartas pueden tocar `turtle.stats`, `state` o `run`.
- */
+/** Contexto que recibe una carta al aplicarse: puede tocar `turtle.stats`, `state` o `run`. */
 export interface CardContext {
   turtle: Turtle
   state: GameState

@@ -76,10 +76,7 @@ export class RenderPipeline {
     }
   }
 
-  /**
-   * Fija el strength objetivo del bloom (0..1). El valor real se interpola
-   * suavemente para evitar saltos cuando cambia de bioma.
-   */
+  /** Fija el strength objetivo del bloom (0..1); el valor real se interpola suavemente. */
   public setBloomStrength(strength: number): void {
     if (!this.bloomAllowed) return
     this.targetStrength = THREE.MathUtils.clamp(strength, 0, 1)
