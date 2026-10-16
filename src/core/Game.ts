@@ -90,6 +90,9 @@ export class Game {
   private transition: BiomeTransition
   private pendingAdvance = false
 
+  private endlessMode = false
+  private loop = 0
+
   // Timer por bioma
   private biomeTimeRemaining = 0
   private biomeTimeLimit = 0
@@ -137,7 +140,8 @@ export class Game {
 
     this.meta = this.saveManager.load()
     this.screens = new ScreenManager({
-      onStartRun: () => this.startRun(),
+      onStartRun: () => this.startRun(false),
+      onStartEndless: () => this.startRun(true),
       onReturnToHub: () => this.showHub(),
       onResetProgress: () => {
         this.meta = this.saveManager.reset()
@@ -276,17 +280,7 @@ export class Game {
       return
     }
 
-    // Forzar elección de cartas
-    if (e.code === "KeyK") {
-      if (
-        !e.repeat &&
-        this.screen === "run" &&
-        !this.transition.blocksGameplay
-      ) {
-        this.openCardChoice()
-      }
-      return
-    }
+    // KeyK: prueba manual de elección de cartas (deshabilitado).
 
     if (this.paused) return
 
@@ -341,15 +335,19 @@ export class Game {
     this.collectedInZone = 0
     this.state.zoneProgress = 0
 
-    // Timer por bioma
+    // Loop: cuántas veces hemos recorrido los 10 biomas
+    this.loop = Math.floor(index / BIOME_ORDER.length)
+    const biomeKey = BIOME_ORDER[index % BIOME_ORDER.length]
+
+    // Timer por bioma (escala con el loop)
     this.biomeTimeLimit = Math.max(
       BIOME_TIME_MIN,
-      BIOME_TIME_BASE - index * BIOME_TIME_DECAY,
+      BIOME_TIME_BASE - (index % BIOME_ORDER.length) * BIOME_TIME_DECAY,
     )
     this.biomeTimeRemaining = this.biomeTimeLimit
 
     const rng = new Rng(deriveSeed(this.runSeed, index))
-    this.biomeGenerator.generateBiome(BIOME_ORDER[index], rng)
+    this.biomeGenerator.generateBiome(biomeKey, rng, this.loop)
     this.applyBiomeLighting()
 
     const sun = this.biomeGenerator.getSun()
@@ -497,6 +495,7 @@ export class Game {
     this.transition.cancel()
     this.pendingAdvance = false
     this.paused = false
+    this.endlessMode = false
     this.screen = "hub"
     this.state.isRunning = false
     this.clearInput()
@@ -505,7 +504,9 @@ export class Game {
     this.screens.showHub(this.meta)
   }
 
-  private startRun(): void {
+  private startRun(endless = false): void {
+    this.endlessMode = endless
+
     this.transition.cancel()
     this.pendingAdvance = false
     this.paused = false
@@ -549,6 +550,8 @@ export class Game {
       durationSeconds: this.runTime,
       seed: this.runSeed,
       cardsPicked: this.runState.cards.map((c) => c.id),
+      endless: this.endlessMode,
+      loopsCompleted: Math.floor(this.biomeIndex / BIOME_ORDER.length),
     }
 
     applyRunToMeta(this.meta, summary)
@@ -569,7 +572,9 @@ export class Game {
 
   private advanceBiome(): void {
     const next = this.biomeIndex + 1
-    if (next >= BIOME_ORDER.length) {
+
+    // Solo termina si NO es endless y ya no hay más biomas
+    if (!this.endlessMode && next >= BIOME_ORDER.length) {
       this.endRun("completed")
       return
     }
@@ -608,7 +613,7 @@ export class Game {
   }
 
   private restartRun(): void {
-    this.startRun()
+    this.startRun(this.endlessMode)
     this.devMenu?.refresh()
   }
 
@@ -764,7 +769,7 @@ export class Game {
     this.updateBuildHud()
 
     if (this.state.zoneProgress >= 100) {
-      if (this.biomeIndex + 1 < BIOME_ORDER.length) {
+      if (this.endlessMode || this.biomeIndex + 1 < BIOME_ORDER.length) {
         this.openCardChoice()
       } else {
         this.endRun("completed")
@@ -798,16 +803,19 @@ export class Game {
         state: this.state,
         run: this.runState,
       })
+
+      // Bioluminiscencia: activa/refuerza el glow de la tortuga
+      if (card.id === "bioluminescence") {
+        const next = Math.min(1, this.turtle.getGlow() + 0.5)
+        this.turtle.setGlow(next)
+      }
+
       this.uiManager.showMessage(`+ ${card.name}`, 1500)
       this.advanceBiome()
     })
   }
 
-  /**
-   * Intenta matar al jugador. Si tiene revives disponibles, consume uno y
-   * resetea la toxicidad al 50%. Si no, termina la run.
-   * Devuelve true si la run sigue viva (se revivió), false si murió.
-   */
+  /** Intenta matar al jugador: consume un revive (toxicity al 50%) o termina la run; true si sigue viva. */
   private tryKill(): boolean {
     if (this.godMode) return true
 

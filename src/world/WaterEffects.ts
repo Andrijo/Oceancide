@@ -19,17 +19,11 @@ const SHAFT_LENGTH = 90
 const SHAFT_OPACITY = 0.08
 const LIGHT = new THREE.Color(0.75, 0.95, 1)
 
-/* ---------------------------------------------
-   Niebla con absorción por canal
---------------------------------------------- */
+// Niebla con absorción por canal
 
 let absorptionInstalled = false
 
-/**
- * Sustituye el chunk de niebla de three para que FogExp2 atenúe cada canal
- * a distinta velocidad. Afecta a todos los materiales con niebla, y debe
- * ejecutarse antes de que se compile el primero (basta con el constructor).
- */
+/** Sustituye el chunk de niebla de three para atenuar cada canal a distinta velocidad. */
 export function installAbsorptionFog(): void {
   if (absorptionInstalled) return
   absorptionInstalled = true
@@ -47,9 +41,7 @@ export function installAbsorptionFog(): void {
 #endif`
 }
 
-/* ---------------------------------------------
-   Sprite circular suave (compartido)
---------------------------------------------- */
+// Sprite circular suave (compartido)
 
 let softDot: THREE.CanvasTexture | null = null
 
@@ -302,9 +294,7 @@ export class WaterEffects {
     this.refreshColors()
   }
 
-  /**
-   * @param cleanliness 0 = bioma contaminado, 1 = limpio. Los rayos se marcan más con agua limpia.
-   */
+  /** @param cleanliness 0 = contaminado, 1 = limpio; los rayos se marcan más con agua limpia. */
   public update(
     deltaTime: number,
     cameraPosition: THREE.Vector3,

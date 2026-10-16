@@ -16,7 +16,7 @@ const CLEAN_FOG_FACTOR = 0.55
 const CLEAN_BRIGHTEN = 0.15
 const VISUAL_SMOOTHING = 2
 
-const HALF_SIZE = 40
+const HALF_SIZE = 60
 const DEBRIS_BASE_COUNT = 200
 const BAND_ABOVE_FLOOR = 6
 const BAND_HEIGHT = 20
@@ -156,11 +156,7 @@ const BIOME_AMBIENCE: Record<BiomeKey, BiomeAmbience> = {
   },
 }
 
-/* ---------------------------------------------
-   Luz solar por bioma
-   El sol se apaga con la profundidad: desde el bioma 5 solo
-   queda luz ambiental y la bioluminiscencia de los puntos de luz.
---------------------------------------------- */
+// Luz solar por bioma: se apaga con la profundidad (desde el bioma 5 solo luz ambiental y bioluminiscencia).
 
 const MAX_SUN_INTENSITY = 1.3
 
@@ -184,9 +180,7 @@ const CAUSTICS: Partial<Record<BiomeKey, number>> = {
   subphotic: 0.2,
 }
 
-/* ---------------------------------------------
-   Ruido de valor (relieve del suelo)
---------------------------------------------- */
+// Ruido de valor (relieve del suelo)
 
 function hash(x: number, z: number): number {
   let h = Math.imul(x, 374761393) + Math.imul(z, 668265263)
@@ -267,13 +261,19 @@ export class BiomeGenerator {
     scene.add(this.hemisphereLight)
   }
 
-  public generateBiome(biomeKey: BiomeKey, rng: Rng): void {
+  public generateBiome(biomeKey: BiomeKey, rng: Rng, loop = 0): void {
     // Liberar recursos del bioma anterior antes de reemplazarlos
     this.disposeDebris()
     this.disposeFloor()
     this.disposeParticles()
 
-    this.currentBiome = BIOMES[biomeKey]
+    const base = BIOMES[biomeKey]
+    this.currentBiome = {
+      ...base,
+      toxicityRate: base.toxicityRate * (1 + 1.0 * loop),
+      fogDensity: base.fogDensity * (1 + 0.2 * loop),
+      debrisDensity: base.debrisDensity * (1 + 0.3 * loop),
+    }
     this.currentAmbience = BIOME_AMBIENCE[biomeKey]
     this.currentBiomeKey = biomeKey
     this.causticBase = CAUSTICS[biomeKey] ?? 0
@@ -400,11 +400,7 @@ export class BiomeGenerator {
     return collected
   }
 
-  /**
-   * Elimina un debris del bioma. Si el debris no está en la lista,
-   * no hace nada. No llama a dispose() para no liberar materiales
-   * compartidos; solo quita del grupo y actualiza la contaminación.
-   */
+  /** Elimina un debris del bioma sin dispose (materiales compartidos); solo lo quita y actualiza la contaminación. */
   public removeDebris(debris: Debris): void {
     if (debris.removed) return
 
@@ -447,17 +443,12 @@ export class BiomeGenerator {
     this.updateParticles(deltaTime)
   }
 
-  /**
-   * Efectos del volumen de agua. Llamar cada frame, después de mover la cámara.
-   * Con deltaTime = 0 (pausa) la animación se congela pero la cúpula sigue a la cámara.
-   */
+  /** Efectos del volumen de agua; llamar cada frame. Con deltaTime = 0 la animación se congela. */
   public updateWater(deltaTime: number, cameraPosition: THREE.Vector3): void {
     this.water.update(deltaTime, cameraPosition, 1 - this.visualRatio)
   }
 
-  /* ---------------------------------------------
-     Accesores
-  --------------------------------------------- */
+  // Accesores
 
   public getDebrisList(): Debris[] {
     return this.debrisList
@@ -475,10 +466,7 @@ export class BiomeGenerator {
     return this.currentBiome.name
   }
 
-  /**
-   * Sol del bioma actual. `darkness` (0..1) indica cuánta luz solar falta;
-   * Game la usa para reforzar las luces de bioluminiscencia.
-   */
+  /** Sol del bioma actual; `darkness` (0..1) es cuánta luz solar falta. */
   public getSun(): { intensity: number; color: number; darkness: number } {
     const sun = SUN[this.currentBiomeKey]
     return {
@@ -541,12 +529,7 @@ export class BiomeGenerator {
 
   // Terreno
 
-  /**
-   * Desplazamiento vertical del relieve respecto a la profundidad base.
-   * Una sola fuente de verdad para la malla y para getFloorHeight().
-   * Con ruido normalizado a [-1, 1], el máximo es amp * (1 + 0.25 * detail),
-   * que es exactamente lo que asume getBounds().
-   */
+  /** Desplazamiento vertical del relieve respecto a la profundidad base (fuente única para malla y getFloorHeight). */
   private floorOffset(x: number, z: number): number {
     const {
       floorAmplitude: amp,
