@@ -143,12 +143,20 @@ export class Turtle {
   private time = 0
   private readonly turnSpeed = 3
 
+  /* Spinning */
   private isSpinning = false
   private spinProgress = 0
   private spinDirection = 1
   private readonly spinDuration = 0.8
 
   private completedRoll = 0
+
+  // Backflip
+  private isBackflipping = false
+  private backflipProgress = 0
+  private readonly backflipDuration = 0.7
+  private backflipStartYaw = 0
+  private completedPitch = 0
 
   // Boost de giro (Q/E)
   private spinBoost = 0
@@ -216,6 +224,14 @@ export class Turtle {
     this.spinBoost = this.spinBoostMultiplier
   }
 
+  public triggerBackflip(): void {
+    if (this.isBackflipping || this.isSpinning) return
+
+    this.isBackflipping = true
+    this.backflipProgress = 0
+    this.backflipStartYaw = this.mesh.rotation.y
+  }
+
   public reset(position: THREE.Vector3): void {
     this.mesh.position.copy(position)
     this.mesh.rotation.set(0, 0, 0)
@@ -228,6 +244,9 @@ export class Turtle {
     this.spinBoost = 0
     this.boostEnergy = this.boostMaxEnergy
     this.boostActiveThisFrame = false
+    this.isBackflipping = false
+    this.backflipProgress = 0
+    this.completedPitch = 0
   }
 
   public addSpinBoostMultiplier(delta: number): void {
@@ -282,7 +301,6 @@ export class Turtle {
     const wantsBoost = input.boost
     const canBoost = this.boostEnergy >= this.boostMinToStart
     const isBoosting = wantsBoost && canBoost
-
     this.boostActiveThisFrame = isBoosting
 
     if (isBoosting) {
@@ -333,7 +351,31 @@ export class Turtle {
 
     this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-4 * deltaTime))
 
-    this.mesh.rotation.y += steer * this.turnSpeed * deltaTime
+    // Giro normal vs Backflip
+    let extraPitch = 0
+
+    if (this.isBackflipping) {
+      this.backflipProgress += deltaTime / this.backflipDuration
+      const t = Math.min(1, this.backflipProgress)
+      // smoothstep para acelerar y desacelerar la voltereta
+      const eased = t * t * (3 - 2 * t)
+
+      // Gira la dirección 180° (yaw) suavemente durante el salto
+      this.mesh.rotation.y = this.backflipStartYaw + Math.PI * eased
+
+      if (this.backflipProgress >= 1) {
+        this.isBackflipping = false
+        this.backflipProgress = 1
+        this.mesh.rotation.y = this.backflipStartYaw + Math.PI
+        this.completedPitch -= Math.PI * 2 // Conserva la rotación visual
+      } else {
+        // Rotación de 360° en el eje X (pitch). Negativo para voltereta hacia atrás.
+        extraPitch = -eased * Math.PI * 2
+      }
+    } else {
+      // Giro normal
+      this.mesh.rotation.y += steer * this.turnSpeed * deltaTime
+    }
 
     let extraRollAngle = 0
 
@@ -378,7 +420,8 @@ export class Turtle {
     )
     position.y = THREE.MathUtils.clamp(position.y, bounds.minY, bounds.maxY)
 
-    this.animateSwimming(deltaTime, steer, vertical, extraRollAngle)
+    // Pasamos extraPitch a la animación
+    this.animateSwimming(deltaTime, steer, vertical, extraRollAngle, extraPitch)
     this.updateGlow(deltaTime)
   }
 
@@ -420,6 +463,10 @@ export class Turtle {
     this.glowTarget = 0
     this.glowLevel = 0
     this.glowLight.intensity = 0
+
+    this.isBackflipping = false
+    this.backflipProgress = 0
+    this.completedPitch = 0
 
     this.shellMaterial.color.copy(this.baseColors.shell)
     this.skinMaterial.color.copy(this.baseColors.skin)
@@ -591,9 +638,10 @@ export class Turtle {
 
   private animateSwimming(
     deltaTime: number,
-    turn: number,
+    steer: number,
     vertical: number,
     extraRollAngle: number,
+    extraPitch: number = 0,
   ): void {
     const speedRatio = THREE.MathUtils.clamp(
       Math.abs(this.speed) / this.stats.speed,
@@ -611,11 +659,17 @@ export class Turtle {
     this.rightBackFlipper.rotation.x = paddle * swimAmplitude * 0.45
     this.tail.rotation.y = paddle * 0.18
 
-    const pitchTarget = -vertical * 0.38 + Math.sin(this.time * 2.6) * 0.035
+    // Cabeceo vertical + voltereta + conservación de rotación
+    const pitchTarget =
+      -vertical * 0.38 +
+      Math.sin(this.time * 2.6) * 0.035 +
+      this.completedPitch +
+      extraPitch
+
     this.model.rotation.x +=
       (pitchTarget - this.model.rotation.x) * (1 - Math.exp(-6 * deltaTime))
 
-    const bankTarget = -turn * 0.28
+    const bankTarget = -steer * 0.28
     const baseRoll = Math.sin(this.time * 4.5) * 0.07
     const targetRoll =
       bankTarget + baseRoll + this.completedRoll + extraRollAngle
