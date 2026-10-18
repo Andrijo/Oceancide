@@ -109,6 +109,8 @@ export class RenderPipeline {
   /** Ajusta el tamaño del composer y del bloom al redimensionar. */
   public setSize(width: number, height: number): void {
     if (this.composer) {
+      // El pixel ratio puede cambiar (p. ej. al mover la ventana a otro monitor).
+      this.composer.setPixelRatio(this.renderer.getPixelRatio())
       this.composer.setSize(width, height)
     }
     if (this.bloomPass) {

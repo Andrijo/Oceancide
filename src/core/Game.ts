@@ -114,6 +114,10 @@ export class Game {
   private runSeed = randomSeed()
   private runTime = 0
 
+  // Vectores temporales reutilizados: evitan asignar por frame (GC churn).
+  private readonly tmpCameraTarget = new THREE.Vector3()
+  private readonly tmpProjected = new THREE.Vector3()
+
   constructor() {
     this.scene = new THREE.Scene()
 
@@ -340,6 +344,8 @@ export class Game {
   private handleResize(): void {
     this.camera.aspect = window.innerWidth / window.innerHeight
     this.camera.updateProjectionMatrix()
+    // Reaplicar el pixel ratio: si la ventana cambia de monitor el DPR puede variar.
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     this.renderer.setSize(window.innerWidth, window.innerHeight)
     this.renderPipeline.setSize(window.innerWidth, window.innerHeight)
   }
@@ -400,17 +406,18 @@ export class Game {
   }
 
   private getCameraTarget(): THREE.Vector3 {
-    return CAMERA_OFFSET.clone()
+    return this.tmpCameraTarget
+      .copy(CAMERA_OFFSET)
       .applyAxisAngle(
         UP,
         this.turtle.mesh.rotation.y + (this.lookBack ? Math.PI : 0),
       )
-      .add(this.turtle.getPosition())
+      .add(this.turtle.mesh.position)
   }
 
   private snapCamera(): void {
     this.camera.position.copy(this.getCameraTarget())
-    this.camera.lookAt(this.turtle.getPosition())
+    this.camera.lookAt(this.turtle.mesh.position)
   }
 
   private computeStructurePhase(): number {
@@ -597,7 +604,7 @@ export class Game {
   }
 
   private orbitCamera(time: number): void {
-    const center = this.turtle.getPosition()
+    const center = this.turtle.mesh.position
     const angle = time * 0.15
     this.camera.position.set(
       center.x + Math.sin(angle) * 14,
@@ -662,8 +669,7 @@ export class Game {
   private projectToScreen(
     worldPosition: THREE.Vector3,
   ): { x: number; y: number } | null {
-    const pos = worldPosition.clone()
-    pos.project(this.camera)
+    const pos = this.tmpProjected.copy(worldPosition).project(this.camera)
 
     if (pos.z > 1) return null
 
@@ -725,14 +731,15 @@ export class Game {
 
     const smoothing = 1 - Math.exp(-6 * deltaTime)
     this.camera.position.lerp(this.getCameraTarget(), smoothing)
-    this.camera.lookAt(this.turtle.getPosition())
+    this.camera.lookAt(this.turtle.mesh.position)
 
     // Recolección manual
     const collected = this.biomeGenerator.updateDebris(
-      this.turtle.getPosition(),
+      this.turtle.mesh.position,
       this.turtle.getCollectionRadius(),
       time,
       deltaTime,
+      this.input.boost,
     )
 
     const required = Math.max(
@@ -761,9 +768,14 @@ export class Game {
     for (const debris of collected) {
       this.state.debrisCollected++
 
-      const eco = Math.round(debris.ecoValue * this.runState.ecoMultiplier)
+      // Frágil tocado en boost: se ha roto y no da eco (ya soltó esquirlas).
+      const eco = debris.shattered
+        ? 0
+        : Math.round(debris.ecoValue * this.runState.ecoMultiplier)
       this.state.ecoAwareness += eco
-      this.collectedInZone++
+
+      // Las esquirlas de trampas/frágiles no cuentan para el objetivo de la zona.
+      if (!debris.isFragment) this.collectedInZone++
 
       if (!this.godMode) {
         const reduction =
@@ -772,7 +784,7 @@ export class Game {
         this.state.toxicity = Math.max(0, this.state.toxicity - reduction)
       }
 
-      this.showFloatingEco(debris, eco)
+      if (eco > 0) this.showFloatingEco(debris, eco)
     }
 
     // Simbiosis: eco por segundo por filtro activo (una vez por frame)
@@ -925,7 +937,7 @@ export class Game {
 
     this.bubbles.update(
       simDelta,
-      this.turtle.getPosition(),
+      this.turtle.mesh.position,
       this.turtle.mesh.rotation.y,
       boosting,
       spinIntensity,

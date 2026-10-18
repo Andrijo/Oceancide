@@ -42,8 +42,20 @@ function cachedGeometry(
 
 // Fabricación de props
 
+// La roca varía de tamaño por escala, pero el radio de la malla se cuantiza a un
+// puñado de valores para poder compartir (y no acumular) geometrías entre props.
+const ROCK_RADIUS_STEPS = 5
+
 function createRock(rng: Rng): THREE.Object3D {
-  const geometry = new THREE.DodecahedronGeometry(1 + rng.range(0, 2), 0)
+  const step = Math.round(
+    (rng.range(0, 2) / 2) * (ROCK_RADIUS_STEPS - 1),
+  )
+  const radius = 1 + (step / (ROCK_RADIUS_STEPS - 1)) * 2
+
+  const geometry = cachedGeometry(
+    `rock-${step}`,
+    () => new THREE.DodecahedronGeometry(radius, 0),
+  )
 
   const material = new THREE.MeshStandardMaterial({
     color: randomColor(rng, 0x3d4a54, 0.08),
