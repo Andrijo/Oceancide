@@ -8,7 +8,7 @@ import {
 } from "@core/types"
 import { BiomeProps } from "./BiomeProps"
 import { WaterEffects, getSoftDot } from "./WaterEffects"
-import { Debris } from "@entities/Debris"
+import { Debris, updateLeakPulse } from "@entities/Debris"
 import type { Rng } from "@core/rng"
 
 const WHITE = new THREE.Color(1, 1, 1)
@@ -21,6 +21,9 @@ const DEBRIS_BASE_COUNT = 200
 const BAND_ABOVE_FLOOR = 6
 const BAND_HEIGHT = 20
 const FLOOR_CLEARANCE = 2 // margen sobre la cima más alta del relieve
+
+// Suelo de contaminación mientras quede una fuga activa (hazard "lixivia").
+const LEAK_POLLUTION_FLOOR = 0.35
 
 type BiomeAmbience = {
   floorAmplitude: number
@@ -222,9 +225,13 @@ export class BiomeGenerator {
   private hemisphereLight?: THREE.HemisphereLight
 
   private initialDebrisCount = 0
+  private rng?: Rng
 
   private pollutionTotal = 0
   private pollutionRemaining = 0
+  /** Desechos con `hazard: "lixivia"` vivos: mantienen el agua contaminada. */
+  private leakingRemaining = 0
+  private leakingInitial = 0
 
   private baseColor = new THREE.Color()
   private waterColor = new THREE.Color()
@@ -310,6 +317,9 @@ export class BiomeGenerator {
       DEBRIS_BASE_COUNT * this.currentBiome.debrisDensity,
     )
 
+    this.rng = rng
+    this.leakingRemaining = 0
+
     for (let i = 0; i < this.initialDebrisCount; i++) {
       const position = new THREE.Vector3(
         rng.range(-HALF_SIZE, HALF_SIZE),
@@ -321,7 +331,10 @@ export class BiomeGenerator {
         position,
         Debris.pickDefinition(biomeKey, rng),
         rng,
+        bounds,
       )
+
+      if (debris.hazard === "lixivia") this.leakingRemaining++
 
       this.debrisGroup.add(debris.mesh)
       this.debrisList.push(debris)
@@ -333,6 +346,12 @@ export class BiomeGenerator {
     )
 
     this.pollutionRemaining = this.pollutionTotal
+    this.leakingInitial = this.leakingRemaining
+
+    // Contraste automático: separa cada desecho del color del agua del bioma.
+    for (const debris of this.debrisList) {
+      debris.adaptToWater(this.baseColor)
+    }
 
     this.generateTerrain()
 
@@ -375,8 +394,12 @@ export class BiomeGenerator {
     collectionRadius: number,
     time: number,
     deltaTime: number,
+    boosting: boolean,
   ): Debris[] {
     const collected: Debris[] = []
+
+    // Las fugas latan para que el jugador las identifique.
+    updateLeakPulse(time)
 
     for (let i = this.debrisList.length - 1; i >= 0; i--) {
       const debris = this.debrisList[i]
@@ -388,7 +411,17 @@ export class BiomeGenerator {
       }
 
       if (debris.mesh.position.distanceTo(turtlePosition) < collectionRadius) {
+        // Frágil en boost: se rompe sin dar eco (premia acercarse con calma).
+        const shatters = debris.hazard === "fragil" && boosting
+        if (shatters) debris.shatter()
+
         collected.push(debris)
+
+        // Trampas y frágiles sueltan esquirlas que también hay que limpiar.
+        if (debris.hazard === "trampa" || shatters) {
+          this.spawnFragments(debris.mesh.position, shatters ? 3 : 2)
+        }
+
         this.removeDebrisInternal(debris, i)
       }
     }
@@ -398,6 +431,48 @@ export class BiomeGenerator {
     }
 
     return collected
+  }
+
+  /**
+   * Suelta microfragmentos alrededor de un punto (trampas y desechos frágiles).
+   * Se añaden al final de la lista; el bucle de `updateDebris` recorre hacia
+   * atrás, así que no se visitan en el mismo frame.
+   */
+  public spawnFragments(origin: THREE.Vector3, count: number): void {
+    const rng = this.rng
+    if (!rng) return
+
+    const bounds = this.getBounds()
+
+    for (let i = 0; i < count; i++) {
+      const position = new THREE.Vector3(
+        THREE.MathUtils.clamp(
+          origin.x + rng.range(-1.2, 1.2),
+          -HALF_SIZE,
+          HALF_SIZE,
+        ),
+        THREE.MathUtils.clamp(
+          origin.y + rng.range(-0.8, 0.8),
+          bounds.minY,
+          bounds.maxY,
+        ),
+        THREE.MathUtils.clamp(
+          origin.z + rng.range(-1.2, 1.2),
+          -HALF_SIZE,
+          HALF_SIZE,
+        ),
+      )
+
+      const fragment = Debris.createFragment(position, rng, bounds)
+      fragment.adaptToWater(this.baseColor)
+
+      this.debrisGroup.add(fragment.mesh)
+      this.debrisList.push(fragment)
+
+      // Las esquirlas también contaminan: limpiar la trampa cuesta más trabajo.
+      this.pollutionTotal += fragment.pollution
+      this.pollutionRemaining += fragment.pollution
+    }
   }
 
   /** Elimina un debris del bioma sin dispose (materiales compartidos); solo lo quita y actualiza la contaminación. */
@@ -415,9 +490,21 @@ export class BiomeGenerator {
   }
 
   public getPollutionRatio(): number {
-    return this.pollutionTotal > 0
-      ? this.pollutionRemaining / this.pollutionTotal
-      : 0
+    if (this.pollutionTotal <= 0) return 0
+
+    const ratio = this.pollutionRemaining / this.pollutionTotal
+
+    // Mientras queden fugas activas el agua no se comporta como limpia: hay que
+    // retirarlas para que la niebla se aclare y pare la toxicidad pasiva.
+    // Baja según se van quitando, para que el progreso parcial se note.
+    if (this.leakingRemaining <= 0) return ratio
+
+    const share =
+      this.leakingInitial > 0
+        ? this.leakingRemaining / this.leakingInitial
+        : 1
+
+    return Math.max(ratio, LEAK_POLLUTION_FLOOR * share)
   }
 
   // Visuals
@@ -493,6 +580,8 @@ export class BiomeGenerator {
     }
     this.debrisGroup.clear()
     this.debrisList = []
+    this.leakingRemaining = 0
+    this.leakingInitial = 0
   }
 
   private disposeFloor(): void {
@@ -688,6 +777,14 @@ export class BiomeGenerator {
 
   private removeDebrisInternal(debris: Debris, index: number): void {
     debris.removed = true
+
+    if (debris.hazard === "lixivia") {
+      this.leakingRemaining = Math.max(0, this.leakingRemaining - 1)
+    }
+
+    // Los desechos "nube" (y los microfragmentos) tienen geometría y material
+    // propios: si no se liberan al recogerlos, se acumulan en la GPU.
+    debris.dispose()
 
     this.debrisGroup.remove(debris.mesh)
     this.debrisList.splice(index, 1)

@@ -102,6 +102,8 @@ export const DEBRIS_VISUALS: Record<string, DebrisVisual> = {
     clearcoat: 1,
     clearcoatRoughness: 0.05,
     wetness: 1,
+    emissive: 0x3a2a6b, // iridiscencia de película de crudo; late por ser fuga
+    glow: 0.15,
     deformation: 0.7,
   },
 
@@ -642,6 +644,19 @@ export const DEBRIS_VISUALS: Record<string, DebrisVisual> = {
     biofouling: 0.5,
     emissive: 0xd6431f,
     glow: 0.3,
+    deformation: 0.9,
+  },
+
+  // Esquirla que sueltan las trampas y los desechos frágiles (Fase 1).
+  // No pertenece a ningún bioma; la genera BiomeGenerator en runtime.
+  microfragmento: {
+    shape: "cloud",
+    color: 0xdfe6ee,
+    scale: 0.7,
+    opacity: 0.75,
+    roughness: 0.85,
+    metalness: 0.05,
+    weathering: 0.5,
     deformation: 0.9,
   },
 }

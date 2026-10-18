@@ -31,6 +31,29 @@ La columna **Desechos** es la densidad relativa con la que se generan (sobre una
 
 Cada bioma tiene su propio catálogo de desechos (botellas, redes fantasma, microplásticos, barriles, vertidos de petróleo...) con aspecto, valor ecológico y toxicidad propios. El catálogo completo está en `src/entities/debrisCatalog.ts`.
 
+Los desechos no son todos iguales. Cada tipo define, en el catálogo, **dos comportamientos independientes**:
+
+**Movimiento** (antes de tocarlo):
+
+| Comportamiento | Efecto |
+| --- | --- |
+| *(sin definir)* | Inerte: flota con un balanceo suave. |
+| `deriva` | Se desplaza en horizontal con la corriente; más difícil de interceptar. |
+| `hunde` | Desciende lento hasta el borde inferior de la banda. |
+| `flota` | Sube lento hasta el borde superior. |
+| `reposa` | Quieto en el borde inferior: hay que bajar a por él. |
+
+**Peligro** (al tocarlo):
+
+| Peligro | Efecto |
+| --- | --- |
+| *(sin definir)* | Ninguno. |
+| `fragil` | Si llegas en **boost**, se rompe: suelta 3 microfragmentos y no da eco. Con calma se recoge entero. |
+| `trampa` | Al recogerlo suelta 2 microfragmentos que también hay que limpiar. |
+| `lixivia` | Mientras siga ahí, **mantiene el agua contaminada**: la niebla no se aclara del todo y la toxicidad pasiva no para. Su emisivo **late** para que se distinga. |
+
+Además, cada tipo tiene un **peso** de aparición: los comunes llenan el bioma y los raros (trampas, fugas) aparecen de verdad como excepción. La selección es ponderada (`Rng.pickWeighted`), no uniforme.
+
 ## Sistemas de juego
 
 ### Toxicidad
@@ -38,6 +61,7 @@ Cada bioma tiene su propio catálogo de desechos (botellas, redes fantasma, micr
 La toxicidad es la barra de peligro de la run (0 a 100) y se muestra como una **calavera que se va llenando** en la parte superior de la pantalla:
 
 - **Sube sola** mientras haya desechos en el bioma, a un ritmo proporcional a la contaminación restante y a la tasa de toxicidad de la zona.
+- Las **fugas** (desechos `lixivia`, con el emisivo latiendo) mantienen la contaminación por encima de un suelo mientras no se retiren, así que el agua no acaba de aclararse hasta limpiarlas todas.
 - **Baja** cada vez que recoges un desecho (más cuanto más contaminante sea) o cuando una esfera filtradora absorbe uno.
 - Al **cambiar de bioma** se arrastra la mitad, pero nunca baja del **suelo de contaminación** del bioma (a más profundidad, más alto).
 - Si llega al **100%**, la run termina ("¡Se acabó! La toxicidad ganó.").
@@ -150,6 +174,7 @@ El resumen de una inmersión sin fin es propio: muestra los **biomas sobrevivido
 | `J`             | Bajar                       |
 | `I`             | Impulso                     |
 | `Q` / `E`       | Giro de 360° (dash)         |
+| `Espacio`       | Backflip                    |
 | `B`             | Construir esfera filtradora |
 | `C` (mantener)  | Ver hacia atrás             |
 | `Esc` / `Enter` | Pausar / reanudar           |

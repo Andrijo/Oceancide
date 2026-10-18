@@ -29,6 +29,29 @@ export class Rng {
   public pick<T>(items: readonly T[]): T {
     return items[this.int(items.length)]
   }
+
+  /**
+   * Elige un elemento con probabilidad proporcional a su peso (los pesos
+   * negativos se tratan como 0). Si todos pesan 0, cae a `pick` uniforme.
+   */
+  public pickWeighted<T>(items: readonly T[], weightOf: (item: T) => number): T {
+    if (items.length === 0) {
+      throw new Error("[Rng.pickWeighted] lista vacía")
+    }
+
+    let total = 0
+    for (const item of items) total += Math.max(0, weightOf(item))
+
+    if (total <= 0) return this.pick(items)
+
+    let roll = this.next() * total
+    for (const item of items) {
+      roll -= Math.max(0, weightOf(item))
+      if (roll <= 0) return item
+    }
+
+    return items[items.length - 1]
+  }
 }
 
 export function randomSeed(): number {
