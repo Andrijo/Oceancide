@@ -560,9 +560,8 @@ export class ScreenManager {
     const { root, content } = this.makeWindowFrame()
 
     const title = this.makeScreenTitle("Pausa")
-    const subtitle = this.makeScreenSubtitle("El juego está detenido")
 
-    content.append(title, subtitle)
+    content.append(title)
 
     if (runInfo) {
       const zoneLabel = `${runInfo.biomeIndex + 1}. ${runInfo.biomeName}`
@@ -620,7 +619,6 @@ export class ScreenManager {
   }
 
   // Marco de ventana compartido (cuadrícula + fondo)
-
   private makeWindowFrame(): {
     root: HTMLElement
     content: HTMLElement
@@ -637,7 +635,7 @@ export class ScreenManager {
       flex-direction: column;
       overflow: hidden;
       background:
-        linear-gradient(180deg, rgba(4, 12, 20, 0.30), rgba(2, 8, 16, 0.50));`,
+        linear-gradient(180deg, rgba(4, 12, 20, 0.30), rgba(2, 8, 16, 0.70));`,
     )
 
     const grid = el(
@@ -704,21 +702,6 @@ export class ScreenManager {
       0 6px 14px rgba(0, 5, 18, 0.5),
       0 0 12px ${color}44;
     max-width: 900px;`,
-      text,
-    )
-  }
-
-  /** Subtítulo pequeño en mayúsculas, al estilo del hub. */
-  private makeScreenSubtitle(text: string): HTMLElement {
-    return el(
-      "div",
-      `max-width: 720px;
-      font-family: ${paragraphFONT};
-      font-size: clamp(6px, 1.5vw, 15px);
-      letter-spacing: 0.16em;
-      color: rgba(214, 236, 240, 0.62);
-      margin-bottom: 30px;
-      text-align: center;`,
       text,
     )
   }

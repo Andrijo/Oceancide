@@ -292,9 +292,19 @@ export class Game {
       }
       return
     }
+    if (e.code === "Space") {
+      if (
+        !e.repeat &&
+        this.screen === "run" &&
+        !this.transition.blocksGameplay
+      ) {
+        this.turtle.triggerBackflip()
+        e.preventDefault()
+      }
+      return
+    }
 
     // KeyK: prueba manual de elección de cartas (deshabilitado).
-
     if (this.paused) return
 
     if (e.code === "KeyR") {
