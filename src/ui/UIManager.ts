@@ -1,9 +1,25 @@
 // src/ui/UIManager.ts
 import type { GameState } from "@core/types"
 
-const TOXICITY_HINT_DURATION = 7000
 const CLEANSING_DURATION = 600
 const CLEANSING_THRESHOLD = 0.5
+const TUTORIAL_SEEN_KEY = "oceancide.tutorial.seen"
+
+function hasSeenTutorial(): boolean {
+  try {
+    return localStorage.getItem(TUTORIAL_SEEN_KEY) === "1"
+  } catch {
+    return false
+  }
+}
+
+function markTutorialSeen(): void {
+  try {
+    localStorage.setItem(TUTORIAL_SEEN_KEY, "1")
+  } catch {}
+}
+
+type HintData = { id: string; title: string; body: string }
 
 export class UIManager {
   private debrisCountEl: HTMLElement
@@ -11,13 +27,12 @@ export class UIManager {
   private zoneProgressEl: HTMLElement
   private toxicitySkullEl: HTMLElement
   private toxicitySkullFillEl: SVGRectElement
+  private toxicityTrendEl: HTMLElement
+  private dangerClusterEl: HTMLElement
+
   private biomeTimerEl: HTMLElement
   private boostBarEl: HTMLElement
   private boostBarFillEl: HTMLElement
-  private toxicityTrendEl: HTMLElement
-  private toxicityTrend = 0
-  private trendHoldUntil = 0
-  private lastTrendClass = ""
 
   private buildHudEl: HTMLElement
   private spinBoostHudEl: HTMLElement
@@ -31,9 +46,22 @@ export class UIManager {
   private lastToxicity = 0
   private cleansingTimeout?: number
 
-  private toxicityHintShownThisRun = false
-  private toxicityHintEl?: HTMLElement
-  private toxicityHintTimeout?: number
+  // Tendencia de toxicidad
+  private toxicityTrend = 0
+  private trendHoldUntil = 0 // En segundos
+  private lastTrendClass = ""
+
+  // Sistema de tutoriales pasivos (Toasts)
+  private tutorialSeen = hasSeenTutorial()
+  private hintQueue: HintData[] = []
+  private activeHintEl: HTMLElement | null = null
+  private hintTimeout?: number
+  private hintQueueRunning = false
+  private toxicityHintQueuedThisRun = false
+
+  // Sistema de tutoriales interactivos (Action Hints)
+  private activeActionHintId: string | null = null
+  private actionHintEl?: HTMLElement
 
   private currentMessage?: HTMLElement
   private messageTimeout?: number
@@ -47,11 +75,10 @@ export class UIManager {
       "#toxicity-skull-fill",
     )!
 
-    // Cluster de peligro (arriba centro): temporizador arriba y calavera debajo, las dos señales de supervivencia.
-    const dangerCluster = document.createElement("div")
-    dangerCluster.id = "danger-cluster"
+    // Cluster de peligro (arriba centro)
+    this.dangerClusterEl = document.createElement("div")
+    this.dangerClusterEl.id = "danger-cluster"
 
-    // Timer del bioma (anclado al borde superior, comparte el lenguaje visual del HUD)
     this.biomeTimerEl = document.createElement("div")
     this.biomeTimerEl.id = "biome-timer"
     this.biomeTimerEl.style.cssText = `
@@ -69,21 +96,18 @@ export class UIManager {
       text-shadow: 0 0 10px rgba(0, 0, 0, 0.9);
       transition: color 0.3s ease, border-color 0.3s ease;
     `
-    dangerCluster.appendChild(this.biomeTimerEl)
+    this.dangerClusterEl.appendChild(this.biomeTimerEl)
 
-    // Calavera de toxicidad (emerge bajo el timer cuando la toxicidad amenaza)
-    const skull = document.getElementById("toxicity-skull")!
-    dangerCluster.appendChild(skull)
+    this.dangerClusterEl.appendChild(this.toxicitySkullEl)
 
-    // Chevron de tendencia dentro de la calavera
     this.toxicityTrendEl = document.createElement("div")
     this.toxicityTrendEl.id = "toxicity-trend"
     this.toxicityTrendEl.className = "toxicity-trend"
-    skull.appendChild(this.toxicityTrendEl)
+    this.toxicitySkullEl.appendChild(this.toxicityTrendEl)
 
-    document.getElementById("game-container")!.appendChild(dangerCluster)
+    document.getElementById("game-container")!.appendChild(this.dangerClusterEl)
 
-    // Barra de energía del boost (centro inferior)
+    // Barra de energía del boost
     this.boostBarEl = document.createElement("div")
     this.boostBarEl.id = "boost-energy-bar"
     this.boostBarEl.style.cssText = `
@@ -256,19 +280,23 @@ export class UIManager {
     }
   }
 
-  public updateUI(state: GameState): void {
+  public updateUI(state: GameState, deltaTime: number): void {
     this.debrisCountEl.textContent = state.debrisCollected.toString()
     this.ecoAwarenessEl.textContent = Math.floor(state.ecoAwareness).toString()
     this.zoneProgressEl.textContent = `${Math.round(state.zoneProgress)}%`
 
     const toxicity = Math.min(state.toxicity, 100)
 
-    // Tendencia suavizada (derivada) para el chevron de la calavera
     const toxicityDelta = toxicity - this.lastToxicity
     this.toxicityTrend += (toxicityDelta - this.toxicityTrend) * 0.2
 
-    if (!this.toxicityHintShownThisRun && toxicity > 0.5) {
-      this.showToxicityHint()
+    if (!this.toxicityHintQueuedThisRun && toxicity > 0.5) {
+      this.toxicityHintQueuedThisRun = true
+      this.enqueueHint(
+        "toxicity",
+        "TOXICIDAD",
+        "Si se llena, la tortuga muere. Recoge desechos o construye una esfera filtradora para bajarla.",
+      )
     }
 
     const fillY = 120 - (toxicity / 100) * 120
@@ -310,22 +338,26 @@ export class UIManager {
       this.lastToxicityLevel = level
     }
 
-    this.updateToxicityTrend(visible)
+    this.updateToxicityTrend(visible, deltaTime)
   }
 
-  /** Actualiza el chevron ▲/▼ según si la toxicidad sube o baja (▼ se retiene un instante tras limpiar). */
-  private updateToxicityTrend(visible: boolean): void {
+  private updateToxicityTrend(visible: boolean, deltaTime: number): void {
     const threshold = 0.02
-    const now = performance.now()
     let cls = ""
+
+    if (this.trendHoldUntil > 0) {
+      this.trendHoldUntil -= deltaTime
+    }
+
     if (visible && this.toxicityTrend > threshold) {
       cls = "up"
     } else if (visible && this.toxicityTrend < -threshold) {
       cls = "down"
-      this.trendHoldUntil = now + 400
-    } else if (now < this.trendHoldUntil) {
+      this.trendHoldUntil = 0.4
+    } else if (this.trendHoldUntil > 0) {
       cls = "down"
     }
+
     if (cls === this.lastTrendClass) return
     this.lastTrendClass = cls
     this.toxicityTrendEl.classList.remove("up", "down")
@@ -335,8 +367,7 @@ export class UIManager {
   }
 
   public resetRunHints(): void {
-    this.toxicityHintShownThisRun = false
-    this.hideToxicityHint()
+    this.toxicityHintQueuedThisRun = false
     this.lastToxicity = 0
     this.lastToxicityLevel = null
     this.lastToxicityVisible = false
@@ -355,11 +386,9 @@ export class UIManager {
     )
   }
 
-  public hideToxicityHint(): void {
-    window.clearTimeout(this.toxicityHintTimeout)
-    this.toxicityHintTimeout = undefined
-    this.toxicityHintEl?.remove()
-    this.toxicityHintEl = undefined
+  public markTutorialComplete(): void {
+    this.tutorialSeen = true
+    markTutorialSeen()
   }
 
   private triggerCleansing(): void {
@@ -371,55 +400,224 @@ export class UIManager {
     }, CLEANSING_DURATION)
   }
 
-  private showToxicityHint(): void {
-    this.toxicityHintShownThisRun = true
-    const container = document.getElementById("game-container")!
-    const isMobile = window.innerWidth <= 700
-    const top = isMobile ? 150 : 130
+  // ---------------------------------------------
+  // Tutoriales Pasivos (Toasts)
+  // ---------------------------------------------
+  public enqueueHint(id: string, title: string, body: string): void {
+    if (
+      this.tutorialSeen ||
+      this.hintQueue.some((h) => h.id === id) ||
+      this.activeHintEl?.dataset.id === id
+    ) {
+      return
+    }
 
-    const hint = document.createElement("div")
-    hint.id = "toxicity-hint"
-    hint.style.cssText = `
-      position: absolute;
-      top: ${top}px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: max-content;
-      max-width: min(320px, 86vw);
-      padding: 10px 16px;
-      text-align: center;
-      line-height: 1.35;
-      font-family: "Geist-Semibold", sans-serif;
-      color: #f7f7ff;
-      background: rgba(0, 0, 0, 0.55);
-      border: 1px solid rgba(255, 255, 255, 0.25);
-      border-radius: 8px;
-      pointer-events: none;
-      z-index: 160;
-      animation: fadeInOut ${TOXICITY_HINT_DURATION}ms ease-in-out forwards;
-    `
-
-    const title = document.createElement("div")
-    title.textContent = "TOXICIDAD"
-    title.style.cssText =
-      "font-size: 12px; letter-spacing: 0.12em; color: #ff9a9a; margin-bottom: 4px;"
-
-    const body = document.createElement("div")
-    body.textContent =
-      "Si se llena, la tortuga muere. Recoge desechos o construye una esfera filtradora para bajarla."
-    body.style.cssText = "font-size: 14px;"
-
-    hint.append(title, body)
-    container.appendChild(hint)
-    this.toxicityHintEl = hint
-
-    this.toxicityHintTimeout = window.setTimeout(() => {
-      hint.remove()
-      if (this.toxicityHintEl === hint) this.toxicityHintEl = undefined
-      this.toxicityHintTimeout = undefined
-    }, TOXICITY_HINT_DURATION)
+    this.hintQueue.push({ id, title, body })
+    this.processHintQueue()
   }
 
+  private processHintQueue(): void {
+    if (this.hintQueueRunning || this.hintQueue.length === 0) return
+    this.hintQueueRunning = true
+    const hint = this.hintQueue.shift()!
+    this.showHintToast(hint)
+  }
+
+  private showHintToast(hint: HintData): void {
+    const container = document.getElementById("game-container")!
+
+    const el = document.createElement("div")
+    el.dataset.id = hint.id
+    el.style.cssText = `
+    position: absolute;
+    top: 20%;
+    left: 50%;
+    transform: translate(-50%, -20px);
+    width: max-content;
+    max-width: min(380px, 90vw);
+    padding: 12px 18px;
+    background: rgba(0, 15, 25, 0.85);
+    border: 1px solid rgba(124, 247, 212, 0.4);
+    border-radius: 12px;
+    color: #f7f7ff;
+    font-family: "Geist-SemiBold", sans-serif;
+    text-align: center;
+    backdrop-filter: blur(4px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 0 20px rgba(124, 247, 212, 0.1);
+    pointer-events: none;
+    z-index: 2000;
+    opacity: 0;
+    transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+  `
+
+    const titleEl = document.createElement("div")
+    titleEl.textContent = hint.title
+    titleEl.style.cssText = `
+    color: #7cf7d4;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  `
+
+    const bodyEl = document.createElement("div")
+    bodyEl.textContent = hint.body
+    bodyEl.style.cssText = "font-size: 14px; line-height: 1.4; opacity: 0.9;"
+
+    el.append(titleEl, bodyEl)
+    container.appendChild(el)
+    this.activeHintEl = el
+
+    requestAnimationFrame(() => {
+      el.style.opacity = "1"
+      el.style.transform = "translate(-50%, 0)"
+    })
+
+    this.hintTimeout = window.setTimeout(() => {
+      this.hideCurrentHint()
+    }, 4500)
+  }
+
+  private hideCurrentHint(): void {
+    if (!this.activeHintEl) return
+
+    window.clearTimeout(this.hintTimeout)
+    this.activeHintEl.style.opacity = "0"
+    this.activeHintEl.style.transform = "translate(-50%, -10px)"
+
+    const elToRemove = this.activeHintEl
+    this.activeHintEl = null
+
+    setTimeout(() => {
+      elToRemove.remove()
+      setTimeout(() => {
+        this.hintQueueRunning = false
+        this.processHintQueue()
+      }, 500)
+    }, 400)
+  }
+
+  // ---------------------------------------------
+  // Tutoriales Interactivos (Action Hints)
+  // ---------------------------------------------
+
+  /** Inyecta las animaciones necesarias si no existen */
+  private ensureActionHintAnimation(): void {
+    if (document.getElementById("action-hint-anim")) return
+    const style = document.createElement("style")
+    style.id = "action-hint-anim"
+    style.textContent = `
+      @keyframes popIn {
+        to { transform: scale(1); }
+      }
+      @keyframes pulseKey {
+        0%, 100% { transform: scale(1); filter: brightness(1); }
+        50% { transform: scale(1.05); filter: brightness(1.2); }
+      }
+    `
+    document.head.appendChild(style)
+  }
+
+  /** Muestra un cartel en el centro y congela el juego hasta que se complete la acción. */
+  public showActionHint(
+    id: string,
+    title: string,
+    body: string,
+    keycap: string,
+  ): void {
+    if (this.activeActionHintId || this.tutorialSeen) return
+
+    this.ensureActionHintAnimation()
+    this.activeActionHintId = id
+    const container = document.getElementById("game-container")!
+
+    const overlay = document.createElement("div")
+    overlay.id = "action-hint-overlay"
+    overlay.style.cssText = `
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 10, 20, 0.4);
+    backdrop-filter: blur(2px);
+    z-index: 3000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none; /* Permite mover la tortuga detrás */
+    animation: fadeInOut 300ms ease-out forwards;
+  `
+
+    const card = document.createElement("div")
+    card.style.cssText = `
+    background: rgba(0, 20, 30, 0.95);
+    border: 2px solid #7cf7d4;
+    border-radius: 16px;
+    padding: 24px 40px;
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), inset 0 0 30px rgba(124, 247, 212, 0.15);
+    font-family: "Geist-SemiBold", sans-serif;
+    color: #f7f7ff;
+    transform: scale(0.9);
+    animation: popIn 400ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  `
+
+    const titleEl = document.createElement("div")
+    titleEl.textContent = title
+    titleEl.style.cssText = `
+    color: #7cf7d4;
+    font-size: 14px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  `
+
+    const bodyEl = document.createElement("div")
+    bodyEl.textContent = body
+    bodyEl.style.cssText =
+      "font-size: 18px; line-height: 1.4; margin-bottom: 20px;"
+
+    const keyEl = document.createElement("div")
+    keyEl.textContent = keycap
+    keyEl.style.cssText = `
+    display: inline-block;
+    padding: 10px 20px;
+    font-family: "Pogonia", sans-serif;
+    font-size: 20px;
+    font-weight: bold;
+    color: #0a1306;
+    background: #7cf7d4;
+    border-radius: 8px;
+    box-shadow: 0 4px 0 #005f73;
+    animation: pulseKey 1.5s infinite;
+  `
+
+    card.append(titleEl, bodyEl, keyEl)
+    overlay.appendChild(card)
+    container.appendChild(overlay)
+    this.actionHintEl = overlay
+  }
+
+  /** Comprueba si el juego está congelado esperando una acción. */
+  public hasActiveActionHint(): boolean {
+    return this.activeActionHintId !== null
+  }
+
+  /** El jugador hizo la acción, quitamos el cartel y despausamos. */
+  public resolveActionHint(id: string): void {
+    if (this.activeActionHintId !== id || !this.actionHintEl) return
+
+    this.actionHintEl.style.opacity = "0"
+    this.actionHintEl.style.transition = "opacity 300ms ease"
+
+    const elToRemove = this.actionHintEl
+    this.activeActionHintId = null
+    this.actionHintEl = undefined
+
+    setTimeout(() => elToRemove.remove(), 300)
+  }
+
+  // ---------------------------------------------
+  // Utilidades
+  // ---------------------------------------------
   public showMessage(message: string, duration: number = 2000): void {
     this.currentMessage?.remove()
     window.clearTimeout(this.messageTimeout)
@@ -490,14 +688,15 @@ export class UIManager {
 
   public dispose(): void {
     window.clearTimeout(this.messageTimeout)
-    window.clearTimeout(this.toxicityHintTimeout)
     window.clearTimeout(this.cleansingTimeout)
+    window.clearTimeout(this.hintTimeout)
 
     this.currentMessage?.remove()
-    this.toxicityHintEl?.remove()
+    this.activeHintEl?.remove()
+    this.actionHintEl?.remove()
     this.buildHudEl.remove()
     this.spinBoostHudEl.remove()
-    this.biomeTimerEl.remove()
     this.boostBarEl.remove()
+    this.dangerClusterEl.remove()
   }
 }

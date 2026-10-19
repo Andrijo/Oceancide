@@ -26,7 +26,7 @@ export interface RunInfo {
 }
 
 const titleFONT = '"Pogonia", Tahoma, Geneva, Verdana, sans-serif'
-const paragraphFONT = '"Geist-SemiBold", Tahoma, Geneva, Verdana, sans-serif'
+const paragraphFONT = '"DMSans", "Geist-SemiBold", Geneva, Verdana, sans-serif'
 
 const RARITY_COLORS: Record<CardRarity, string> = {
   common: "#94a3b8",
@@ -261,6 +261,7 @@ export class ScreenManager {
       z-index: 3;
       display: flex;
       justify-content: flex-end;
+      font-family: ${paragraphFONT};
       align-items: center;
       padding: 18px 20px;`,
     )
@@ -635,7 +636,7 @@ export class ScreenManager {
       flex-direction: column;
       overflow: hidden;
       background:
-        linear-gradient(180deg, rgba(4, 12, 20, 0.30), rgba(2, 8, 16, 0.70));`,
+        linear-gradient(180deg, rgba(4, 12, 20, 0.70), rgba(2, 8, 16, 0.70));`,
     )
 
     const grid = el(

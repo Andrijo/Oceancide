@@ -25,3 +25,10 @@
   font-weight: bold;
   font-display: swap;
 }
+
+@font-face {
+  font-family: "DMSans";
+  src: url(/public/fonts/dm-sans-regular.ttf) format("ttf");
+  font-weight: 500;
+  font-display: swap;
+}

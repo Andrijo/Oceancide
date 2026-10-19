@@ -48,14 +48,11 @@ const BUILD_DISTANCE = 4
 const DEEP_POINT_LIGHT_BOOST = 25
 const BLOOM_MAX_STRENGTH = 0.5
 
-// Timer por bioma: 120s base, bajando 2s por bioma. Nunca menos de 80s.
-// Al agotarse no mata: multiplica la subida pasiva de toxicidad.
 const BIOME_TIME_BASE = 120
 const BIOME_TIME_DECAY = 2
 const BIOME_TIME_MIN = 80
 const BIOME_TIME_PRESSURE = 4
 
-// Revives: la toxicidad a la que revives sube con cada revive gastado.
 const REVIVE_TOXICITY_BASE = 50
 const REVIVE_TOXICITY_STEP = 10
 const REVIVE_TOXICITY_MAX = 90
@@ -98,10 +95,14 @@ export class Game {
   private transition: BiomeTransition
   private pendingAdvance = false
 
+  // Variables de estado para los tutoriales interactivos
+  private hasBackflipped = false
+  private hasBoosted = false
+  private hasBuilt = false
+
   private endlessMode = false
   private loop = 0
 
-  // Timer por bioma
   private biomeTimeRemaining = 0
   private biomeTimeLimit = 0
   private revivesUsed = 0
@@ -114,7 +115,6 @@ export class Game {
   private runSeed = randomSeed()
   private runTime = 0
 
-  // Vectores temporales reutilizados: evitan asignar por frame (GC churn).
   private readonly tmpCameraTarget = new THREE.Vector3()
   private readonly tmpProjected = new THREE.Vector3()
 
@@ -296,6 +296,7 @@ export class Game {
       }
       return
     }
+
     if (e.code === "Space") {
       if (
         !e.repeat &&
@@ -304,11 +305,14 @@ export class Game {
       ) {
         this.turtle.triggerBackflip()
         e.preventDefault()
+
+        // Tutorial: Resolver Backflip
+        this.hasBackflipped = true
+        this.uiManager.resolveActionHint("backflip")
       }
       return
     }
 
-    // KeyK: prueba manual de elección de cartas (deshabilitado).
     if (this.paused) return
 
     if (e.code === "KeyR") {
@@ -344,7 +348,6 @@ export class Game {
   private handleResize(): void {
     this.camera.aspect = window.innerWidth / window.innerHeight
     this.camera.updateProjectionMatrix()
-    // Reaplicar el pixel ratio: si la ventana cambia de monitor el DPR puede variar.
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     this.renderer.setSize(window.innerWidth, window.innerHeight)
     this.renderPipeline.setSize(window.innerWidth, window.innerHeight)
@@ -355,11 +358,9 @@ export class Game {
     this.collectedInZone = 0
     this.state.zoneProgress = 0
 
-    // Loop: cuántas veces hemos recorrido los 10 biomas
     this.loop = Math.floor(index / BIOME_ORDER.length)
     const biomeKey = BIOME_ORDER[index % BIOME_ORDER.length]
 
-    // Timer por bioma (escala con el loop)
     this.biomeTimeLimit = Math.max(
       BIOME_TIME_MIN,
       BIOME_TIME_BASE - (index % BIOME_ORDER.length) * BIOME_TIME_DECAY,
@@ -370,7 +371,6 @@ export class Game {
     this.biomeGenerator.generateBiome(biomeKey, rng, this.loop)
     this.applyBiomeLighting()
 
-    // La toxicidad se arrastra a la mitad y nunca baja del suelo del bioma.
     this.state.toxicity = Math.max(
       this.state.toxicity * TOXICITY_CARRYOVER,
       this.biomeGenerator.getBiome().toxicityRate * TOXICITY_FLOOR_SCALE,
@@ -472,9 +472,14 @@ export class Game {
     position.y = THREE.MathUtils.clamp(position.y, bounds.minY, bounds.maxY)
 
     this.state.ecoAwareness -= config.cost
-
     const phase = this.computeStructurePhase()
     this.structures.build(key, position, phase)
+
+    // Tutorial: Resolver Filtro
+    if (!this.hasBuilt) {
+      this.hasBuilt = true
+      this.uiManager.resolveActionHint("filter")
+    }
   }
 
   private updateBuildHud(): void {
@@ -548,7 +553,6 @@ export class Game {
 
   private startRun(endless = false): void {
     this.endlessMode = endless
-
     this.transition.cancel()
     this.pendingAdvance = false
     this.paused = false
@@ -567,11 +571,21 @@ export class Game {
     this.cardManager.resetPity()
     this.revivesUsed = 0
 
+    this.hasBackflipped = false
+    this.hasBoosted = false
+    this.hasBuilt = false
+
     this.uiManager.resetRunHints()
 
     this.screens.hide()
     this.loadBiome(0)
     this.uiManager.showMessage(this.biomeBanner())
+
+    this.uiManager.enqueueHint(
+      "timer",
+      "Tiempo de Inmersión",
+      "Tienes un tiempo limitado para limpiar cada zona. Si llega a 0, la toxicidad te vencerá.",
+    )
   }
 
   private endRun(outcome: RunOutcome): void {
@@ -582,6 +596,8 @@ export class Game {
     this.screen = "summary"
     this.state.isRunning = false
     this.clearInput()
+
+    this.uiManager.markTutorialComplete()
 
     const { base, bonus } = computeEco(this.state.ecoAwareness, outcome)
     const summary: RunSummary = {
@@ -616,8 +632,6 @@ export class Game {
 
   private advanceBiome(): void {
     const next = this.biomeIndex + 1
-
-    // Solo termina si NO es endless y ya no hay más biomas
     if (!this.endlessMode && next >= BIOME_ORDER.length) {
       this.endRun("completed")
       return
@@ -638,7 +652,6 @@ export class Game {
     }
   }
 
-  /** Texto del cambio de bioma: nombre + profundidad actual. */
   private biomeBanner(): string {
     const depth = this.biomeGenerator.getBiome().depth
     return `${this.biomeGenerator.getBiomeName()} · ${depth} m`
@@ -709,10 +722,43 @@ export class Game {
     if (this.paused) return
     if (this.screens.isCardChoiceActive()) return
 
+    // --- Sistema de Tutoriales Interactivos ---
+    // Solo se disparan si el tutorial general no se ha completado
+    if (!this.hasBackflipped && this.runTime > 8) {
+      this.uiManager.showActionHint(
+        "backflip",
+        "Evasión",
+        "Pulsa ESPACIO para hacer un backflip y cambiar de dirección.",
+        "ESPACIO",
+      )
+    } else if (!this.hasBoosted && this.runTime > 20) {
+      this.uiManager.showActionHint(
+        "boost",
+        "Velocidad",
+        "Mantén la tecla I para usar el impulso.",
+        "I",
+      )
+    } else if (
+      !this.hasBuilt &&
+      this.state.ecoAwareness >= STRUCTURES.filter.cost
+    ) {
+      this.uiManager.showActionHint(
+        "filter",
+        "Defensa",
+        "Pulsa B para construir un filtro que absorba desechos.",
+        "B",
+      )
+    }
+
+    // Si hay un cartel en pantalla, el tiempo del mundo se congela
+    const isTutorialPaused = this.uiManager.hasActiveActionHint()
+    const simDelta = isTutorialPaused ? 0 : deltaTime
+
+    // El tiempo real de la run siempre avanza para que salten los tutoriales
     this.runTime += deltaTime
 
-    // --- Timer por bioma: al agotarse no mata, presuriza la toxicidad ---
-    this.biomeTimeRemaining -= deltaTime
+    // --- Timer por bioma (congelado si hay tutorial) ---
+    this.biomeTimeRemaining -= simDelta
     if (this.biomeTimeRemaining < 0) this.biomeTimeRemaining = 0
     const timePressure =
       this.biomeTimeRemaining <= 0 ? 1 + BIOME_TIME_PRESSURE : 1
@@ -721,6 +767,7 @@ export class Game {
       this.biomeTimeLimit,
     )
 
+    // La tortuga siempre se puede mover (para probar la acción)
     const bounds = this.biomeGenerator.getBounds()
     this.turtle.update(deltaTime, this.input, bounds)
 
@@ -733,12 +780,12 @@ export class Game {
     this.camera.position.lerp(this.getCameraTarget(), smoothing)
     this.camera.lookAt(this.turtle.mesh.position)
 
-    // Recolección manual
+    // --- Recolección (congelada si hay tutorial) ---
     const collected = this.biomeGenerator.updateDebris(
       this.turtle.mesh.position,
       this.turtle.getCollectionRadius(),
       time,
-      deltaTime,
+      simDelta,
       this.input.boost,
     )
 
@@ -747,8 +794,8 @@ export class Game {
       this.biomeGenerator.getInitialDebrisCount() * ZONE_COMPLETION_RATIO,
     )
 
-    // Toxicidad pasiva
-    this.biomeGenerator.updateVisuals(deltaTime)
+    // --- Toxicidad Pasiva (congelada si hay tutorial) ---
+    this.biomeGenerator.updateVisuals(simDelta)
     const pollution = this.biomeGenerator.getPollutionRatio()
     const base = this.biomeGenerator.getBiome().toxicityRate * TOXICITY_SCALE
     const passiveRate =
@@ -760,21 +807,24 @@ export class Game {
     if (!this.godMode) {
       this.state.toxicity = Math.max(
         0,
-        this.state.toxicity + passiveRate * deltaTime,
+        this.state.toxicity + passiveRate * simDelta,
       )
     }
 
-    // Recolección manual
+    // Resolución del tutorial de boost
+    if (this.turtle.isBoosting() && !this.hasBoosted) {
+      this.hasBoosted = true
+      this.uiManager.resolveActionHint("boost")
+    }
+
+    // --- Recolección manual ---
     for (const debris of collected) {
       this.state.debrisCollected++
-
-      // Frágil tocado en boost: se ha roto y no da eco (ya soltó esquirlas).
       const eco = debris.shattered
         ? 0
         : Math.round(debris.ecoValue * this.runState.ecoMultiplier)
       this.state.ecoAwareness += eco
 
-      // Las esquirlas de trampas/frágiles no cuentan para el objetivo de la zona.
       if (!debris.isFragment) this.collectedInZone++
 
       if (!this.godMode) {
@@ -787,15 +837,15 @@ export class Game {
       if (eco > 0) this.showFloatingEco(debris, eco)
     }
 
-    // Simbiosis: eco por segundo por filtro activo (una vez por frame)
+    // --- Simbiosis (congelada si hay tutorial) ---
     const filterCount = this.structures.getActiveCount()
     if (filterCount > 0 && this.runState.filterEcoPerSecond > 0) {
       this.state.ecoAwareness +=
-        filterCount * this.runState.filterEcoPerSecond * deltaTime
+        filterCount * this.runState.filterEcoPerSecond * simDelta
     }
 
-    // Filtros
-    const credit = this.structures.update(deltaTime, time, this.biomeGenerator)
+    // --- Filtros (congelados si hay tutorial) ---
+    const credit = this.structures.update(simDelta, time, this.biomeGenerator)
     this.state.debrisCollected += credit.count
     this.collectedInZone += credit.count
 
@@ -821,7 +871,8 @@ export class Game {
       (this.collectedInZone / required) * 100,
     )
 
-    this.uiManager.updateUI(this.state)
+    // Actualizamos la UI con deltaTime para animaciones
+    this.uiManager.updateUI(this.state, deltaTime)
     this.updateBuildHud()
 
     if (this.state.zoneProgress >= 100) {
@@ -853,6 +904,12 @@ export class Game {
     const rng = new Rng(deriveSeed(this.runSeed, this.biomeIndex + 1000))
     const choices = this.cardManager.rollChoices(3, rng)
 
+    this.uiManager.enqueueHint(
+      "cards",
+      "Mejoras",
+      "Elige una mejora para esta run. ¡Las cartas se acumulan y crean sinergias poderosas!",
+    )
+
     this.screens.showCardChoice(choices, (card) => {
       this.cardManager.pick(card, {
         turtle: this.turtle,
@@ -860,7 +917,6 @@ export class Game {
         run: this.runState,
       })
 
-      // Bioluminiscencia: activa/refuerza el glow de la tortuga
       if (card.id === "bioluminescence") {
         const next = Math.min(1, this.turtle.getGlow() + 0.5)
         this.turtle.setGlow(next)
@@ -871,7 +927,6 @@ export class Game {
     })
   }
 
-  /** Intenta matar al jugador: consume un revive (toxicidad escalada) o termina la run; true si sigue viva. */
   private tryKill(): boolean {
     if (this.godMode) return true
 
