@@ -321,6 +321,7 @@ Los imports entre carpetas usan alias configurados en `tsconfig.json` y `vite.co
 ## Tecnologías utilizadas
 
 - [Three.js](https://threejs.org/) — renderizado 3D WebGL
+- [GSAP](https://gsap.com/) — animaciones UI (revelado de cartas; se congela junto con la pausa)
 - [TypeScript](https://www.typescriptlang.org/) — tipado estático
 - [Vite](https://vite.dev/) — bundler y servidor de desarrollo
 - [Bun](https://bun.sh) — runtime y gestor de paquetes

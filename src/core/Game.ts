@@ -15,6 +15,7 @@ import { BiomeTransition } from "@world/BiomeTransition"
 import { StructureManager } from "@world/StructureManager"
 import { STRUCTURES, type StructureKey } from "@world/StructureConfig"
 import { ScreenManager } from "@ui/ScreenManager"
+import { setAnimationsPaused } from "@ui/animations"
 import { RenderPipeline } from "@core/RenderPipeline"
 import {
   SaveManager,
@@ -492,7 +493,7 @@ export class Game {
       this.screens.showPause(
         () => this.setPaused(false),
         () => {
-          this.paused = false
+          this.setPaused(false)
           this.endRun("abandoned")
         },
         {
@@ -507,6 +508,9 @@ export class Game {
       this.paused = false
       this.screens.hide()
     }
+
+    // GSAP corre en tiempo real: lo congelamos junto con la simulación.
+    setAnimationsPaused(paused)
   }
 
   private clearInput(): void {

@@ -8,6 +8,7 @@ import {
 import type { MetaState } from "@core/MetaState"
 import type { Card, CardRarity } from "@cards/Card"
 import { CARD_POOL } from "@cards/CardPool"
+import { revealCards } from "@ui/animations"
 
 export interface ScreenCallbacks {
   onStartRun(): void
@@ -544,13 +545,19 @@ export class ScreenManager {
       width: 100%;`,
     )
 
+    const cardButtons: HTMLElement[] = []
+
     cards.forEach((card, i) => {
-      row.append(this.makeCardButton(card, i, () => pick(i)))
+      const btn = this.makeCardButton(card, i, () => pick(i))
+      cardButtons.push(btn)
+      row.append(btn)
     })
 
     content.append(title, row)
 
     this.open(root, () => {})
+
+    revealCards(cardButtons)
   }
 
   public showPause(
