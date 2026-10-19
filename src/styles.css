@@ -28,7 +28,7 @@
 
 @font-face {
   font-family: "DMSans";
-  src: url(/public/fonts/dm-sans-regular.ttf) format("ttf");
+  src: url("/public/fonts/dm-sans-regular.ttf") format("truetype");
   font-weight: 500;
   font-display: swap;
 }

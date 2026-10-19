@@ -3,23 +3,6 @@ import type { GameState } from "@core/types"
 
 const CLEANSING_DURATION = 600
 const CLEANSING_THRESHOLD = 0.5
-const TUTORIAL_SEEN_KEY = "oceancide.tutorial.seen"
-
-function hasSeenTutorial(): boolean {
-  try {
-    return localStorage.getItem(TUTORIAL_SEEN_KEY) === "1"
-  } catch {
-    return false
-  }
-}
-
-function markTutorialSeen(): void {
-  try {
-    localStorage.setItem(TUTORIAL_SEEN_KEY, "1")
-  } catch {}
-}
-
-type HintData = { id: string; title: string; body: string }
 
 export class UIManager {
   private debrisCountEl: HTMLElement
@@ -50,18 +33,6 @@ export class UIManager {
   private toxicityTrend = 0
   private trendHoldUntil = 0 // En segundos
   private lastTrendClass = ""
-
-  // Sistema de tutoriales pasivos (Toasts)
-  private tutorialSeen = hasSeenTutorial()
-  private hintQueue: HintData[] = []
-  private activeHintEl: HTMLElement | null = null
-  private hintTimeout?: number
-  private hintQueueRunning = false
-  private toxicityHintQueuedThisRun = false
-
-  // Sistema de tutoriales interactivos (Action Hints)
-  private activeActionHintId: string | null = null
-  private actionHintEl?: HTMLElement
 
   private currentMessage?: HTMLElement
   private messageTimeout?: number
@@ -290,15 +261,6 @@ export class UIManager {
     const toxicityDelta = toxicity - this.lastToxicity
     this.toxicityTrend += (toxicityDelta - this.toxicityTrend) * 0.2
 
-    if (!this.toxicityHintQueuedThisRun && toxicity > 0.5) {
-      this.toxicityHintQueuedThisRun = true
-      this.enqueueHint(
-        "toxicity",
-        "TOXICIDAD",
-        "Si se llena, la tortuga muere. Recoge desechos o construye una esfera filtradora para bajarla.",
-      )
-    }
-
     const fillY = 120 - (toxicity / 100) * 120
     this.toxicitySkullFillEl.style.transform = `translateY(${fillY}px)`
 
@@ -366,8 +328,7 @@ export class UIManager {
       cls === "up" ? "▲" : cls === "down" ? "▼" : ""
   }
 
-  public resetRunHints(): void {
-    this.toxicityHintQueuedThisRun = false
+  public resetRunHud(): void {
     this.lastToxicity = 0
     this.lastToxicityLevel = null
     this.lastToxicityVisible = false
@@ -386,11 +347,6 @@ export class UIManager {
     )
   }
 
-  public markTutorialComplete(): void {
-    this.tutorialSeen = true
-    markTutorialSeen()
-  }
-
   private triggerCleansing(): void {
     this.toxicitySkullEl.classList.add("cleansing")
     window.clearTimeout(this.cleansingTimeout)
@@ -398,221 +354,6 @@ export class UIManager {
       this.toxicitySkullEl.classList.remove("cleansing")
       this.cleansingTimeout = undefined
     }, CLEANSING_DURATION)
-  }
-
-  // ---------------------------------------------
-  // Tutoriales Pasivos (Toasts)
-  // ---------------------------------------------
-  public enqueueHint(id: string, title: string, body: string): void {
-    if (
-      this.tutorialSeen ||
-      this.hintQueue.some((h) => h.id === id) ||
-      this.activeHintEl?.dataset.id === id
-    ) {
-      return
-    }
-
-    this.hintQueue.push({ id, title, body })
-    this.processHintQueue()
-  }
-
-  private processHintQueue(): void {
-    if (this.hintQueueRunning || this.hintQueue.length === 0) return
-    this.hintQueueRunning = true
-    const hint = this.hintQueue.shift()!
-    this.showHintToast(hint)
-  }
-
-  private showHintToast(hint: HintData): void {
-    const container = document.getElementById("game-container")!
-
-    const el = document.createElement("div")
-    el.dataset.id = hint.id
-    el.style.cssText = `
-    position: absolute;
-    top: 20%;
-    left: 50%;
-    transform: translate(-50%, -20px);
-    width: max-content;
-    max-width: min(380px, 90vw);
-    padding: 12px 18px;
-    background: rgba(0, 15, 25, 0.85);
-    border: 1px solid rgba(124, 247, 212, 0.4);
-    border-radius: 12px;
-    color: #f7f7ff;
-    font-family: "Geist-SemiBold", sans-serif;
-    text-align: center;
-    backdrop-filter: blur(4px);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 0 20px rgba(124, 247, 212, 0.1);
-    pointer-events: none;
-    z-index: 2000;
-    opacity: 0;
-    transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
-  `
-
-    const titleEl = document.createElement("div")
-    titleEl.textContent = hint.title
-    titleEl.style.cssText = `
-    color: #7cf7d4;
-    font-size: 12px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    margin-bottom: 4px;
-  `
-
-    const bodyEl = document.createElement("div")
-    bodyEl.textContent = hint.body
-    bodyEl.style.cssText = "font-size: 14px; line-height: 1.4; opacity: 0.9;"
-
-    el.append(titleEl, bodyEl)
-    container.appendChild(el)
-    this.activeHintEl = el
-
-    requestAnimationFrame(() => {
-      el.style.opacity = "1"
-      el.style.transform = "translate(-50%, 0)"
-    })
-
-    this.hintTimeout = window.setTimeout(() => {
-      this.hideCurrentHint()
-    }, 4500)
-  }
-
-  private hideCurrentHint(): void {
-    if (!this.activeHintEl) return
-
-    window.clearTimeout(this.hintTimeout)
-    this.activeHintEl.style.opacity = "0"
-    this.activeHintEl.style.transform = "translate(-50%, -10px)"
-
-    const elToRemove = this.activeHintEl
-    this.activeHintEl = null
-
-    setTimeout(() => {
-      elToRemove.remove()
-      setTimeout(() => {
-        this.hintQueueRunning = false
-        this.processHintQueue()
-      }, 500)
-    }, 400)
-  }
-
-  // ---------------------------------------------
-  // Tutoriales Interactivos (Action Hints)
-  // ---------------------------------------------
-
-  /** Inyecta las animaciones necesarias si no existen */
-  private ensureActionHintAnimation(): void {
-    if (document.getElementById("action-hint-anim")) return
-    const style = document.createElement("style")
-    style.id = "action-hint-anim"
-    style.textContent = `
-      @keyframes popIn {
-        to { transform: scale(1); }
-      }
-      @keyframes pulseKey {
-        0%, 100% { transform: scale(1); filter: brightness(1); }
-        50% { transform: scale(1.05); filter: brightness(1.2); }
-      }
-    `
-    document.head.appendChild(style)
-  }
-
-  /** Muestra un cartel en el centro y congela el juego hasta que se complete la acción. */
-  public showActionHint(
-    id: string,
-    title: string,
-    body: string,
-    keycap: string,
-  ): void {
-    if (this.activeActionHintId || this.tutorialSeen) return
-
-    this.ensureActionHintAnimation()
-    this.activeActionHintId = id
-    const container = document.getElementById("game-container")!
-
-    const overlay = document.createElement("div")
-    overlay.id = "action-hint-overlay"
-    overlay.style.cssText = `
-    position: absolute;
-    inset: 0;
-    background: rgba(0, 10, 20, 0.4);
-    backdrop-filter: blur(2px);
-    z-index: 3000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none; /* Permite mover la tortuga detrás */
-    animation: fadeInOut 300ms ease-out forwards;
-  `
-
-    const card = document.createElement("div")
-    card.style.cssText = `
-    background: rgba(0, 20, 30, 0.95);
-    border: 2px solid #7cf7d4;
-    border-radius: 16px;
-    padding: 24px 40px;
-    text-align: center;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), inset 0 0 30px rgba(124, 247, 212, 0.15);
-    font-family: "Geist-SemiBold", sans-serif;
-    color: #f7f7ff;
-    transform: scale(0.9);
-    animation: popIn 400ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-  `
-
-    const titleEl = document.createElement("div")
-    titleEl.textContent = title
-    titleEl.style.cssText = `
-    color: #7cf7d4;
-    font-size: 14px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    margin-bottom: 8px;
-  `
-
-    const bodyEl = document.createElement("div")
-    bodyEl.textContent = body
-    bodyEl.style.cssText =
-      "font-size: 18px; line-height: 1.4; margin-bottom: 20px;"
-
-    const keyEl = document.createElement("div")
-    keyEl.textContent = keycap
-    keyEl.style.cssText = `
-    display: inline-block;
-    padding: 10px 20px;
-    font-family: "Pogonia", sans-serif;
-    font-size: 20px;
-    font-weight: bold;
-    color: #0a1306;
-    background: #7cf7d4;
-    border-radius: 8px;
-    box-shadow: 0 4px 0 #005f73;
-    animation: pulseKey 1.5s infinite;
-  `
-
-    card.append(titleEl, bodyEl, keyEl)
-    overlay.appendChild(card)
-    container.appendChild(overlay)
-    this.actionHintEl = overlay
-  }
-
-  /** Comprueba si el juego está congelado esperando una acción. */
-  public hasActiveActionHint(): boolean {
-    return this.activeActionHintId !== null
-  }
-
-  /** El jugador hizo la acción, quitamos el cartel y despausamos. */
-  public resolveActionHint(id: string): void {
-    if (this.activeActionHintId !== id || !this.actionHintEl) return
-
-    this.actionHintEl.style.opacity = "0"
-    this.actionHintEl.style.transition = "opacity 300ms ease"
-
-    const elToRemove = this.actionHintEl
-    this.activeActionHintId = null
-    this.actionHintEl = undefined
-
-    setTimeout(() => elToRemove.remove(), 300)
   }
 
   // ---------------------------------------------
@@ -689,11 +430,8 @@ export class UIManager {
   public dispose(): void {
     window.clearTimeout(this.messageTimeout)
     window.clearTimeout(this.cleansingTimeout)
-    window.clearTimeout(this.hintTimeout)
 
     this.currentMessage?.remove()
-    this.activeHintEl?.remove()
-    this.actionHintEl?.remove()
     this.buildHudEl.remove()
     this.spinBoostHudEl.remove()
     this.boostBarEl.remove()

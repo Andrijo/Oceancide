@@ -95,11 +95,6 @@ export class Game {
   private transition: BiomeTransition
   private pendingAdvance = false
 
-  // Variables de estado para los tutoriales interactivos
-  private hasBackflipped = false
-  private hasBoosted = false
-  private hasBuilt = false
-
   private endlessMode = false
   private loop = 0
 
@@ -305,10 +300,6 @@ export class Game {
       ) {
         this.turtle.triggerBackflip()
         e.preventDefault()
-
-        // Tutorial: Resolver Backflip
-        this.hasBackflipped = true
-        this.uiManager.resolveActionHint("backflip")
       }
       return
     }
@@ -474,12 +465,6 @@ export class Game {
     this.state.ecoAwareness -= config.cost
     const phase = this.computeStructurePhase()
     this.structures.build(key, position, phase)
-
-    // Tutorial: Resolver Filtro
-    if (!this.hasBuilt) {
-      this.hasBuilt = true
-      this.uiManager.resolveActionHint("filter")
-    }
   }
 
   private updateBuildHud(): void {
@@ -571,21 +556,11 @@ export class Game {
     this.cardManager.resetPity()
     this.revivesUsed = 0
 
-    this.hasBackflipped = false
-    this.hasBoosted = false
-    this.hasBuilt = false
-
-    this.uiManager.resetRunHints()
+    this.uiManager.resetRunHud()
 
     this.screens.hide()
     this.loadBiome(0)
     this.uiManager.showMessage(this.biomeBanner())
-
-    this.uiManager.enqueueHint(
-      "timer",
-      "Tiempo de Inmersión",
-      "Tienes un tiempo limitado para limpiar cada zona. Si llega a 0, la toxicidad te vencerá.",
-    )
   }
 
   private endRun(outcome: RunOutcome): void {
@@ -596,8 +571,6 @@ export class Game {
     this.screen = "summary"
     this.state.isRunning = false
     this.clearInput()
-
-    this.uiManager.markTutorialComplete()
 
     const { base, bonus } = computeEco(this.state.ecoAwareness, outcome)
     const summary: RunSummary = {
@@ -722,43 +695,10 @@ export class Game {
     if (this.paused) return
     if (this.screens.isCardChoiceActive()) return
 
-    // --- Sistema de Tutoriales Interactivos ---
-    // Solo se disparan si el tutorial general no se ha completado
-    if (!this.hasBackflipped && this.runTime > 8) {
-      this.uiManager.showActionHint(
-        "backflip",
-        "Evasión",
-        "Pulsa ESPACIO para hacer un backflip y cambiar de dirección.",
-        "ESPACIO",
-      )
-    } else if (!this.hasBoosted && this.runTime > 20) {
-      this.uiManager.showActionHint(
-        "boost",
-        "Velocidad",
-        "Mantén la tecla I para usar el impulso.",
-        "I",
-      )
-    } else if (
-      !this.hasBuilt &&
-      this.state.ecoAwareness >= STRUCTURES.filter.cost
-    ) {
-      this.uiManager.showActionHint(
-        "filter",
-        "Defensa",
-        "Pulsa B para construir un filtro que absorba desechos.",
-        "B",
-      )
-    }
-
-    // Si hay un cartel en pantalla, el tiempo del mundo se congela
-    const isTutorialPaused = this.uiManager.hasActiveActionHint()
-    const simDelta = isTutorialPaused ? 0 : deltaTime
-
-    // El tiempo real de la run siempre avanza para que salten los tutoriales
     this.runTime += deltaTime
 
-    // --- Timer por bioma (congelado si hay tutorial) ---
-    this.biomeTimeRemaining -= simDelta
+    // --- Timer por bioma ---
+    this.biomeTimeRemaining -= deltaTime
     if (this.biomeTimeRemaining < 0) this.biomeTimeRemaining = 0
     const timePressure =
       this.biomeTimeRemaining <= 0 ? 1 + BIOME_TIME_PRESSURE : 1
@@ -780,12 +720,12 @@ export class Game {
     this.camera.position.lerp(this.getCameraTarget(), smoothing)
     this.camera.lookAt(this.turtle.mesh.position)
 
-    // --- Recolección (congelada si hay tutorial) ---
+    // --- Recolección ---
     const collected = this.biomeGenerator.updateDebris(
       this.turtle.mesh.position,
       this.turtle.getCollectionRadius(),
       time,
-      simDelta,
+      deltaTime,
       this.input.boost,
     )
 
@@ -794,8 +734,8 @@ export class Game {
       this.biomeGenerator.getInitialDebrisCount() * ZONE_COMPLETION_RATIO,
     )
 
-    // --- Toxicidad Pasiva (congelada si hay tutorial) ---
-    this.biomeGenerator.updateVisuals(simDelta)
+    // --- Toxicidad Pasiva ---
+    this.biomeGenerator.updateVisuals(deltaTime)
     const pollution = this.biomeGenerator.getPollutionRatio()
     const base = this.biomeGenerator.getBiome().toxicityRate * TOXICITY_SCALE
     const passiveRate =
@@ -807,14 +747,8 @@ export class Game {
     if (!this.godMode) {
       this.state.toxicity = Math.max(
         0,
-        this.state.toxicity + passiveRate * simDelta,
+        this.state.toxicity + passiveRate * deltaTime,
       )
-    }
-
-    // Resolución del tutorial de boost
-    if (this.turtle.isBoosting() && !this.hasBoosted) {
-      this.hasBoosted = true
-      this.uiManager.resolveActionHint("boost")
     }
 
     // --- Recolección manual ---
@@ -837,15 +771,15 @@ export class Game {
       if (eco > 0) this.showFloatingEco(debris, eco)
     }
 
-    // --- Simbiosis (congelada si hay tutorial) ---
+    // --- Simbiosis ---
     const filterCount = this.structures.getActiveCount()
     if (filterCount > 0 && this.runState.filterEcoPerSecond > 0) {
       this.state.ecoAwareness +=
-        filterCount * this.runState.filterEcoPerSecond * simDelta
+        filterCount * this.runState.filterEcoPerSecond * deltaTime
     }
 
-    // --- Filtros (congelados si hay tutorial) ---
-    const credit = this.structures.update(simDelta, time, this.biomeGenerator)
+    // --- Filtros ---
+    const credit = this.structures.update(deltaTime, time, this.biomeGenerator)
     this.state.debrisCollected += credit.count
     this.collectedInZone += credit.count
 
@@ -903,12 +837,6 @@ export class Game {
 
     const rng = new Rng(deriveSeed(this.runSeed, this.biomeIndex + 1000))
     const choices = this.cardManager.rollChoices(3, rng)
-
-    this.uiManager.enqueueHint(
-      "cards",
-      "Mejoras",
-      "Elige una mejora para esta run. ¡Las cartas se acumulan y crean sinergias poderosas!",
-    )
 
     this.screens.showCardChoice(choices, (card) => {
       this.cardManager.pick(card, {
