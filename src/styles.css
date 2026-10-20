@@ -1,34 +1,13 @@
 @font-face {
   font-family: "Pogonia";
-  src: url("/public/fonts/pogonia-bold.woff") format("woff");
-  font-weight: bold;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "PogoniaRegular";
-  src: url("/public/fonts/pogonia-regular.woff") format("woff");
-  font-weight: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Montserrat";
-  src: url("/public/fonts/Montserrat-Regular.woff") format("woff");
-  font-weight: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Geist-Semibold";
-  src: url("/public/fonts/Geist-SemiBold.woff") format("woff");
-  font-weight: bold;
+  src: url("/fonts/pogonia-bold.woff") format("woff");
+  font-weight: 400 900;
   font-display: swap;
 }
 
 @font-face {
   font-family: "DMSans";
-  src: url("/public/fonts/dm-sans-regular.ttf") format("truetype");
+  src: url("/fonts/dm-sans-regular.woff") format("woff");
   font-weight: 500;
   font-display: swap;
 }

@@ -1,8 +1,16 @@
 // src/ui/UIManager.ts
 import type { GameState } from "@core/types"
+import { PARAGRAPH_FONT, TITLE_FONT } from "@ui/fonts"
 
 const CLEANSING_DURATION = 600
 const CLEANSING_THRESHOLD = 0.5
+
+const TOXICITY_LEVEL_LABELS: Record<string, string> = {
+  "level-low": "baja",
+  "level-mid": "media",
+  "level-high": "alta",
+  "level-crit": "crítica",
+}
 
 export class UIManager {
   private debrisCountEl: HTMLElement
@@ -11,6 +19,7 @@ export class UIManager {
   private toxicitySkullEl: HTMLElement
   private toxicitySkullFillEl: SVGRectElement
   private toxicityTrendEl: HTMLElement
+  private toxicityStatusEl: HTMLElement
   private dangerClusterEl: HTMLElement
 
   private biomeTimerEl: HTMLElement
@@ -45,6 +54,7 @@ export class UIManager {
     this.toxicitySkullFillEl = document.querySelector<SVGRectElement>(
       "#toxicity-skull-fill",
     )!
+    this.toxicityStatusEl = document.getElementById("toxicity-status")!
 
     // Cluster de peligro (arriba centro)
     this.dangerClusterEl = document.createElement("div")
@@ -55,10 +65,9 @@ export class UIManager {
     this.biomeTimerEl.style.cssText = `
       position: relative;
       padding: 4px 12px;
-      font-family: "Geist-Semibold", sans-serif;
-      font-size: 16px;
+      font-family: ${PARAGRAPH_FONT};
+      font-size: 17px;
       font-weight: bold;
-      letter-spacing: 0.06em;
       color: #f7f7ff;
       background: rgba(0, 0, 0, 0.55);
       border: 2px solid rgba(255, 255, 255, 0.35);
@@ -116,8 +125,8 @@ export class UIManager {
       left: 50%;
       transform: translateX(-50%);
       padding: 6px 14px;
-      font-family: "Geist-Semibold", sans-serif;
-      font-size: 14px;
+      font-family: ${PARAGRAPH_FONT};
+      font-size: 15px;
       white-space: nowrap;
       color: #f7f7ff;
       background: rgba(0, 0, 0, 0.45);
@@ -136,9 +145,8 @@ export class UIManager {
       left: 50%;
       transform: translateX(-50%);
       padding: 6px 18px;
-      font-family: "Geist-Semibold", sans-serif;
-      font-size: 13px;
-      letter-spacing: 0.08em;
+      font-family: ${PARAGRAPH_FONT};
+      font-size: 14px;
       color: #0ff;
       background: rgba(0, 40, 60, 0.65);
       border: 1px solid rgba(0, 255, 255, 0.5);
@@ -252,9 +260,9 @@ export class UIManager {
   }
 
   public updateUI(state: GameState, deltaTime: number): void {
-    this.debrisCountEl.textContent = state.debrisCollected.toString()
-    this.ecoAwarenessEl.textContent = Math.floor(state.ecoAwareness).toString()
-    this.zoneProgressEl.textContent = `${Math.round(state.zoneProgress)}%`
+    this.setText(this.debrisCountEl, state.debrisCollected.toString())
+    this.setText(this.ecoAwarenessEl, Math.floor(state.ecoAwareness).toString())
+    this.setText(this.zoneProgressEl, `${Math.round(state.zoneProgress)}%`)
 
     const toxicity = Math.min(state.toxicity, 100)
 
@@ -298,6 +306,7 @@ export class UIManager {
       )
       if (level) this.toxicitySkullEl.classList.add(level)
       this.lastToxicityLevel = level
+      this.announceToxicity(level, toxicity)
     }
 
     this.updateToxicityTrend(visible, deltaTime)
@@ -328,6 +337,20 @@ export class UIManager {
       cls === "up" ? "▲" : cls === "down" ? "▼" : ""
   }
 
+  /** Anuncia el nivel de toxicidad solo cuando cambia, para no saturar al lector de pantalla. */
+  private announceToxicity(level: string | null, toxicity: number): void {
+    const label = level ? TOXICITY_LEVEL_LABELS[level] : null
+    const text = label
+      ? `Toxicidad ${label}: ${Math.round(toxicity)} por ciento`
+      : "Toxicidad despejada"
+
+    this.setText(this.toxicityStatusEl, text)
+  }
+
+  private setText(element: HTMLElement, text: string): void {
+    if (element.textContent !== text) element.textContent = text
+  }
+
   public resetRunHud(): void {
     this.lastToxicity = 0
     this.lastToxicityLevel = null
@@ -337,6 +360,7 @@ export class UIManager {
     this.lastTrendClass = ""
     this.toxicityTrendEl.classList.remove("up", "down")
     this.toxicityTrendEl.textContent = ""
+    this.setText(this.toxicityStatusEl, "")
     this.toxicitySkullEl.classList.remove(
       "active",
       "level-low",
@@ -372,8 +396,8 @@ export class UIManager {
       left: 50%;
       transform: translate(-50%, -50%);
       color: #f7f7ff;
-      font-family: "Pogonia", sans-serif;
-      font-size: 36px;
+      font-family: ${TITLE_FONT};
+      font-size: 38px;
       font-weight: bold;
       text-shadow: 2px 2px 4px rgba(0,0,0,0.6);
       background: none;
@@ -399,7 +423,7 @@ export class UIManager {
     screenX: number,
     screenY: number,
   ): void {
-    const size = Math.min(34, 16 + value * 0.6)
+    const size = Math.min(36, 17 + value * 0.6)
     const color = value >= 20 ? "#ffd166" : value >= 12 ? "#7cf7d4" : "#a5f3fc"
     const duration = 1.1 + Math.min(0.5, value * 0.015)
 
@@ -410,7 +434,7 @@ export class UIManager {
       left: ${screenX}px;
       top: ${screenY}px;
       transform: translate(-50%, -50%);
-      font-family: "Geist-Semibold", sans-serif;
+      font-family: ${PARAGRAPH_FONT};
       font-size: ${size}px;
       font-weight: bold;
       color: ${color};
