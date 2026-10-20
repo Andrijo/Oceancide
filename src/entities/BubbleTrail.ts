@@ -202,5 +202,4 @@ export class BubbleTrail {
     this.phase[i] = Math.random() * Math.PI * 2
     this.wobble[i] = 0.5 + Math.random() * 1.2
   }
-
 }

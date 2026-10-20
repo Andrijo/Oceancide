@@ -305,11 +305,7 @@ const SHAPE_FACTORIES: Record<DebrisShape, ShapeFactory> = {
   sheet: (_rng, d) => createSheetGeometry(d),
   blob: (_rng, d) => createBlobGeometry(d),
   ring: (_rng, d) =>
-    deformGeometry(
-      new THREE.TorusGeometry(0.28, 0.085, 14, 32),
-      d * 0.55,
-      6,
-    ),
+    deformGeometry(new THREE.TorusGeometry(0.28, 0.085, 14, 32), d * 0.55, 6),
   shard: (rng, d) => createShardGeometry(rng, d),
   // La nube varía por instancia (partículas); la deformación ajusta el grano base.
   cloud: (_rng, d) => new THREE.IcosahedronGeometry(0.035 + d * 0.02, 1),
@@ -503,11 +499,13 @@ export class Debris {
 
     // Escala no uniforme: rompe la silueta entre instancias del mismo tipo.
     const variance = rng.range(0.85, 1.18)
-    this.baseScale.set(
-      variance * rng.range(0.9, 1.12),
-      variance * rng.range(0.85, 1.15),
-      variance * rng.range(0.9, 1.12),
-    ).multiplyScalar(visual.scale ?? 1)
+    this.baseScale
+      .set(
+        variance * rng.range(0.9, 1.12),
+        variance * rng.range(0.85, 1.15),
+        variance * rng.range(0.9, 1.12),
+      )
+      .multiplyScalar(visual.scale ?? 1)
 
     this.object.scale.copy(this.baseScale)
 
@@ -538,7 +536,9 @@ export class Debris {
     if (this.object instanceof THREE.Mesh) {
       const material = this.object.material
       if (Array.isArray(material)) {
-        material.forEach((m) => adaptMaterialToWater(m as ColorMaterial, waterColor))
+        material.forEach((m) =>
+          adaptMaterialToWater(m as ColorMaterial, waterColor),
+        )
       } else {
         adaptMaterialToWater(material as ColorMaterial, waterColor)
       }
@@ -682,5 +682,4 @@ export class Debris {
 
     return material
   }
-
 }

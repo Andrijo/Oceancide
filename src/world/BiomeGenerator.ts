@@ -500,9 +500,7 @@ export class BiomeGenerator {
     if (this.leakingRemaining <= 0) return ratio
 
     const share =
-      this.leakingInitial > 0
-        ? this.leakingRemaining / this.leakingInitial
-        : 1
+      this.leakingInitial > 0 ? this.leakingRemaining / this.leakingInitial : 1
 
     return Math.max(ratio, LEAK_POLLUTION_FLOOR * share)
   }

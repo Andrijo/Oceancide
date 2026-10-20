@@ -21,10 +21,7 @@
       "@ui/*": ["./src/ui/*"],
       "@cards/*": ["./src/cards/*"],
       "@tycoon/*": ["./src/tycoon/*"],
-      "@events/*": ["./src/events/*"],
-      "@relics/*": ["./src/relics/*"],
-      "@drones/*": ["./src/drones/*"],
-      "@bosses/*": ["./src/bosses/*"]
+      "@events/*": ["./src/events/*"]
     },
     "noUnusedLocals": true,
     "noUnusedParameters": true,

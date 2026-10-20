@@ -47,9 +47,7 @@ function cachedGeometry(
 const ROCK_RADIUS_STEPS = 5
 
 function createRock(rng: Rng): THREE.Object3D {
-  const step = Math.round(
-    (rng.range(0, 2) / 2) * (ROCK_RADIUS_STEPS - 1),
-  )
+  const step = Math.round((rng.range(0, 2) / 2) * (ROCK_RADIUS_STEPS - 1))
   const radius = 1 + (step / (ROCK_RADIUS_STEPS - 1)) * 2
 
   const geometry = cachedGeometry(

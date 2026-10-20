@@ -126,7 +126,10 @@ export function previewEventEffects(
     })
   }
 
-  if (effects.collectionRadius !== undefined && effects.collectionRadius !== 0) {
+  if (
+    effects.collectionRadius !== undefined &&
+    effects.collectionRadius !== 0
+  ) {
     const before = ctx.turtle.stats.collectionRadius
     const after = before + effects.collectionRadius
 
@@ -185,9 +188,7 @@ export function previewEventEffects(
   let warning: string | undefined
   if (lethal) {
     warning =
-      ctx.run.reviveCharges > 0
-        ? "Puede consumir un revive"
-        : "Puede matarte"
+      ctx.run.reviveCharges > 0 ? "Puede consumir un revive" : "Puede matarte"
   }
 
   return { lines, warning }
@@ -230,7 +231,10 @@ export function applyEventEffects(
     )
   }
 
-  if (effects.collectionRadius !== undefined && effects.collectionRadius !== 0) {
+  if (
+    effects.collectionRadius !== undefined &&
+    effects.collectionRadius !== 0
+  ) {
     ctx.turtle.stats.collectionRadius += effects.collectionRadius
     parts.push(`${signedDecimal(effects.collectionRadius)} radio`)
   }

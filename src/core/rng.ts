@@ -34,7 +34,10 @@ export class Rng {
    * Elige un elemento con probabilidad proporcional a su peso (los pesos
    * negativos se tratan como 0). Si todos pesan 0, cae a `pick` uniforme.
    */
-  public pickWeighted<T>(items: readonly T[], weightOf: (item: T) => number): T {
+  public pickWeighted<T>(
+    items: readonly T[],
+    weightOf: (item: T) => number,
+  ): T {
     if (items.length === 0) {
       throw new Error("[Rng.pickWeighted] lista vacía")
     }
