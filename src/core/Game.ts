@@ -91,7 +91,7 @@ export class Game {
   private pointLightBoost = 1
 
   private cardManager = new CardManager()
-  private upgradeManager = new UpgradeManager() // <-- NUEVO
+  private upgradeManager = new UpgradeManager()
   private runState: RunState = createRunState()
   private biomeIndex = 0
   private collectedInZone = 0
@@ -112,7 +112,7 @@ export class Game {
   private pendingTimeDelta = 0
   private pendingToxicityFloor: number | null = null
   private revivesUsed = 0
-  private toxicityScaleMult = 1 // <-- NUEVO
+  private toxicityScaleMult = 1
 
   private saveManager = new SaveManager()
   private meta: MetaState
@@ -160,7 +160,6 @@ export class Game {
 
     this.meta = this.saveManager.load()
 
-    // <-- NUEVO CALLBACK: onSaveMeta
     this.screens = new ScreenManager({
       onStartRun: () => this.startRun(false),
       onStartEndless: () => this.startRun(true),

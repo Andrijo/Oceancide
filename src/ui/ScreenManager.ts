@@ -20,7 +20,7 @@ export interface ScreenCallbacks {
   onStartEndless(): void
   onReturnToHub(): void
   onResetProgress(): void
-  onSaveMeta(): void // <-- NUEVO
+  onSaveMeta(): void
 }
 
 export interface RunInfo {
@@ -973,12 +973,10 @@ export class ScreenManager {
       const remaining = items.length - i
       if (remaining === 1 && rows.length > 0) {
         rows[rows.length - 1].push(items[i])
-        i += 1
         break
       }
       if (remaining === 3 && target === 2 && rows.length > 0) {
         rows.push(items.slice(i, i + 3))
-        i += 3
         break
       }
       const size = Math.min(target, remaining)

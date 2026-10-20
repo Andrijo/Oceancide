@@ -255,6 +255,18 @@ bun run build
 
 # Vista previa del build
 bun run preview
+
+# Typecheck
+bun run typecheck
+
+# Tests (una vez) / en watch / con cobertura
+bun run test:run
+bun run test
+bun run test:coverage
+
+# Lint y formato
+bun run lint
+bun run format:check
 ```
 
 ## Estructura del proyecto
@@ -265,6 +277,9 @@ oceancidio/
 ├── package.json
 ├── tsconfig.json
 ├── vite.config.ts        # Config de Vite (alias de importación)
+├── vitest.config.ts      # Config de tests y cobertura
+├── eslint.config.js      # Reglas de lint (flat config)
+├── .github/workflows/    # CI: typecheck, lint, formato, tests y build
 ├── public/
 │   ├── fonts/            # Fuentes (Pogonia para títulos, DM Sans para párrafos)
 │   ├── favicon.svg
@@ -296,6 +311,12 @@ oceancidio/
     │   ├── Card.ts             # Tipos de carta y estado de la run
     │   ├── CardManager.ts      # Reparto y aplicación de cartas
     │   └── CardPool.ts         # Mazo de cartas y pesos por rareza
+    ├── events/           # Eventos narrativos con opciones
+    │   ├── EventPool.ts        # Catálogo de eventos
+    │   └── EventEffects.ts     # Efectos declarativos, preview y aplicación
+    ├── tycoon/           # Mejoras permanentes del Refugio
+    │   ├── Upgrades.ts         # Catálogo de mejoras
+    │   └── UpgradeManager.ts   # Compra y aplicación de mejoras
     └── ui/               # Interfaz y controles
         ├── UIManager.ts        # HUD, números flotantes, calavera y mensajes
         ├── ScreenManager.ts    # Menús (hub, resumen, pausa y elección de cartas)
@@ -314,9 +335,11 @@ Los imports entre carpetas usan alias configurados en `tsconfig.json` y `vite.co
 | `@entities/*` | `src/entities/*` |
 | `@ui/*`       | `src/ui/*`       |
 | `@cards/*`    | `src/cards/*`    |
+| `@tycoon/*`   | `src/tycoon/*`   |
+| `@events/*`   | `src/events/*`   |
 | `@/*`         | `src/*`          |
 
-> Reservados para sistemas futuros (aún sin carpeta): `@tycoon`, `@events`, `@relics`, `@drones`, `@bosses`.
+> Los alias solo se declaran para carpetas que existen. `@relics`, `@drones` y `@bosses` se eliminaron al no tener todavía código.
 
 ## Tecnologías utilizadas
 
