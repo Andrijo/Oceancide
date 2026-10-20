@@ -151,6 +151,8 @@
         width: 100%;
         height: 100%;
         display: block;
+        /* El glow se dibuja fuera del viewBox; sin esto se recorta. */
+        overflow: visible;
       }
 
       .skull-shape {
@@ -193,8 +195,8 @@
       }
 
       .toxicity-skull.level-crit .skull-shape {
-        stroke: rgba(255, 80, 80, 0.95);
-        filter: drop-shadow(0 0 8px rgba(255, 60, 60, 0.7));
+        stroke: rgba(255, 110, 110, 1);
+        filter: url(#skull-glow-red);
       }
 
       /* Chevron de tendencia: ▲ subiendo (empeora), ▼ bajando (limpiando) */
@@ -239,8 +241,8 @@
 
       /* Flash verde cuando la toxicidad baja */
       .toxicity-skull.cleansing .skull-shape {
-        stroke: rgba(120, 255, 160, 0.95);
-        filter: drop-shadow(0 0 10px rgba(80, 255, 140, 0.8));
+        stroke: rgba(150, 255, 185, 1);
+        filter: url(#skull-glow-green);
       }
 
       .toxicity-skull.cleansing .skull-fill {
@@ -524,6 +526,60 @@
 
       <div id="toxicity-skull" class="toxicity-skull" aria-hidden="true">
         <svg viewBox="0 0 100 120" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <!-- Glow SVG nativo: sigue la silueta del path y no la caja del filtro. -->
+            <filter
+              id="skull-glow-red"
+              x="-60%"
+              y="-60%"
+              width="220%"
+              height="220%">
+              <feDropShadow
+                dx="0"
+                dy="0"
+                stdDeviation="1.5"
+                flood-color="#ff8a80"
+                flood-opacity="0.95" />
+              <feDropShadow
+                dx="0"
+                dy="0"
+                stdDeviation="5"
+                flood-color="#ff2d2d"
+                flood-opacity="0.9" />
+              <feDropShadow
+                dx="0"
+                dy="0"
+                stdDeviation="11"
+                flood-color="#ff0000"
+                flood-opacity="0.65" />
+            </filter>
+            <filter
+              id="skull-glow-green"
+              x="-60%"
+              y="-60%"
+              width="220%"
+              height="220%">
+              <feDropShadow
+                dx="0"
+                dy="0"
+                stdDeviation="1.5"
+                flood-color="#d6ffe2"
+                flood-opacity="0.95" />
+              <feDropShadow
+                dx="0"
+                dy="0"
+                stdDeviation="5"
+                flood-color="#50ff8c"
+                flood-opacity="0.95" />
+              <feDropShadow
+                dx="0"
+                dy="0"
+                stdDeviation="11"
+                flood-color="#14ff78"
+                flood-opacity="0.65" />
+            </filter>
+          </defs>
+
           <!-- Silueta de calavera -->
           <path
             class="skull-shape"
