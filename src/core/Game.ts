@@ -1,5 +1,3 @@
-// src/core/Game.ts
-
 import * as THREE from "three"
 import { Turtle } from "@entities/Turtle"
 import { BiomeGenerator } from "@world/BiomeGenerator"
@@ -31,6 +29,7 @@ import {
   type RunOutcome,
   type RunSummary,
 } from "@core/types"
+import { UpgradeManager } from "@/tycoon/UpgradeManager"
 
 const MAX_DELTA = 0.1
 
@@ -84,6 +83,7 @@ export class Game {
   private pointLightBoost = 1
 
   private cardManager = new CardManager()
+  private upgradeManager = new UpgradeManager() // <-- NUEVO
   private runState: RunState = createRunState()
   private biomeIndex = 0
   private collectedInZone = 0
@@ -102,6 +102,7 @@ export class Game {
   private biomeTimeRemaining = 0
   private biomeTimeLimit = 0
   private revivesUsed = 0
+  private toxicityScaleMult = 1 // <-- NUEVO
 
   private saveManager = new SaveManager()
   private meta: MetaState
@@ -148,6 +149,8 @@ export class Game {
     this.transition = new BiomeTransition()
 
     this.meta = this.saveManager.load()
+
+    // <-- NUEVO CALLBACK: onSaveMeta
     this.screens = new ScreenManager({
       onStartRun: () => this.startRun(false),
       onStartEndless: () => this.startRun(true),
@@ -156,6 +159,7 @@ export class Game {
         this.meta = this.saveManager.reset()
         this.showHub()
       },
+      onSaveMeta: () => this.saveManager.save(this.meta),
     })
 
     this.state = {
@@ -509,7 +513,6 @@ export class Game {
       this.screens.hide()
     }
 
-    // GSAP corre en tiempo real: lo congelamos junto con la simulación.
     setAnimationsPaused(paused)
   }
 
@@ -559,6 +562,11 @@ export class Game {
     this.runState = createRunState()
     this.cardManager.resetPity()
     this.revivesUsed = 0
+
+    // <-- NUEVO: Aplicar mejoras del refugio
+    const bonuses = this.upgradeManager.applyAll(this.meta, this.turtle.stats)
+    this.runState.ecoMultiplier *= bonuses.ecoMult
+    this.toxicityScaleMult = bonuses.toxScaleMult
 
     this.uiManager.resetRunHud()
 
@@ -711,7 +719,6 @@ export class Game {
       this.biomeTimeLimit,
     )
 
-    // La tortuga siempre se puede mover (para probar la acción)
     const bounds = this.biomeGenerator.getBounds()
     this.turtle.update(deltaTime, this.input, bounds)
 
@@ -738,10 +745,13 @@ export class Game {
       this.biomeGenerator.getInitialDebrisCount() * ZONE_COMPLETION_RATIO,
     )
 
-    // --- Toxicidad Pasiva ---
+    // --- Toxicidad Pasiva (aplicando el multiplicador de la mejora "Sistema Inmune") ---
     this.biomeGenerator.updateVisuals(deltaTime)
     const pollution = this.biomeGenerator.getPollutionRatio()
-    const base = this.biomeGenerator.getBiome().toxicityRate * TOXICITY_SCALE
+    const base =
+      this.biomeGenerator.getBiome().toxicityRate *
+      TOXICITY_SCALE *
+      this.toxicityScaleMult
     const passiveRate =
       base *
       pollution *
@@ -809,7 +819,6 @@ export class Game {
       (this.collectedInZone / required) * 100,
     )
 
-    // Actualizamos la UI con deltaTime para animaciones
     this.uiManager.updateUI(this.state, deltaTime)
     this.updateBuildHud()
 

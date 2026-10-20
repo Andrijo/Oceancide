@@ -10,15 +10,17 @@ import type { Card, CardRarity } from "@cards/Card"
 import { CARD_POOL } from "@cards/CardPool"
 import { revealCards } from "@ui/animations"
 import { PARAGRAPH_FONT, TITLE_FONT } from "@ui/fonts"
+import { UPGRADES } from "@/tycoon/Upgrades"
+import { UpgradeManager } from "@/tycoon/UpgradeManager"
 
 export interface ScreenCallbacks {
   onStartRun(): void
   onStartEndless(): void
   onReturnToHub(): void
   onResetProgress(): void
+  onSaveMeta(): void // <-- NUEVO
 }
 
-/** Info de la run actual, para mostrarla en el menú de pausa. */
 export interface RunInfo {
   biomeIndex: number
   biomeName: string
@@ -71,7 +73,6 @@ const OUTCOME_TITLES: Record<RunOutcome, string> = {
   abandoned: "Inmersión abandonada",
 }
 
-// Color del título según el outcome.
 const OUTCOME_COLORS: Record<RunOutcome, string> = {
   died: "#ff7a6b",
   completed: "#7cf7d4",
@@ -88,6 +89,8 @@ const CARD_KEYS: Record<string, number> = {
 }
 
 const HUB_ACCENT = "#a855f7"
+const UPGRADE_ACCENT = HUB_ACCENT
+const UPGRADE_TEXT = "#d8b4fe"
 
 const ICONS = {
   trash: [
@@ -144,7 +147,7 @@ function formatTime(seconds: number): string {
   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`
 }
 
-type ActionVariant = "primary" | "danger" | "neutral"
+type ActionVariant = "primary" | "danger" | "neutral" | "upgrade"
 
 export class ScreenManager {
   private overlay: HTMLElement
@@ -220,8 +223,6 @@ export class ScreenManager {
     return this.cardChoiceActive
   }
 
-  // Pantallas
-
   public showHub(meta: MetaState): void {
     this.ensureHubAnimation()
 
@@ -251,7 +252,6 @@ export class ScreenManager {
 
     const { root, content } = this.makeWindowFrame()
 
-    // Barra superior: botón de eliminar progreso
     const topBar = el(
       "div",
       `position: absolute;
@@ -266,7 +266,6 @@ export class ScreenManager {
     )
     topBar.append(this.makeGhostTrashButton("Eliminar progreso", reset))
 
-    // Logo
     const title = el(
       "div",
       `width: 100%;
@@ -311,17 +310,6 @@ export class ScreenManager {
       ),
     )
 
-    const tagline = el(
-      "div",
-      `max-width: 760px;
-      font-family: ${TITLE_FONT};
-      font-size: clamp(17px, 2.9vw, 38px);
-      font-weight: 900;
-      line-height: 1.15;
-      color: #eaffef;
-      text-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);`,
-    )
-
     const stats = this.makeBentoGrid([
       {
         label: "Conciencia ecológica",
@@ -341,19 +329,15 @@ export class ScreenManager {
     ])
 
     const endless = () => this.callbacks.onStartEndless()
-    const endlessWrap = el("div", `display: flex; justify-content: center;`)
-    endlessWrap.append(
-      this.makeGhostAction("Inmersión sin fin", endless, "neutral"),
-    )
 
-    // Fila de botones: primario al 65%, secundario al 35%
+    // Fila de botones de acción
     const actionsRow = el(
       "div",
       `display: flex;
-  align-items: stretch;
-  gap: 12px;
-  width: 100%;
-  max-width: 640px;`,
+      align-items: stretch;
+      gap: 12px;
+      width: 100%;
+      max-width: 640px;`,
     )
 
     const primary = this.makeHubCta("Empezar", start, true)
@@ -371,32 +355,135 @@ export class ScreenManager {
 
     actionsRow.append(secondary, primary)
 
+    // Botón de Mejoras (debajo de la fila)
+    const upgradesBtn = this.makeGhostAction(
+      "Mejoras del Refugio",
+      () => this.showUpgrades(meta, () => this.showHub(meta)),
+      "upgrade",
+      true,
+    )
+    upgradesBtn.style.marginTop = "8px"
+    upgradesBtn.style.maxWidth = "400px"
+
     content.append(
       enter(title, 0),
-      enter(tagline, 90),
       enter(stats, 180),
       enter(this.makeZoneProgress(bestIndex), 280),
       enter(actionsRow, 380),
+      enter(upgradesBtn, 440),
     )
 
     root.append(topBar)
     this.open(root, start)
   }
 
+  public showUpgrades(meta: MetaState, onClose: () => void): void {
+    const { root, content } = this.makeWindowFrame()
+    const manager = new UpgradeManager()
+
+    const title = this.makeScreenTitle("Mejoras del Refugio")
+    const subtitle = el(
+      "div",
+      `font-size: 16px; color: ${UPGRADE_TEXT}; margin-bottom: 20px; font-family: ${TITLE_FONT}; font-weight: bold;`,
+      `Eco disponible: ${meta.ecoPoints.toLocaleString("es")}`,
+    )
+
+    const grid = el(
+      "div",
+      `display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      width: 100%;
+      max-width: 960px;
+      margin-bottom: 20px;
+      text-align: left;`,
+    )
+
+    UPGRADES.forEach((upgrade) => {
+      const level = meta.upgrades[upgrade.id] || 0
+      const isMax = level >= upgrade.maxLevel
+      const cost = isMax ? 0 : upgrade.costs[level]
+      const canBuy = manager.canBuy(meta, upgrade.id)
+
+      const card = el(
+        "div",
+        `display: flex;
+        flex-direction: column;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid ${isMax ? UPGRADE_ACCENT : "rgba(255, 255, 255, 0.1)"};
+        border-radius: 14px;
+        padding: 16px;
+        gap: 12px;`,
+      )
+
+      const header = el(
+        "div",
+        `display: flex; justify-content: space-between; align-items: flex-start;`,
+      )
+
+      const name = el(
+        "div",
+        `font-family: ${TITLE_FONT}; font-size: 18px; color: #fff;`,
+        upgrade.name,
+      )
+
+      const badge = el(
+        "div",
+        `font-size: 12px; padding: 2px 8px; border-radius: 4px; background: rgba(255,255,255,0.1); color: #ddd; white-space: nowrap;`,
+        `${level} / ${upgrade.maxLevel}`,
+      )
+
+      header.append(name, badge)
+
+      const desc = el(
+        "div",
+        `font-size: 13px; color: rgba(255,255,255,0.7); line-height: 1.4; flex: 1;`,
+        upgrade.description,
+      )
+
+      const btn = this.makeGhostAction(
+        isMax ? "Nivel Máximo" : `Comprar · ${cost} Eco`,
+        () => {
+          if (manager.buy(meta, upgrade.id)) {
+            this.callbacks.onSaveMeta() // Guardar en localStorage
+            this.showUpgrades(meta, onClose) // Redibujar
+          }
+        },
+        isMax ? "upgrade" : canBuy ? "primary" : "neutral",
+        true,
+      )
+
+      if (!canBuy) {
+        btn.style.opacity = "0.5"
+        btn.style.pointerEvents = "none"
+      }
+
+      card.append(header, desc, btn)
+      grid.append(card)
+    })
+
+    const backBtn = this.makeGhostAction(
+      "Volver al Refugio",
+      onClose,
+      "neutral",
+      true,
+    )
+    backBtn.style.maxWidth = "400px"
+
+    content.append(title, subtitle, grid, backBtn)
+    this.open(root, onClose)
+  }
+
   public showSummary(summary: RunSummary, meta: MetaState): void {
     const again = () => this.callbacks.onStartRun()
-
     const { root, content } = this.makeWindowFrame()
 
-    // Título: distinto si es endless
     const titleText = summary.endless
       ? "Fin de la inmersión"
       : OUTCOME_TITLES[summary.outcome]
-
     const titleColor = summary.endless
       ? "#7cf7d4"
       : OUTCOME_COLORS[summary.outcome]
-
     const title = this.makeScreenTitle(titleText, titleColor)
 
     const zoneLabel = summary.endless
@@ -452,13 +539,8 @@ export class ScreenManager {
       content.append(
         el(
           "div",
-          `font-size: 13px;
-          opacity: 0.85;
-          color: #bcebf6;
-          text-align: center;
-          font-family: ${PARAGRAPH_FONT};
-          line-height: 1.6;
-          max-width: 720px;`,
+          `font-size: 13px; opacity: 0.85; color: #bcebf6; text-align: center;
+          font-family: ${PARAGRAPH_FONT}; line-height: 1.6; max-width: 720px;`,
           names,
         ),
       )
@@ -466,13 +548,8 @@ export class ScreenManager {
 
     const buttons = el(
       "div",
-      `width: 100%;
-  max-width: 640px;
-  display: flex;
-  flex-direction: row;
-  align-items: stretch;
-  gap: 12px;
-  margin-top: 4px;`,
+      `width: 100%; max-width: 640px; display: flex; flex-direction: row;
+      align-items: stretch; gap: 12px; margin-top: 4px;`,
     )
 
     const againBtn = this.makeGhostAction(
@@ -499,12 +576,8 @@ export class ScreenManager {
     content.append(
       el(
         "div",
-        `font-size: 11px;
-        text-transform: capitalize;
-        opacity: 0.55;
-        text-align: center;
-        color: #bcebf6;
-        font-family: ${PARAGRAPH_FONT};`,
+        `font-size: 11px; text-transform: capitalize; opacity: 0.55;
+        text-align: center; color: #bcebf6; font-family: ${PARAGRAPH_FONT};`,
         `Semilla · ${summary.seed}`,
       ),
     )
@@ -517,10 +590,8 @@ export class ScreenManager {
 
     const pick = (index: number) => {
       if (!this.cardChoiceActive) return
-
       const card = cards[index]
       if (!card) return
-
       this.hide()
       onPick(card)
     }
@@ -532,11 +603,7 @@ export class ScreenManager {
 
     const row = el(
       "div",
-      `display: flex;
-      flex-wrap: wrap;
-      gap: 18px;
-      justify-content: center;
-      width: 100%;`,
+      `display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; width: 100%;`,
     )
 
     const cardButtons: HTMLElement[] = []
@@ -548,9 +615,7 @@ export class ScreenManager {
     })
 
     content.append(title, row)
-
     this.open(root, () => {})
-
     revealCards(cardButtons)
   }
 
@@ -560,14 +625,11 @@ export class ScreenManager {
     runInfo?: RunInfo,
   ): void {
     const { root, content } = this.makeWindowFrame()
-
     const title = this.makeScreenTitle("Pausa")
-
     content.append(title)
 
     if (runInfo) {
       const zoneLabel = `${runInfo.biomeIndex + 1}. ${runInfo.biomeName}`
-
       content.append(
         this.makeBentoGrid([
           { label: "Zona actual", value: zoneLabel },
@@ -577,23 +639,15 @@ export class ScreenManager {
             value: runInfo.ecoAwareness.toLocaleString("es"),
             highlight: true,
           },
-          {
-            label: "Cartas elegidas",
-            value: String(runInfo.cardsCount),
-          },
+          { label: "Cartas elegidas", value: String(runInfo.cardsCount) },
         ]),
       )
     }
 
     const buttons = el(
       "div",
-      `width: 100%;
-  max-width: 640px;
-  display: flex;
-  flex-direction: row;
-  align-items: stretch;
-  gap: 12px;
-  margin-top: 4px;`,
+      `width: 100%; max-width: 640px; display: flex; flex-direction: row;
+      align-items: stretch; gap: 12px; margin-top: 4px;`,
     )
 
     const resumeBtn = this.makeGhostAction(
@@ -616,35 +670,20 @@ export class ScreenManager {
 
     buttons.append(abandonBtn, resumeBtn)
     content.append(buttons)
-
     this.open(root, onResume)
   }
 
-  // Marco de ventana compartido (cuadrícula + fondo)
-  private makeWindowFrame(): {
-    root: HTMLElement
-    content: HTMLElement
-  } {
+  private makeWindowFrame(): { root: HTMLElement; content: HTMLElement } {
     const root = el(
       "div",
-      `position: absolute;
-      inset: 0;
-      z-index: 1;
-      width: 100%;
-      height: 100%;
-      box-sizing: border-box;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      background:
-        linear-gradient(180deg, rgba(4, 12, 20, 0.70), rgba(2, 8, 16, 0.70));`,
+      `position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%;
+      box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden;
+      background: linear-gradient(180deg, rgba(4, 12, 20, 0.70), rgba(2, 8, 16, 0.70));`,
     )
 
     const grid = el(
       "div",
-      `position: absolute;
-      inset: 0;
-      pointer-events: none;
+      `position: absolute; inset: 0; pointer-events: none;
       background-image:
         linear-gradient(rgba(220, 245, 255, 0.04) 1px, transparent 1px),
         linear-gradient(90deg, rgba(220, 245, 255, 0.04) 1px, transparent 1px);
@@ -655,26 +694,14 @@ export class ScreenManager {
 
     const glow = el(
       "div",
-      `position: absolute;
-      top: -180px;
-      left: 50%;
-      width: 780px;
-      height: 460px;
-      transform: translateX(-50%);
-      pointer-events: none;
-      filter: blur(20px);`,
+      `position: absolute; top: -180px; left: 50%; width: 780px; height: 460px;
+      transform: translateX(-50%); pointer-events: none; filter: blur(20px);`,
     )
 
     const content = el(
       "div",
-      `position: relative;
-      flex: 1 1 auto;
-      min-height: 0;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
+      `position: relative; flex: 1 1 auto; min-height: 0; overflow-y: auto;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
       gap: clamp(14px, 2.4vh, 28px);
       padding: clamp(10px, 2vh, 24px) clamp(18px, 4vw, 56px) clamp(22px, 4vh, 44px);
       text-align: center;`,
@@ -684,30 +711,18 @@ export class ScreenManager {
     return { root, content }
   }
 
-  // Menú de pausa
   private makeScreenTitle(text: string, color = "#efffff"): HTMLElement {
     return el(
       "div",
-      `width: 100%;
-    overflow: visible;
-    font-family: ${TITLE_FONT};
-    font-size: clamp(30px, 4.7vw, 60px);
-    font-weight: 900;
-    font-stretch: condensed;
-    line-height: 1;
-    text-align: center;
-    margin-bottom: 40px;
-    color: ${color};
-    text-shadow:
-      0 3px 0 rgba(0, 44, 70, 0.6),
-      0 6px 14px rgba(0, 5, 18, 0.5),
-      0 0 12px ${color}44;
-    max-width: 900px;`,
+      `width: 100%; overflow: visible; font-family: ${TITLE_FONT};
+      font-size: clamp(30px, 4.7vw, 60px); font-weight: 900; font-stretch: condensed;
+      line-height: 1; text-align: center; margin-bottom: 40px; color: ${color};
+      text-shadow: 0 3px 0 rgba(0, 44, 70, 0.6), 0 6px 14px rgba(0, 5, 18, 0.5), 0 0 12px ${color}44;
+      max-width: 900px;`,
       text,
     )
   }
 
-  /** Layout panal: filas alternando 2 y 3 items (2+3+2...), centradas, con efecto zigzag. */
   private makeBentoGrid(
     items: Array<{
       label: string
@@ -718,59 +733,37 @@ export class ScreenManager {
   ): HTMLElement {
     const wrap = el(
       "div",
-      `display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 14px;
-    width: 100%;
-    max-width: 780px;`,
+      `display: flex; flex-direction: column; align-items: center; gap: 14px;
+      width: 100%; max-width: 780px;`,
     )
 
-    // --- Chunking tipo panal ---
     const rows: Array<typeof items> = []
     let i = 0
     let target = 2
 
     while (i < items.length) {
       const remaining = items.length - i
-
-      // Si solo queda 1, agregarlo a la última fila (evita huérfanos)
       if (remaining === 1 && rows.length > 0) {
         rows[rows.length - 1].push(items[i])
         i += 1
         break
       }
-
-      // Si quedan 3 y veníamos buscando 2, hacer fila de 3
-      // (evita 2 + 1 cuando con 3 cierra mejor)
       if (remaining === 3 && target === 2 && rows.length > 0) {
         rows.push(items.slice(i, i + 3))
         i += 3
         break
       }
-
       const size = Math.min(target, remaining)
       rows.push(items.slice(i, i + size))
       i += size
-
-      // Alternar 2 → 3 → 2 → 3...
       target = target === 2 ? 3 : 2
     }
 
-    // --- Render de cada fila ---
     for (const row of rows) {
       const rowEl = el(
         "div",
-        `display: flex;
-      gap: 14px;
-      justify-content: center;
-      align-items: stretch;
-      width: 100%;`,
+        `display: flex; gap: 14px; justify-content: center; align-items: stretch; width: 100%;`,
       )
-
-      // Las filas de 2 son más anchas por tarjeta que las de 3.
-      // Esto refuerza el efecto panal: los items de la fila superior
-      // son ligeramente más grandes que los de la fila inferior.
       const widthPct =
         row.length === 1 ? "60%" : row.length === 2 ? "40%" : "30%"
 
@@ -785,10 +778,8 @@ export class ScreenManager {
         stat.style.minWidth = "0"
         rowEl.append(stat)
       }
-
       wrap.append(rowEl)
     }
-
     return wrap
   }
 
@@ -800,23 +791,15 @@ export class ScreenManager {
   ): HTMLElement {
     const card = el(
       "div",
-      `display: flex;
-    flex-direction: column;
-    gap: 6px;
-    min-width: 0;
-    padding: 12px 14px;
-    text-align: left;
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.045);
-    border: 1px solid rgba(255, 255, 255, 0.09);
-    backdrop-filter: blur(6px);
-    transition: border-color 160ms ease, transform 160ms ease;`,
+      `display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 12px 14px;
+      text-align: left; border-radius: 14px; background: rgba(255, 255, 255, 0.045);
+      border: 1px solid rgba(255, 255, 255, 0.09); backdrop-filter: blur(6px);
+      transition: border-color 160ms ease, transform 160ms ease;`,
     )
 
     card.addEventListener("mouseenter", () => {
       card.style.transform = "translateY(-2px)"
     })
-
     card.addEventListener("mouseleave", () => {
       card.style.borderColor = "rgba(255, 255, 255, 0.09)"
       card.style.transform = "translateY(0)"
@@ -825,22 +808,12 @@ export class ScreenManager {
     card.append(
       el(
         "div",
-        `min-width: 0;
-      font-size: 10px;
-      text-transform: capitalize;
-      margin-bottom: 2px;
-      color: rgba(214, 236, 240, 0.8);`,
+        `min-width: 0; font-size: 10px; text-transform: capitalize; margin-bottom: 2px; color: rgba(214, 236, 240, 0.8);`,
         label,
       ),
       el(
         "div",
-        `font-family: ${TITLE_FONT};
-      font-size: clamp(17px, 1.7vw, 23px);
-      font-weight: 900;
-      line-height: 1.1;
-      text-align: left;
-      overflow-wrap: anywhere;
-      color: ${highlight ? HUB_ACCENT : "#ffffff"};`,
+        `font-family: ${TITLE_FONT}; font-size: clamp(17px, 1.7vw, 23px); font-weight: 900; line-height: 1.1; text-align: left; overflow-wrap: anywhere; color: ${highlight ? HUB_ACCENT : "#ffffff"};`,
         value,
       ),
     )
@@ -850,11 +823,9 @@ export class ScreenManager {
         el("div", `font-size: 11px; color: rgba(214, 236, 240, 0.55);`, sub),
       )
     }
-
     return card
   }
 
-  /** Botón fantasma unificado: primary (cyan), danger (rojo), neutral (blanco). */
   private makeGhostAction(
     label: string,
     onClick: () => void,
@@ -869,6 +840,14 @@ export class ScreenManager {
         hoverBorder: "rgba(220, 245, 255, 0.55)",
         hoverColor: "#ffffff",
         focus: HUB_ACCENT,
+      },
+      upgrade: {
+        color: UPGRADE_TEXT,
+        border: "rgba(168, 85, 247, 0.45)",
+        hoverBg: "rgba(168, 85, 247, 0.16)",
+        hoverBorder: "rgba(216, 180, 254, 0.8)",
+        hoverColor: "#f3e8ff",
+        focus: UPGRADE_TEXT,
       },
       danger: {
         color: "rgba(255, 150, 150, 0.9)",
@@ -890,25 +869,12 @@ export class ScreenManager {
 
     const btn = el(
       "button",
-      `display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      ${fullWidth ? "width: 100%;" : "width: auto;"}
-      min-height: 54px;
-      padding: 12px 22px;
-      border-radius: 12px;
-      cursor: pointer;
-      color: ${palette.color};
-      font: 700 clamp(15px, 1.9vw, 20px) ${TITLE_FONT};
-      background: rgba(255, 255, 255, 0.02);
-      border: 1.5px solid ${palette.border};
-      backdrop-filter: blur(6px);
-      transition:
-        transform 160ms ease,
-        background 160ms ease,
-        border-color 160ms ease,
-        color 160ms ease;`,
+      `display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+      ${fullWidth ? "width: 100%;" : "width: auto;"} min-height: 54px; padding: 12px 22px;
+      border-radius: 12px; cursor: pointer; color: ${palette.color};
+      font: 700 clamp(15px, 1.9vw, 20px) ${TITLE_FONT}; background: rgba(255, 255, 255, 0.02);
+      border: 1.5px solid ${palette.border}; backdrop-filter: blur(6px);
+      transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, color 160ms ease;`,
       label,
     )
 
@@ -918,135 +884,66 @@ export class ScreenManager {
       btn.style.borderColor = palette.hoverBorder
       btn.style.color = palette.hoverColor
     })
-
     btn.addEventListener("mouseleave", () => {
       btn.style.transform = "translateY(0)"
       btn.style.background = "rgba(255, 255, 255, 0.02)"
       btn.style.borderColor = palette.border
       btn.style.color = palette.color
     })
-
     btn.addEventListener("focus", () => {
       btn.style.outline = `2px solid ${palette.focus}`
       btn.style.outlineOffset = "4px"
     })
-
     btn.addEventListener("blur", () => {
       btn.style.outline = "none"
     })
-
     btn.addEventListener("click", onClick)
 
     return btn
   }
 
-  // Helpers de UI
   private ensureUltraGlowAnimation(): void {
     if (document.getElementById("menu-ultra-glow")) return
-
     const style = document.createElement("style")
     style.id = "menu-ultra-glow"
-
     style.textContent = `
     @keyframes ultraGlow {
-      0% {
-        border-color: #94a3b8;
-        box-shadow:
-          0 0 14px rgba(148, 163, 184, 0.7),
-          inset 0 0 12px rgba(148, 163, 184, 0.3);
-      }
-      17% {
-        border-color: #38bdf8;
-        box-shadow:
-          0 0 18px rgba(56, 189, 248, 0.85),
-          inset 0 0 14px rgba(56, 189, 248, 0.4);
-      }
-      33% {
-        border-color: #a855f7;
-        box-shadow:
-          0 0 22px rgba(168, 85, 247, 0.9),
-          inset 0 0 16px rgba(168, 85, 247, 0.45);
-      }
-      50% {
-        border-color: #fbbf24;
-        box-shadow:
-          0 0 26px rgba(251, 191, 36, 1),
-          inset 0 0 18px rgba(251, 191, 36, 0.5);
-      }
-      67% {
-        border-color: #ef4444;
-        box-shadow:
-          0 0 22px rgba(239, 68, 68, 0.9),
-          inset 0 0 16px rgba(239, 68, 68, 0.45);
-      }
-      83% {
-        border-color: #0a9396;
-        box-shadow:
-          0 0 20px rgba(10, 147, 150, 0.9),
-          inset 0 0 14px rgba(10, 147, 150, 0.4);
-      }
-      100% {
-        border-color: #94a3b8;
-        box-shadow:
-          0 0 14px rgba(148, 163, 184, 0.7),
-          inset 0 0 12px rgba(148, 163, 184, 0.3);
-      }
+      0% { border-color: #94a3b8; box-shadow: 0 0 14px rgba(148, 163, 184, 0.7), inset 0 0 12px rgba(148, 163, 184, 0.3); }
+      17% { border-color: #38bdf8; box-shadow: 0 0 18px rgba(56, 189, 248, 0.85), inset 0 0 14px rgba(56, 189, 248, 0.4); }
+      33% { border-color: #a855f7; box-shadow: 0 0 22px rgba(168, 85, 247, 0.9), inset 0 0 16px rgba(168, 85, 247, 0.45); }
+      50% { border-color: #fbbf24; box-shadow: 0 0 26px rgba(251, 191, 36, 1), inset 0 0 18px rgba(251, 191, 36, 0.5); }
+      67% { border-color: #ef4444; box-shadow: 0 0 22px rgba(239, 68, 68, 0.9), inset 0 0 16px rgba(239, 68, 68, 0.45); }
+      83% { border-color: #0a9396; box-shadow: 0 0 20px rgba(10, 147, 150, 0.9), inset 0 0 14px rgba(10, 147, 150, 0.4); }
+      100% { border-color: #94a3b8; box-shadow: 0 0 14px rgba(148, 163, 184, 0.7), inset 0 0 12px rgba(148, 163, 184, 0.3); }
     }
-
-    @media (prefers-reduced-motion: reduce) {
-      .card-ultra-legendary {
-        animation: none !important;
-      }
-    }
+    @media (prefers-reduced-motion: reduce) { .card-ultra-legendary { animation: none !important; } }
   `
-
     document.head.appendChild(style)
   }
 
   private ensureBubbleAnimation(): void {
     if (document.getElementById("menu-bubble-animation")) return
-
     const style = document.createElement("style")
     style.id = "menu-bubble-animation"
-
     style.textContent = `
       @keyframes menuBubbleFloat {
-        0% {
-          transform: translate3d(0, 0, 0) scale(0.92);
-          opacity: 0;
-        }
+        0% { transform: translate3d(0, 0, 0) scale(0.92); opacity: 0; }
         15% { opacity: 0.55; }
         80% { opacity: 0.42; }
-        100% {
-          transform: translate3d(18px, -170px, 0) scale(1.12);
-          opacity: 0;
-        }
+        100% { transform: translate3d(18px, -170px, 0) scale(1.12); opacity: 0; }
       }
     `
-
     document.head.appendChild(style)
   }
 
   private ensureHubAnimation(): void {
     if (document.getElementById("menu-hub-animation")) return
-
     const style = document.createElement("style")
     style.id = "menu-hub-animation"
-
     style.textContent = `
-      @keyframes hubFadeUp {
-        from { opacity: 0; transform: translateY(16px); }
-        to   { opacity: 1; transform: translateY(0); }
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        [data-hub-anim],
-        [data-hub-cta] {
-          animation: none !important;
-        }
-      }
+      @keyframes hubFadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+      @media (prefers-reduced-motion: reduce) { [data-hub-anim], [data-hub-cta] { animation: none !important; } }
     `
-
     document.head.appendChild(style)
   }
 
@@ -1057,36 +954,20 @@ export class ScreenManager {
   ): HTMLButtonElement {
     const btn = el(
       "button",
-      `display: inline-flex;
-    align-items: center;
-    justify-content: ${fullWidth ? "center" : "flex-start"};
-    gap: 12px;
-    ${fullWidth ? "width: 100%;" : "width: auto;"}
-    padding: 12px 22px;
-    border-radius: 12px;
-    cursor: pointer;
-    color: rgba(220, 245, 255, 0.92);
-    font: 700 clamp(15px, 1.9vw, 21px) ${TITLE_FONT};
-    background: #013f52;
-    border: 1.5px solid rgba(220, 245, 255, 0.28);
-    backdrop-filter: blur(6px);
-    transition:
-      transform 160ms ease,
-      background 160ms ease,
-      border-color 160ms ease,
-      color 160ms ease;`,
+      `display: inline-flex; align-items: center; justify-content: ${fullWidth ? "center" : "flex-start"};
+      gap: 12px; ${fullWidth ? "width: 100%;" : "width: auto;"} padding: 12px 22px;
+      border-radius: 12px; cursor: pointer; color: rgba(220, 245, 255, 0.92);
+      font: 700 clamp(15px, 1.9vw, 21px) ${TITLE_FONT}; background: #013f52;
+      border: 1.5px solid rgba(220, 245, 255, 0.28); backdrop-filter: blur(6px);
+      transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, color 160ms ease;`,
     )
 
     btn.dataset.hubCta = ""
 
     const keycap = el(
       "span",
-      `font: 700 10px ${PARAGRAPH_FONT};
-      text-transform: capitalize;
-      padding: 3px 8px;
-      border-radius: 6px;
-      border: 1px solid rgba(220, 245, 255, 0.28);
-      color: rgba(220, 245, 255, 0.55);`,
+      `font: 700 10px ${PARAGRAPH_FONT}; text-transform: capitalize; padding: 3px 8px;
+      border-radius: 6px; border: 1px solid rgba(220, 245, 255, 0.28); color: rgba(220, 245, 255, 0.55);`,
       "Enter",
     )
     keycap.setAttribute("aria-hidden", "true")
@@ -1099,23 +980,19 @@ export class ScreenManager {
       btn.style.borderColor = "rgba(220, 245, 255, 0.55)"
       btn.style.color = "#ffffff"
     })
-
     btn.addEventListener("mouseleave", () => {
       btn.style.transform = "translateY(0)"
       btn.style.background = "#013f52"
       btn.style.borderColor = "rgba(220, 245, 255, 0.28)"
       btn.style.color = "rgba(220, 245, 255, 0.92)"
     })
-
     btn.addEventListener("focus", () => {
       btn.style.outline = `2px solid ${HUB_ACCENT}`
       btn.style.outlineOffset = "5px"
     })
-
     btn.addEventListener("blur", () => {
       btn.style.outline = "none"
     })
-
     btn.addEventListener("click", onClick)
 
     return btn
@@ -1127,15 +1004,9 @@ export class ScreenManager {
   ): HTMLButtonElement {
     const btn = el(
       "button",
-      `display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 9px 14px;
-      border-radius: 12px;
-      cursor: pointer;
-      font: 13px ${PARAGRAPH_FONT};
-      color: rgba(255, 150, 150, 0.9);
-      background: transparent;
+      `display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px;
+      border-radius: 12px; cursor: pointer; font: 13px ${PARAGRAPH_FONT};
+      color: rgba(255, 150, 150, 0.9); background: transparent;
       border: 1px solid rgba(255, 120, 120, 0.28);
       transition: background 150ms ease, border-color 150ms ease;`,
     )
@@ -1146,21 +1017,17 @@ export class ScreenManager {
       btn.style.background = "rgba(255, 90, 90, 0.12)"
       btn.style.borderColor = "rgba(255, 120, 120, 0.6)"
     })
-
     btn.addEventListener("mouseleave", () => {
       btn.style.background = "transparent"
       btn.style.borderColor = "rgba(255, 120, 120, 0.28)"
     })
-
     btn.addEventListener("focus", () => {
       btn.style.outline = "2px solid rgba(255, 150, 150, 0.8)"
       btn.style.outlineOffset = "3px"
     })
-
     btn.addEventListener("blur", () => {
       btn.style.outline = "none"
     })
-
     btn.addEventListener("click", onClick)
 
     return btn
@@ -1172,22 +1039,12 @@ export class ScreenManager {
 
     const wrap = el(
       "div",
-      `width: 100%;
-      max-width: 960px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;`,
+      `width: 100%; max-width: 960px; display: flex; flex-direction: column; gap: 10px;`,
     )
-
     const header = el(
       "div",
-      `display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 12px;
-      font-size: 11px;
-      text-transform: capitalize;
-      color: rgba(214, 236, 240, 0.62);`,
+      `display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+      font-size: 11px; text-transform: capitalize; color: rgba(214, 236, 240, 0.62);`,
     )
 
     header.append(
@@ -1200,18 +1057,12 @@ export class ScreenManager {
     )
 
     const bar = el("div", `display: flex; gap: 6px;`)
-
     BIOME_ORDER.forEach((key, i) => {
       const lit = i < reached
-
       const seg = el(
         "div",
-        `flex: 1 1 0;
-        height: 8px;
-        border-radius: 999px;
-        background: ${lit ? HUB_ACCENT : "rgba(255, 255, 255, 0.1)"};`,
+        `flex: 1 1 0; height: 8px; border-radius: 999px; background: ${lit ? HUB_ACCENT : "rgba(255, 255, 255, 0.1)"};`,
       )
-
       seg.title = `${i + 1}. ${BIOMES[key].name}`
       bar.append(seg)
     })
@@ -1223,13 +1074,8 @@ export class ScreenManager {
   private makeCornerBubbles(): HTMLElement {
     const layer = el(
       "div",
-      `position: absolute;
-      inset: 0;
-      z-index: 0;
-      overflow: hidden;
-      pointer-events: none;`,
+      `position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none;`,
     )
-
     const bubbles = [
       { size: 94, left: "4%", bottom: "8%", delay: "0s", duration: "7s" },
       { size: 48, left: "10%", bottom: "20%", delay: "-2s", duration: "6s" },
@@ -1256,34 +1102,15 @@ export class ScreenManager {
 
       const node = el(
         "div",
-        `position: absolute;
-        ${position}
-        width: ${bubble.size}px;
-        height: ${bubble.size}px;
-        border-radius: 50%;
-        box-sizing: border-box;
-        opacity: 0.55;
-        background:
-          radial-gradient(
-            circle at 30% 25%,
-            rgba(255, 255, 255, 0.95) 0%,
-            rgba(23, 75, 164, 0.28) 18%,
-            rgba(71, 211, 238, 0.12) 48%,
-            rgba(6, 107, 144, 0.05) 72%,
-            transparent 73%
-          );
+        `position: absolute; ${position} width: ${bubble.size}px; height: ${bubble.size}px;
+        border-radius: 50%; box-sizing: border-box; opacity: 0.55;
+        background: radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.95) 0%, rgba(23, 75, 164, 0.28) 18%, rgba(71, 211, 238, 0.12) 48%, rgba(6, 107, 144, 0.05) 72%, transparent 73%);
         border: 1px solid rgba(196, 250, 255, 0.72);
-        box-shadow:
-          inset -3px -4px 7px rgba(0, 77, 110, 0.22),
-          inset 2px 2px 5px rgba(255, 255, 255, 0.35),
-          0 0 12px rgba(91, 236, 255, 0.28);
-        animation:
-          menuBubbleFloat ${bubble.duration} ease-in-out ${bubble.delay} infinite;`,
+        box-shadow: inset -3px -4px 7px rgba(0, 77, 110, 0.22), inset 2px 2px 5px rgba(255, 255, 255, 0.35), 0 0 12px rgba(91, 236, 255, 0.28);
+        animation: menuBubbleFloat ${bubble.duration} ease-in-out ${bubble.delay} infinite;`,
       )
-
       layer.append(node)
     }
-
     return layer
   }
 
@@ -1297,10 +1124,7 @@ export class ScreenManager {
   private setHudVisible(visible: boolean): void {
     for (const id of HUD_IDS) {
       const node = document.getElementById(id)
-
-      if (node) {
-        node.style.display = visible ? "" : "none"
-      }
+      if (node) node.style.display = visible ? "" : "none"
     }
   }
 
@@ -1312,25 +1136,14 @@ export class ScreenManager {
     const accent = RARITY_COLORS[card.rarity]
     const bg = RARITY_BACKGROUNDS[card.rarity]
     const label = RARITY_LABELS[card.rarity]
-
     const isUltra = card.rarity === "ultra_legendary"
 
     const btn = el(
       "button",
-      `position: relative;
-    flex: 0 1 clamp(170px, 26vw, 240px);
-    height: clamp(260px, 38vw, 320px);
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    cursor: pointer;
-    background: ${isUltra ? "#0f0f14" : bg};
-    border: 6px solid ${isUltra ? "#94a3b8" : accent};
-    border-radius: 16px;
-    overflow: hidden;
-    transition:
-      transform 160ms ease,
-      filter 160ms ease;`,
+      `position: relative; flex: 0 1 clamp(170px, 26vw, 240px); height: clamp(260px, 38vw, 320px);
+      padding: 0; display: flex; flex-direction: column; cursor: pointer;
+      background: ${isUltra ? "#0f0f14" : bg}; border: 6px solid ${isUltra ? "#94a3b8" : accent};
+      border-radius: 16px; overflow: hidden; transition: transform 160ms ease, filter 160ms ease;`,
     )
 
     if (isUltra) {
@@ -1346,117 +1159,59 @@ export class ScreenManager {
     btn.addEventListener("mouseenter", () => {
       btn.style.transform = "translateY(-6px) scale(1.02)"
       btn.style.filter = "brightness(1.15)"
-      btn.style.boxShadow = `
-        0 14px 32px rgba(0, 0, 0, 0.65),
-        inset 0 0 0 1px rgba(255, 255, 255, 0.12),
-        0 0 24px ${accent}66
-      `
+      btn.style.boxShadow = `0 14px 32px rgba(0, 0, 0, 0.65), inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 0 24px ${accent}66`
     })
-
     btn.addEventListener("mouseleave", () => {
       btn.style.transform = "translateY(0) scale(1)"
       btn.style.filter = "brightness(1)"
-      btn.style.boxShadow = `
-        0 6px 20px rgba(0, 0, 0, 0.55),
-        inset 0 0 0 1px rgba(255, 255, 255, 0.06)
-      `
+      btn.style.boxShadow = `0 6px 20px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.06)`
     })
-
     btn.addEventListener("click", onClick)
 
     const keyBadge = el(
       "div",
-      `position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 26px;
-  height: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: ${TITLE_FONT};
-  font-size: 12px;
-  font-weight: 900;
-  color: ${isUltra ? "#ffffff" : accent};
-  background: ${isUltra ? "rgba(0, 0, 0, 0.5)" : "none"};
-  border: 1.5px solid ${isUltra ? "#ffffff" : accent};
-  border-radius: 6px;
-  z-index: 2;`,
+      `position: absolute; top: 12px; right: 12px; width: 26px; height: 26px;
+      display: flex; align-items: center; justify-content: center; font-family: ${TITLE_FONT};
+      font-size: 12px; font-weight: 900; color: ${isUltra ? "#ffffff" : accent};
+      background: ${isUltra ? "rgba(0, 0, 0, 0.5)" : "none"}; border: 1.5px solid ${isUltra ? "#ffffff" : accent};
+      border-radius: 6px; z-index: 2;`,
       `${index + 1}`,
     )
     keyBadge.setAttribute("aria-hidden", "true")
 
     const rarityArea = el(
       "div",
-      `padding: 22px 16px 14px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 10px;`,
+      `padding: 22px 16px 14px; display: flex; flex-direction: column; align-items: center; gap: 10px;`,
     )
-
     const rarityLabel = el(
       "div",
-      `font-family: ${TITLE_FONT};
-  font-size: 16px;
-  font-weight: 900;
-  text-transform: uppercase;
-  color: ${isUltra ? "#ffffff" : accent};`,
+      `font-family: ${TITLE_FONT}; font-size: 16px; font-weight: 900; text-transform: uppercase; color: ${isUltra ? "#ffffff" : accent};`,
       label,
     )
-
     const rarityDivider = el(
       "div",
-      `width: 60%;
-  height: 1px;
-  background: ${
-    isUltra
-      ? "linear-gradient(90deg, transparent, #ffffff, transparent)"
-      : `linear-gradient(90deg, transparent, ${accent}, transparent)`
-  };`,
+      `width: 60%; height: 1px;
+      background: ${isUltra ? "linear-gradient(90deg, transparent, #ffffff, transparent)" : `linear-gradient(90deg, transparent, ${accent}, transparent)`};`,
     )
-
     rarityArea.append(rarityLabel, rarityDivider)
 
     const body = el(
       "div",
-      `flex: 1 1 auto;
-      padding: 0 18px 22px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      gap: 12px;`,
+      `flex: 1 1 auto; padding: 0 18px 22px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 12px;`,
     )
-
     const name = el(
       "div",
-      `font-family: ${TITLE_FONT};
-      font-size: 21px;
-      font-weight: 900;
-      line-height: 1.1;
-      text-transform: uppercase;
-      color: #ffffff;`,
+      `font-family: ${TITLE_FONT}; font-size: 21px; font-weight: 900; line-height: 1.1; text-transform: uppercase; color: #ffffff;`,
       card.name,
     )
-
     const value = el(
       "div",
-      `font-family: ${TITLE_FONT};
-  font-size: 23px;
-  font-weight: 900;
-  color: ${isUltra ? "#ffffff" : "#4ade80"};`,
+      `font-family: ${TITLE_FONT}; font-size: 23px; font-weight: 900; color: ${isUltra ? "#ffffff" : "#4ade80"};`,
       card.value,
     )
-
     const desc = el(
       "div",
-      `font-family: ${PARAGRAPH_FONT};
-      font-size: 12px;
-      line-height: 1.45;
-      color: rgba(220, 235, 250, 0.75);
-      margin-top: 4px;`,
+      `font-family: ${PARAGRAPH_FONT}; font-size: 12px; line-height: 1.45; color: rgba(220, 235, 250, 0.75); margin-top: 4px;`,
       card.description,
     )
 
