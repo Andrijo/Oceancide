@@ -13,6 +13,7 @@ import { PARAGRAPH_FONT, TITLE_FONT } from "@ui/fonts"
 import { UPGRADES } from "@/tycoon/Upgrades"
 import { UpgradeManager } from "@/tycoon/UpgradeManager"
 import { type GameEvent, type EventOption } from "@/events/EventPool"
+import type { EventPreview } from "@/events/EventEffects"
 
 export interface ScreenCallbacks {
   onStartRun(): void
@@ -164,6 +165,7 @@ export class ScreenManager {
 
     this.ensureBubbleAnimation()
     this.ensureUltraGlowAnimation()
+    this.ensureEventStyles()
 
     window.addEventListener("keydown", (e) => {
       if (e.repeat) return
@@ -438,6 +440,7 @@ export class ScreenManager {
   public showEvent(
     event: GameEvent,
     onChoose: (opt: EventOption) => void,
+    getPreview?: (opt: EventOption) => EventPreview,
   ): void {
     const { root, content } = this.makeWindowFrame()
 
@@ -475,10 +478,28 @@ export class ScreenManager {
        border-radius: 12px; transition: background 160ms ease, border-color 160ms ease;`,
       )
       btn.type = "button"
+      btn.classList.add("event-option")
+      btn.setAttribute("aria-keyshortcuts", String(index + 1))
+
+      const header = el(
+        "div",
+        "display: flex; align-items: center; gap: 10px; width: 100%;",
+      )
+      const keyHint = el(
+        "span",
+        `flex: none; display: inline-flex; align-items: center; justify-content: center;
+         min-width: 22px; height: 22px; padding: 0 6px; border-radius: 6px;
+         border: 1px solid rgba(220, 245, 255, 0.25);
+         background: rgba(220, 245, 255, 0.08);
+         color: rgba(220, 245, 255, 0.75);
+         font-family: ${PARAGRAPH_FONT}; font-size: 11px; font-weight: bold;`,
+        String(index + 1),
+      )
+      keyHint.setAttribute("aria-hidden", "true")
 
       const btnTitle = el(
         "div",
-        `font-family: ${TITLE_FONT}; font-size: 20px; color: #fff;`,
+        `flex: 1; font-family: ${TITLE_FONT}; font-size: 20px; color: #fff;`,
         opt.label,
       )
       const btnDesc = el(
@@ -487,7 +508,61 @@ export class ScreenManager {
         opt.description,
       )
 
-      btn.append(btnTitle, btnDesc)
+      header.append(keyHint, btnTitle)
+      btn.append(header, btnDesc)
+
+      const preview = getPreview?.(opt)
+      if (preview && preview.lines.length > 0) {
+        const previewBox = el(
+          "div",
+          `display: flex; flex-wrap: wrap; gap: 6px; width: 100%; margin-top: 8px;`,
+        )
+
+        for (const line of preview.lines) {
+          const palette =
+            line.tone === "positive"
+              ? {
+                  color: "#86efac",
+                  border: "rgba(134, 239, 172, 0.35)",
+                  background: "rgba(34, 197, 94, 0.10)",
+                }
+              : line.tone === "negative"
+                ? {
+                    color: "#fca5a5",
+                    border: "rgba(252, 165, 165, 0.35)",
+                    background: "rgba(239, 68, 68, 0.10)",
+                  }
+                : {
+                    color: "rgba(220, 235, 250, 0.72)",
+                    border: "rgba(220, 235, 250, 0.18)",
+                    background: "rgba(255, 255, 255, 0.04)",
+                  }
+
+          previewBox.append(
+            el(
+              "span",
+              `display: inline-flex; align-items: center; gap: 4px;
+               padding: 3px 8px; border-radius: 999px; border: 1px solid ${palette.border};
+               background: ${palette.background}; color: ${palette.color};
+               font-family: ${PARAGRAPH_FONT}; font-size: 11px; line-height: 1.3;
+               ${line.noEffect ? "opacity: 0.55;" : ""}`,
+              `${line.label}: ${line.value}`,
+            ),
+          )
+        }
+
+        if (preview.warning) {
+          previewBox.append(
+            el(
+              "div",
+              `width: 100%; font-size: 12px; font-weight: bold; color: #fecaca;`,
+              preview.warning,
+            ),
+          )
+        }
+
+        btn.append(previewBox)
+      }
 
       btn.addEventListener("mouseenter", () => {
         btn.style.background = "rgba(220, 245, 255, 0.10)"
@@ -720,7 +795,11 @@ export class ScreenManager {
     this.open(root, again)
   }
 
-  public showCardChoice(cards: Card[], onPick: (card: Card) => void): void {
+  public showCardChoice(
+    cards: Card[],
+    onPick: (card: Card) => void,
+    notice?: string,
+  ): void {
     const pick = (index: number) => {
       if (!this.cardChoiceActive) return
       const card = cards[index]
@@ -745,6 +824,20 @@ export class ScreenManager {
       cardButtons.push(btn)
       row.append(btn)
     })
+
+    if (notice) {
+      content.append(
+        el(
+          "div",
+          `max-width: 640px; padding: 8px 14px; border-radius: 999px;
+           border: 1px solid rgba(125, 211, 252, 0.28);
+           background: rgba(125, 211, 252, 0.08);
+           color: #bae6fd; font-family: ${PARAGRAPH_FONT}; font-size: 13px;
+           line-height: 1.4; text-align: center;`,
+          `Resultado del evento: ${notice}`,
+        ),
+      )
+    }
 
     content.append(title, row)
     this.open(root, () => {})
@@ -1035,6 +1128,23 @@ export class ScreenManager {
     btn.addEventListener("click", onClick)
 
     return btn
+  }
+
+  private ensureEventStyles(): void {
+    if (document.getElementById("event-option-styles")) return
+
+    const style = document.createElement("style")
+    style.id = "event-option-styles"
+    style.textContent = `
+    .event-option:focus-visible {
+      outline: 2px solid #7dd3fc;
+      outline-offset: 3px;
+    }
+    .event-option:focus:not(:focus-visible) {
+      outline: none;
+    }
+  `
+    document.head.appendChild(style)
   }
 
   private ensureUltraGlowAnimation(): void {

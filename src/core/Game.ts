@@ -31,6 +31,11 @@ import {
 } from "@core/types"
 import { UpgradeManager } from "@/tycoon/UpgradeManager"
 import { ACT_EVENTS } from "@/events/EventPool"
+import {
+  applyEventEffects,
+  previewEventEffects,
+  type EventContext,
+} from "@/events/EventEffects"
 
 const MAX_DELTA = 0.1
 
@@ -248,30 +253,36 @@ export class Game {
 
     const rng = new Rng(deriveSeed(this.runSeed, this.biomeIndex + 2000))
     const event = rng.pick(ACT_EVENTS)
+    const ctx: EventContext = {
+      turtle: this.turtle,
+      state: this.state,
+      run: this.runState,
+      rng,
+    }
 
-    this.screens.showEvent(event, (opt) => {
-      opt.apply({
-        turtle: this.turtle,
-        state: this.state,
-        run: this.runState,
-        rng: rng,
-      })
+    this.screens.showEvent(
+      event,
+      (opt) => {
+        const result = applyEventEffects(opt.effects, ctx)
 
-      if (opt.nextBiomeTimeDelta) {
-        this.pendingTimeDelta += opt.nextBiomeTimeDelta
-      }
-      if (opt.nextBiomeToxicityFloor !== undefined) {
-        this.pendingToxicityFloor = opt.nextBiomeToxicityFloor
-      }
+        if (result.nextBiomeTimeDelta) {
+          this.pendingTimeDelta += result.nextBiomeTimeDelta
+        }
+        if (result.nextBiomeToxicityFloor !== undefined) {
+          this.pendingToxicityFloor = result.nextBiomeToxicityFloor
+        }
 
-      // Los eventos pueden llevar la toxicidad a 100. Resolvemos la muerte o
-      // el revive antes de abrir la elección de carta.
-      const lethal = this.state.toxicity >= 100
-      if (lethal && !this.tryKill()) return
+        this.uiManager.announce(`Evento: ${result.summary}`)
 
-      if (!lethal) this.uiManager.showMessage(opt.label, 1500)
-      this.openCardChoice()
-    })
+        // Los eventos pueden llevar la toxicidad a 100. Resolvemos la muerte o
+        // el revive antes de abrir la elección de carta.
+        const lethal = this.state.toxicity >= 100
+        if (lethal && !this.tryKill()) return
+
+        this.openCardChoice(result.summary)
+      },
+      (opt) => previewEventEffects(opt.effects, ctx),
+    )
   }
 
   private setupEventListeners(): void {
@@ -949,7 +960,7 @@ export class Game {
     )
   }
 
-  private openCardChoice(): void {
+  private openCardChoice(notice?: string): void {
     if (this.screens.isCardChoiceActive()) return
     if (this.screens.isEventActive()) return
     if (this.screen !== "run") return
@@ -959,21 +970,24 @@ export class Game {
     const rng = new Rng(deriveSeed(this.runSeed, this.biomeIndex + 1000))
     const choices = this.cardManager.rollChoices(3, rng)
 
-    this.screens.showCardChoice(choices, (card) => {
-      this.cardManager.pick(card, {
-        turtle: this.turtle,
-        state: this.state,
-        run: this.runState,
-      })
+    this.screens.showCardChoice(
+      choices,
+      (card) => {
+        this.cardManager.pick(card, {
+          turtle: this.turtle,
+          state: this.state,
+          run: this.runState,
+        })
 
-      if (card.id === "bioluminescence") {
-        const next = Math.min(1, this.turtle.getGlow() + 0.5)
-        this.turtle.setGlow(next)
-      }
+        if (card.id === "bioluminescence") {
+          this.turtle.addGlow(0.5)
+        }
 
-      this.uiManager.showMessage(`+ ${card.name}`, 1500)
-      this.advanceBiome()
-    })
+        this.uiManager.showMessage(`+ ${card.name}`, 1500)
+        this.advanceBiome()
+      },
+      notice,
+    )
   }
 
   private tryKill(): boolean {
