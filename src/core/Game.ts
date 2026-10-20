@@ -30,6 +30,7 @@ import {
   type RunSummary,
 } from "@core/types"
 import { UpgradeManager } from "@/tycoon/UpgradeManager"
+import { ACT_EVENTS } from "@/events/EventPool"
 
 const MAX_DELTA = 0.1
 
@@ -101,6 +102,7 @@ export class Game {
 
   private biomeTimeRemaining = 0
   private biomeTimeLimit = 0
+  private pendingTimeBonus = 0
   private revivesUsed = 0
   private toxicityScaleMult = 1 // <-- NUEVO
 
@@ -237,6 +239,43 @@ export class Game {
     }
   }
 
+  private openActEvent(): void {
+    if (this.screen !== "run") return
+    this.clearInput()
+
+    const rng = new Rng(deriveSeed(this.runSeed, this.biomeIndex + 2000))
+    const event = rng.pick(ACT_EVENTS)
+
+    this.screens.showEvent(event, (opt) => {
+      opt.apply({
+        turtle: this.turtle,
+        state: this.state,
+        run: this.runState,
+        rng: rng,
+      })
+
+      // Manejo de tiempo de los eventos
+      if (event.id === "abyssal_whale" && opt.label === "Nadar en su estela") {
+        this.biomeTimeRemaining -= 20
+      } else if (
+        event.id === "abyssal_whale" &&
+        opt.label === "Escuchar el canto"
+      ) {
+        this.biomeTimeRemaining -= 10
+      } else if (
+        event.id === "toxic_vent" &&
+        opt.label === "Ventilar y pasar de largo"
+      ) {
+        this.biomeTimeRemaining -= 20
+      } else if (event.id === "ghost_net" && opt.label === "Rodearla") {
+        this.biomeTimeRemaining -= 30
+      }
+
+      this.uiManager.showMessage(opt.label, 1500)
+      this.openCardChoice()
+    })
+  }
+
   private setupEventListeners(): void {
     window.addEventListener("keydown", (e) => this.handleKeyDown(e))
     window.addEventListener("keyup", (e) => this.handleKeyUp(e))
@@ -246,7 +285,8 @@ export class Game {
       if (
         document.hidden &&
         !this.transition.isActive() &&
-        !this.screens.isCardChoiceActive()
+        !this.screens.isCardChoiceActive() &&
+        !this.screens.isEventActive()
       ) {
         this.setPaused(true)
       }
@@ -284,16 +324,41 @@ export class Game {
   }
 
   private handleKeyDown(e: KeyboardEvent): void {
+    // Durante un evento o una elección de carta, el overlay controla la
+    // interacción (botones, Tab y teclas numéricas). No dejamos que el juego
+    // procese movimiento, pausa, dash, construcción ni el backflip.
+    if (this.screens.isEventActive() || this.screens.isCardChoiceActive()) {
+      return
+    }
+
     if (e.code === "Escape") {
-      if (!e.repeat && !this.screens.isCardChoiceActive()) this.togglePause()
+      if (!e.repeat) this.togglePause()
       return
     }
 
     if (e.code === "Enter") {
-      if (!e.repeat && !e.defaultPrevented && !this.paused) {
-        this.setPaused(true)
-        e.preventDefault()
+      if (
+        e.repeat ||
+        e.defaultPrevented ||
+        this.paused ||
+        this.screen !== "run"
+      ) {
+        return
       }
+
+      // Si hay un control enfocado, Enter debe activarlo a él.
+      const target = e.target
+      if (
+        target instanceof HTMLElement &&
+        target.closest(
+          "button, a[href], [role='button'], input, select, textarea",
+        )
+      ) {
+        return
+      }
+
+      this.setPaused(true)
+      e.preventDefault()
       return
     }
 
@@ -337,6 +402,9 @@ export class Game {
   }
 
   private handleKeyUp(e: KeyboardEvent): void {
+    if (this.screens.isEventActive() || this.screens.isCardChoiceActive()) {
+      return
+    }
     if (e.code === "KeyC") this.lookBack = false
     this.setKey(e.code, false)
   }
@@ -357,11 +425,13 @@ export class Game {
     this.loop = Math.floor(index / BIOME_ORDER.length)
     const biomeKey = BIOME_ORDER[index % BIOME_ORDER.length]
 
-    this.biomeTimeLimit = Math.max(
-      BIOME_TIME_MIN,
-      BIOME_TIME_BASE - (index % BIOME_ORDER.length) * BIOME_TIME_DECAY,
-    )
+    this.biomeTimeLimit =
+      Math.max(
+        BIOME_TIME_MIN,
+        BIOME_TIME_BASE - (index % BIOME_ORDER.length) * BIOME_TIME_DECAY,
+      ) + this.pendingTimeBonus
     this.biomeTimeRemaining = this.biomeTimeLimit
+    this.pendingTimeBonus = 0
 
     const rng = new Rng(deriveSeed(this.runSeed, index))
     this.biomeGenerator.generateBiome(biomeKey, rng, this.loop)
@@ -424,7 +494,14 @@ export class Game {
   }
 
   private tryDash(direction: "left" | "right"): void {
-    if (this.screen !== "run" || this.transition.blocksGameplay) return
+    if (
+      this.screen !== "run" ||
+      this.transition.blocksGameplay ||
+      this.screens.isCardChoiceActive() ||
+      this.screens.isEventActive()
+    ) {
+      return
+    }
 
     this.turtle.trigger360Spin(direction)
     navigator.vibrate?.(15)
@@ -435,7 +512,14 @@ export class Game {
   }
 
   private tryBuild(key: StructureKey): void {
-    if (this.screen !== "run" || this.transition.blocksGameplay) return
+    if (
+      this.screen !== "run" ||
+      this.transition.blocksGameplay ||
+      this.screens.isCardChoiceActive() ||
+      this.screens.isEventActive()
+    ) {
+      return
+    }
 
     const config = STRUCTURES[key]
     if (this.structures.getActiveCount() >= this.turtle.stats.filterCapacity) {
@@ -488,10 +572,17 @@ export class Game {
   }
 
   private setPaused(paused: boolean): void {
+    if (this.screens.isEventActive()) return
     if (paused === this.paused) return
 
     if (paused) {
-      if (this.screen !== "run" || this.transition.isActive()) return
+      if (
+        this.screen !== "run" ||
+        this.transition.isActive() ||
+        this.screens.isCardChoiceActive()
+      ) {
+        return
+      }
       this.paused = true
       this.clearInput()
       this.screens.showPause(
@@ -539,6 +630,7 @@ export class Game {
     this.state.isRunning = false
     this.clearInput()
     this.runSeed = randomSeed()
+    this.pendingTimeBonus = 0
     this.loadBiome(0)
     this.screens.showHub(this.meta)
   }
@@ -561,9 +653,8 @@ export class Game {
     this.turtle.resetStats()
     this.runState = createRunState()
     this.cardManager.resetPity()
+    this.pendingTimeBonus = 0
     this.revivesUsed = 0
-
-    // <-- NUEVO: Aplicar mejoras del refugio
     const bonuses = this.upgradeManager.applyAll(this.meta, this.turtle.stats)
     this.runState.ecoMultiplier *= bonuses.ecoMult
     this.toxicityScaleMult = bonuses.toxScaleMult
@@ -706,6 +797,7 @@ export class Game {
     if (this.transition.blocksGameplay) return
     if (this.paused) return
     if (this.screens.isCardChoiceActive()) return
+    if (this.screens.isEventActive()) return
 
     this.runTime += deltaTime
 
@@ -823,6 +915,13 @@ export class Game {
     this.updateBuildHud()
 
     if (this.state.zoneProgress >= 100) {
+      if (
+        !this.endlessMode &&
+        (this.biomeIndex === 2 || this.biomeIndex === 6)
+      ) {
+        this.openActEvent()
+        return
+      }
       if (this.endlessMode || this.biomeIndex + 1 < BIOME_ORDER.length) {
         this.openCardChoice()
       } else {
@@ -844,6 +943,7 @@ export class Game {
 
   private openCardChoice(): void {
     if (this.screens.isCardChoiceActive()) return
+    if (this.screens.isEventActive()) return
     if (this.screen !== "run") return
     if (this.transition.isActive()) return
     this.clearInput()

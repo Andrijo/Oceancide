@@ -45,6 +45,7 @@ export class UIManager {
 
   private currentMessage?: HTMLElement
   private messageTimeout?: number
+  private liveRegion: HTMLElement
 
   constructor() {
     this.debrisCountEl = document.getElementById("debris-count")!
@@ -157,6 +158,24 @@ export class UIManager {
       text-shadow: 0 0 8px rgba(0, 255, 255, 0.6);
     `
     document.getElementById("game-container")!.appendChild(this.spinBoostHudEl)
+
+    // Región viva para anunciar resultados de eventos sin tapar la interfaz.
+    this.liveRegion = document.createElement("div")
+    this.liveRegion.setAttribute("role", "status")
+    this.liveRegion.setAttribute("aria-live", "polite")
+    this.liveRegion.setAttribute("aria-atomic", "true")
+    this.liveRegion.style.cssText = `
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    `
+    document.getElementById("game-container")!.appendChild(this.liveRegion)
   }
 
   public createPauseButton(onClick: () => void): void {
@@ -383,6 +402,10 @@ export class UIManager {
   // ---------------------------------------------
   // Utilidades
   // ---------------------------------------------
+  public announce(message: string): void {
+    this.liveRegion.textContent = message
+  }
+
   public showMessage(message: string, duration: number = 2000): void {
     this.currentMessage?.remove()
     window.clearTimeout(this.messageTimeout)
@@ -390,6 +413,9 @@ export class UIManager {
 
     const msgEl = document.createElement("div")
     msgEl.textContent = message
+    msgEl.setAttribute("role", "status")
+    msgEl.setAttribute("aria-live", "polite")
+    msgEl.setAttribute("aria-atomic", "true")
     msgEl.style.cssText = `
       position: absolute;
       top: 20%;
@@ -460,5 +486,6 @@ export class UIManager {
     this.spinBoostHudEl.remove()
     this.boostBarEl.remove()
     this.dangerClusterEl.remove()
+    this.liveRegion.remove()
   }
 }

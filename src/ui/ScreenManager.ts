@@ -12,6 +12,7 @@ import { revealCards } from "@ui/animations"
 import { PARAGRAPH_FONT, TITLE_FONT } from "@ui/fonts"
 import { UPGRADES } from "@/tycoon/Upgrades"
 import { UpgradeManager } from "@/tycoon/UpgradeManager"
+import { type GameEvent, type EventOption } from "@/events/EventPool"
 
 export interface ScreenCallbacks {
   onStartRun(): void
@@ -155,6 +156,8 @@ export class ScreenManager {
   private primaryAction: (() => void) | null = null
   private cardChoiceActive = false
   private cardChoiceHandler: ((index: number) => void) | null = null
+  private eventActive = false
+  private eventChoiceHandler: ((index: number) => void) | null = null
 
   constructor(callbacks: ScreenCallbacks) {
     this.callbacks = callbacks
@@ -163,14 +166,20 @@ export class ScreenManager {
     this.ensureUltraGlowAnimation()
 
     window.addEventListener("keydown", (e) => {
-      if (!this.cardChoiceActive) return
       if (e.repeat) return
+
+      const handler = this.cardChoiceActive
+        ? this.cardChoiceHandler
+        : this.eventActive
+          ? this.eventChoiceHandler
+          : null
+      if (!handler) return
 
       const idx = CARD_KEYS[e.code]
       if (idx === undefined) return
 
       e.preventDefault()
-      this.cardChoiceHandler?.(idx)
+      handler(idx)
     })
 
     this.overlay = el(
@@ -193,16 +202,57 @@ export class ScreenManager {
 
     document.getElementById("game-container")!.appendChild(this.overlay)
 
+    // Mantener el foco dentro del diálogo mientras haya una elección abierta.
+    this.overlay.addEventListener("keydown", (event) => {
+      if (
+        (!this.eventActive && !this.cardChoiceActive) ||
+        event.key !== "Tab"
+      ) {
+        return
+      }
+
+      const focusable = Array.from(
+        this.overlay.querySelectorAll<HTMLElement>(
+          "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+        ),
+      )
+      if (focusable.length === 0) return
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (!first || !last) return
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    })
+
     window.addEventListener("keydown", (event) => {
       if (
-        event.code === "Enter" &&
-        !event.repeat &&
-        !event.defaultPrevented &&
-        this.primaryAction
+        event.code !== "Enter" ||
+        event.repeat ||
+        event.defaultPrevented ||
+        !this.primaryAction
       ) {
-        event.preventDefault()
-        this.primaryAction()
+        return
       }
+
+      // Si hay un control enfocado, Enter debe activarlo a él, no a la acción
+      // principal del overlay.
+      const target = event.target
+      if (
+        target instanceof HTMLElement &&
+        target.closest("button, a[href], [role='button']")
+      ) {
+        return
+      }
+
+      event.preventDefault()
+      this.primaryAction()
     })
   }
 
@@ -212,6 +262,10 @@ export class ScreenManager {
     this.primaryAction = null
     this.cardChoiceActive = false
     this.cardChoiceHandler = null
+    this.eventActive = false
+    this.eventChoiceHandler = null
+    this.overlay.removeAttribute("aria-labelledby")
+    this.overlay.removeAttribute("aria-describedby")
     this.setHudVisible(true)
 
     if (document.activeElement instanceof HTMLElement) {
@@ -221,6 +275,10 @@ export class ScreenManager {
 
   public isCardChoiceActive(): boolean {
     return this.cardChoiceActive
+  }
+
+  public isEventActive(): boolean {
+    return this.eventActive
   }
 
   public showHub(meta: MetaState): void {
@@ -357,7 +415,7 @@ export class ScreenManager {
 
     // Botón de Mejoras (debajo de la fila)
     const upgradesBtn = this.makeGhostAction(
-      "Mejoras del Refugio",
+      "Mejoras",
       () => this.showUpgrades(meta, () => this.showHub(meta)),
       "upgrade",
       true,
@@ -375,6 +433,83 @@ export class ScreenManager {
 
     root.append(topBar)
     this.open(root, start)
+  }
+
+  public showEvent(
+    event: GameEvent,
+    onChoose: (opt: EventOption) => void,
+  ): void {
+    const { root, content } = this.makeWindowFrame()
+
+    const title = this.makeScreenTitle(event.title)
+    title.id = "event-dialog-title"
+
+    const desc = el(
+      "div",
+      `font-size: 16px; line-height: 1.5; color: #d9fbff; max-width: 600px; margin-bottom: 20px; text-align: center; font-family: ${PARAGRAPH_FONT};`,
+      event.description,
+    )
+    desc.id = "event-dialog-desc"
+
+    const optionsCol = el(
+      "div",
+      `display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 600px;`,
+    )
+
+    const optionButtons: HTMLButtonElement[] = []
+
+    const choose = (index: number): void => {
+      if (!this.eventActive) return
+      const opt = event.options[index]
+      if (!opt) return
+      this.hide()
+      onChoose(opt)
+    }
+
+    event.options.forEach((opt, index) => {
+      const btn = el(
+        "button",
+        `display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+       width: 100%; padding: 16px 20px; text-align: left; cursor: pointer;
+       background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.15);
+       border-radius: 12px; transition: background 160ms ease, border-color 160ms ease;`,
+      )
+      btn.type = "button"
+
+      const btnTitle = el(
+        "div",
+        `font-family: ${TITLE_FONT}; font-size: 20px; color: #fff;`,
+        opt.label,
+      )
+      const btnDesc = el(
+        "div",
+        `font-size: 13px; color: rgba(220, 235, 250, 0.7);`,
+        opt.description,
+      )
+
+      btn.append(btnTitle, btnDesc)
+
+      btn.addEventListener("mouseenter", () => {
+        btn.style.background = "rgba(220, 245, 255, 0.10)"
+        btn.style.borderColor = "rgba(220, 245, 255, 0.55)"
+      })
+      btn.addEventListener("mouseleave", () => {
+        btn.style.background = "rgba(255, 255, 255, 0.03)"
+        btn.style.borderColor = "rgba(255, 255, 255, 0.15)"
+      })
+      btn.addEventListener("click", () => choose(index))
+
+      optionButtons.push(btn)
+      optionsCol.append(btn)
+    })
+
+    content.append(title, desc, optionsCol)
+    this.open(root, () => {})
+    this.eventActive = true
+    this.eventChoiceHandler = choose
+    this.overlay.setAttribute("aria-labelledby", title.id)
+    this.overlay.setAttribute("aria-describedby", desc.id)
+    optionButtons[0]?.focus()
   }
 
   public showUpgrades(meta: MetaState, onClose: () => void): void {
@@ -586,8 +721,6 @@ export class ScreenManager {
   }
 
   public showCardChoice(cards: Card[], onPick: (card: Card) => void): void {
-    this.cardChoiceActive = true
-
     const pick = (index: number) => {
       if (!this.cardChoiceActive) return
       const card = cards[index]
@@ -595,7 +728,6 @@ export class ScreenManager {
       this.hide()
       onPick(card)
     }
-    this.cardChoiceHandler = pick
 
     const { root, content } = this.makeWindowFrame()
 
@@ -616,7 +748,10 @@ export class ScreenManager {
 
     content.append(title, row)
     this.open(root, () => {})
+    this.cardChoiceActive = true
+    this.cardChoiceHandler = pick
     revealCards(cardButtons)
+    cardButtons[0]?.focus()
   }
 
   public showPause(
@@ -1115,6 +1250,12 @@ export class ScreenManager {
   }
 
   private open(container: HTMLElement, primary: () => void): void {
+    this.eventActive = false
+    this.eventChoiceHandler = null
+    this.cardChoiceActive = false
+    this.cardChoiceHandler = null
+    this.overlay.removeAttribute("aria-labelledby")
+    this.overlay.removeAttribute("aria-describedby")
     this.overlay.replaceChildren(this.makeCornerBubbles(), container)
     this.overlay.style.display = "flex"
     this.primaryAction = primary
