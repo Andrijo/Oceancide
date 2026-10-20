@@ -42,7 +42,7 @@ const FILTER_TOXICITY_REDUCTION =
 const TOXICITY_CARRYOVER = 0.5
 const TOXICITY_FLOOR_SCALE = 30
 
-const ZONE_COMPLETION_RATIO = 0.7
+const ZONE_COMPLETION_RATIO = 0.6
 const CAMERA_OFFSET = new THREE.Vector3(0, 5, -12)
 const UP = new THREE.Vector3(0, 1, 0)
 const BUILD_DISTANCE = 4
@@ -53,6 +53,8 @@ const BIOME_TIME_BASE = 120
 const BIOME_TIME_DECAY = 2
 const BIOME_TIME_MIN = 80
 const BIOME_TIME_PRESSURE = 4
+/** Los eventos pueden recortar el siguiente bioma por debajo del mínimo normal. */
+const MIN_BIOME_TIME_AFTER_EVENT = 30
 
 const REVIVE_TOXICITY_BASE = 50
 const REVIVE_TOXICITY_STEP = 10
@@ -102,7 +104,8 @@ export class Game {
 
   private biomeTimeRemaining = 0
   private biomeTimeLimit = 0
-  private pendingTimeBonus = 0
+  private pendingTimeDelta = 0
+  private pendingToxicityFloor: number | null = null
   private revivesUsed = 0
   private toxicityScaleMult = 1 // <-- NUEVO
 
@@ -254,24 +257,19 @@ export class Game {
         rng: rng,
       })
 
-      // Manejo de tiempo de los eventos
-      if (event.id === "abyssal_whale" && opt.label === "Nadar en su estela") {
-        this.biomeTimeRemaining -= 20
-      } else if (
-        event.id === "abyssal_whale" &&
-        opt.label === "Escuchar el canto"
-      ) {
-        this.biomeTimeRemaining -= 10
-      } else if (
-        event.id === "toxic_vent" &&
-        opt.label === "Ventilar y pasar de largo"
-      ) {
-        this.biomeTimeRemaining -= 20
-      } else if (event.id === "ghost_net" && opt.label === "Rodearla") {
-        this.biomeTimeRemaining -= 30
+      if (opt.nextBiomeTimeDelta) {
+        this.pendingTimeDelta += opt.nextBiomeTimeDelta
+      }
+      if (opt.nextBiomeToxicityFloor !== undefined) {
+        this.pendingToxicityFloor = opt.nextBiomeToxicityFloor
       }
 
-      this.uiManager.showMessage(opt.label, 1500)
+      // Los eventos pueden llevar la toxicidad a 100. Resolvemos la muerte o
+      // el revive antes de abrir la elección de carta.
+      const lethal = this.state.toxicity >= 100
+      if (lethal && !this.tryKill()) return
+
+      if (!lethal) this.uiManager.showMessage(opt.label, 1500)
       this.openCardChoice()
     })
   }
@@ -425,22 +423,30 @@ export class Game {
     this.loop = Math.floor(index / BIOME_ORDER.length)
     const biomeKey = BIOME_ORDER[index % BIOME_ORDER.length]
 
-    this.biomeTimeLimit =
-      Math.max(
-        BIOME_TIME_MIN,
-        BIOME_TIME_BASE - (index % BIOME_ORDER.length) * BIOME_TIME_DECAY,
-      ) + this.pendingTimeBonus
+    const baseTimeLimit = Math.max(
+      BIOME_TIME_MIN,
+      BIOME_TIME_BASE - (index % BIOME_ORDER.length) * BIOME_TIME_DECAY,
+    )
+    this.biomeTimeLimit = Math.max(
+      MIN_BIOME_TIME_AFTER_EVENT,
+      baseTimeLimit + this.pendingTimeDelta,
+    )
     this.biomeTimeRemaining = this.biomeTimeLimit
-    this.pendingTimeBonus = 0
+    this.pendingTimeDelta = 0
 
     const rng = new Rng(deriveSeed(this.runSeed, index))
     this.biomeGenerator.generateBiome(biomeKey, rng, this.loop)
     this.applyBiomeLighting()
 
+    const biomeToxicityFloor =
+      this.biomeGenerator.getBiome().toxicityRate * TOXICITY_FLOOR_SCALE
+    const toxicityFloor = this.pendingToxicityFloor ?? biomeToxicityFloor
+
     this.state.toxicity = Math.max(
       this.state.toxicity * TOXICITY_CARRYOVER,
-      this.biomeGenerator.getBiome().toxicityRate * TOXICITY_FLOOR_SCALE,
+      toxicityFloor,
     )
+    this.pendingToxicityFloor = null
 
     const sun = this.biomeGenerator.getSun()
     this.renderPipeline.setBloomStrength(sun.darkness * BLOOM_MAX_STRENGTH)
@@ -630,7 +636,8 @@ export class Game {
     this.state.isRunning = false
     this.clearInput()
     this.runSeed = randomSeed()
-    this.pendingTimeBonus = 0
+    this.pendingTimeDelta = 0
+    this.pendingToxicityFloor = null
     this.loadBiome(0)
     this.screens.showHub(this.meta)
   }
@@ -653,7 +660,8 @@ export class Game {
     this.turtle.resetStats()
     this.runState = createRunState()
     this.cardManager.resetPity()
-    this.pendingTimeBonus = 0
+    this.pendingTimeDelta = 0
+    this.pendingToxicityFloor = null
     this.revivesUsed = 0
     const bonuses = this.upgradeManager.applyAll(this.meta, this.turtle.stats)
     this.runState.ecoMultiplier *= bonuses.ecoMult
@@ -917,7 +925,7 @@ export class Game {
     if (this.state.zoneProgress >= 100) {
       if (
         !this.endlessMode &&
-        (this.biomeIndex === 2 || this.biomeIndex === 6)
+        (this.biomeIndex === 1 || this.biomeIndex === 3)
       ) {
         this.openActEvent()
         return
