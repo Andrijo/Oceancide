@@ -266,6 +266,18 @@ export class Turtle {
     return this.glowLevel
   }
 
+  /** Nivel objetivo (no el nivel animado) para previsualizar/encadenar efectos. */
+  public getGlowTarget(): number {
+    return this.glowTarget
+  }
+
+  /** Suma glow al objetivo y devuelve el incremento real tras el clamp 0..1. */
+  public addGlow(amount: number): number {
+    const before = this.glowTarget
+    this.glowTarget = THREE.MathUtils.clamp(before + amount, 0, 1)
+    return this.glowTarget - before
+  }
+
   /** Suma resistencia con rendimientos decrecientes: cada punto adicional vale menos. */
   public addToxicityResistance(amount: number): void {
     if (amount <= 0) return
