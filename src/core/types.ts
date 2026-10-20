@@ -77,14 +77,10 @@ export type BiomeKey =
 
 export const BIOME_ORDER: BiomeKey[] = [
   "epipelagic_upper",
-  "pelagic_mid",
   "subphotic",
-  "mesopelagic_upper",
   "mesopelagic_deep",
-  "bathypelagic_upper",
   "bathypelagic_deep",
   "abyssopelagic",
-  "hadopelagic",
   "deepSea",
 ]
 

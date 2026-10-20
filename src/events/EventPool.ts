@@ -12,8 +12,13 @@ export interface EventContext {
 }
 
 export interface EventOption {
+  id: string
   label: string
   description: string
+  /** Segundos que se suman (o restan) al límite del siguiente bioma. */
+  nextBiomeTimeDelta?: number
+  /** Suelo de toxicidad del siguiente bioma; 0 elimina el suelo natural. */
+  nextBiomeToxicityFloor?: number
   apply: (ctx: EventContext) => void
 }
 
@@ -32,6 +37,7 @@ export const ACT_EVENTS: GameEvent[] = [
       "Encuentras un cofre de madera cubierto de percebes. Parece antiguo, pero algo brilla en su interior.",
     options: [
       {
+        id: "force_lock",
         label: "Forzar la cerradura",
         description: "Obtienes 250 Eco, pero el ruido atrae toxicidad (+25).",
         apply: ({ state }) => {
@@ -40,6 +46,7 @@ export const ACT_EVENTS: GameEvent[] = [
         },
       },
       {
+        id: "leave_chest",
         label: "Dejarlo intacto",
         description:
           "Usas el cofre como refugio y reduces tu toxicidad actual (-20).",
@@ -56,6 +63,7 @@ export const ACT_EVENTS: GameEvent[] = [
       "Una grieta en el suelo libera un gas verde. Tus pulmones arden, pero el calor extremo podría acelerar tu metabolismo.",
     options: [
       {
+        id: "take_core",
         label: "Sumergirte a por el núcleo",
         description:
           "Ganas +1 capacidad de filtro, pero sufres un gran daño (+45 toxicidad).",
@@ -65,12 +73,13 @@ export const ACT_EVENTS: GameEvent[] = [
         },
       },
       {
+        id: "vent_and_pass",
         label: "Ventilar y pasar de largo",
         description:
-          "Pierdes 20 segundos del temporizador, pero limpias el gas (-30 toxicidad).",
+          "El siguiente bioma empieza con 20s menos, pero limpias el gas (-30 toxicidad).",
+        nextBiomeTimeDelta: -20,
         apply: ({ state }) => {
           state.toxicity = Math.max(0, state.toxicity - 30)
-          // El tiempo extra/penalización se maneja en Game.ts
         },
       },
     ],
@@ -82,6 +91,7 @@ export const ACT_EVENTS: GameEvent[] = [
       "Una tortuga gigante y sabia flota en la penumbra. Te observa con ojos que brillan en la oscuridad.",
     options: [
       {
+        id: "ask_advice",
         label: "Pedir consejo",
         description:
           "Te enseña a filtrar mejor (+1 filtro), pero su ritmo te vuelve lenta (-15% velocidad).",
@@ -91,6 +101,7 @@ export const ACT_EVENTS: GameEvent[] = [
         },
       },
       {
+        id: "steal_glow",
         label: "Robar su bioluminiscencia",
         description:
           "Brillas con fuerza (+0.5 Glow), pero el remordimiento te resta eco (-150 Eco).",
@@ -108,21 +119,24 @@ export const ACT_EVENTS: GameEvent[] = [
       "Una ballena colosal pasa a tu lado. Su canto resuena en tu caparazón y hace que el océano parezca más pequeño.",
     options: [
       {
+        id: "ride_wake",
         label: "Nadar en su estela",
         description:
-          "Ganas 400 Eco al arrastrar tesoros, pero pierdes 20s del temporizador.",
+          "Ganas 400 Eco al arrastrar tesoros, pero el siguiente bioma empieza con 20s menos.",
+        nextBiomeTimeDelta: -20,
         apply: ({ state }) => {
           state.ecoAwareness += 400
-          // La penalización de tiempo se maneja en Game.ts
         },
       },
       {
+        id: "listen_song",
         label: "Escuchar el canto",
         description:
-          "Recuperas toda tu salud (0 toxicidad), pero te roba tiempo (-10s).",
+          "Recuperas toda tu salud (0 toxicidad), pero el siguiente bioma empieza con 10s menos.",
+        nextBiomeTimeDelta: -10,
+        nextBiomeToxicityFloor: 0,
         apply: ({ state }) => {
           state.toxicity = 0
-          // La penalización de tiempo se maneja en Game.ts
         },
       },
     ],
@@ -134,6 +148,7 @@ export const ACT_EVENTS: GameEvent[] = [
       "Una red de pesca industrial abandonada bloquea tu camino. Está llena de desechos valiosos, pero parece peligrosa.",
     options: [
       {
+        id: "cut_net",
         label: "Cortar la red",
         description:
           "Obtienes 100 Eco y +1 de radio, pero te enredas (-25% velocidad por el resto de la run).",
@@ -144,12 +159,13 @@ export const ACT_EVENTS: GameEvent[] = [
         },
       },
       {
+        id: "go_around",
         label: "Rodearla",
         description:
-          "Pierdes 30 segundos del temporizador, pero ganas un pequeño impulso (+5% vel).",
+          "El siguiente bioma empieza con 30s menos, pero ganas un pequeño impulso (+5% vel).",
+        nextBiomeTimeDelta: -30,
         apply: ({ turtle }) => {
           turtle.stats.speed *= 1.05
-          // Penalización de tiempo en Game.ts
         },
       },
     ],
