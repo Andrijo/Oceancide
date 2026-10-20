@@ -9,6 +9,7 @@ import type { MetaState } from "@core/MetaState"
 import type { Card, CardRarity } from "@cards/Card"
 import { CARD_POOL } from "@cards/CardPool"
 import { revealCards } from "@ui/animations"
+import { PARAGRAPH_FONT, TITLE_FONT } from "@ui/fonts"
 
 export interface ScreenCallbacks {
   onStartRun(): void
@@ -25,9 +26,6 @@ export interface RunInfo {
   ecoAwareness: number
   cardsCount: number
 }
-
-const titleFONT = '"Pogonia", Tahoma, Geneva, Verdana, sans-serif'
-const paragraphFONT = '"DMSans", "Geist-SemiBold", Geneva, Verdana, sans-serif'
 
 const RARITY_COLORS: Record<CardRarity, string> = {
   common: "#94a3b8",
@@ -184,7 +182,7 @@ export class ScreenManager {
       box-sizing: border-box;
       background: rgba(0, 12, 30, 0.55);
       backdrop-filter: blur(4px);
-      font-family: ${paragraphFONT};`,
+      font-family: ${PARAGRAPH_FONT};`,
     )
 
     this.overlay.setAttribute("role", "dialog")
@@ -262,7 +260,7 @@ export class ScreenManager {
       z-index: 3;
       display: flex;
       justify-content: flex-end;
-      font-family: ${paragraphFONT};
+      font-family: ${PARAGRAPH_FONT};
       align-items: center;
       padding: 18px 20px;`,
     )
@@ -273,12 +271,11 @@ export class ScreenManager {
       "div",
       `width: 100%;
       overflow: visible;
-      font-family: ${titleFONT};
+      font-family: ${TITLE_FONT};
       font-size: clamp(56px, 9.5vw, 132px);
       font-weight: 500;
       font-stretch: condensed;
       line-height: 0.8;
-      letter-spacing: -0.045em;
       white-space: nowrap;`,
     )
 
@@ -317,11 +314,10 @@ export class ScreenManager {
     const tagline = el(
       "div",
       `max-width: 760px;
-      font-family: ${titleFONT};
-      font-size: clamp(16px, 3vw, 36px);
+      font-family: ${TITLE_FONT};
+      font-size: clamp(17px, 2.9vw, 38px);
       font-weight: 900;
       line-height: 1.15;
-      letter-spacing: 0.01em;
       color: #eaffef;
       text-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);`,
     )
@@ -460,10 +456,9 @@ export class ScreenManager {
           opacity: 0.85;
           color: #bcebf6;
           text-align: center;
-          font-family: ${paragraphFONT};
+          font-family: ${PARAGRAPH_FONT};
           line-height: 1.6;
-          max-width: 720px;
-          letter-spacing: 0.02em;`,
+          max-width: 720px;`,
           names,
         ),
       )
@@ -505,12 +500,11 @@ export class ScreenManager {
       el(
         "div",
         `font-size: 11px;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
+        text-transform: capitalize;
         opacity: 0.55;
         text-align: center;
         color: #bcebf6;
-        font-family: ${paragraphFONT};`,
+        font-family: ${PARAGRAPH_FONT};`,
         `Semilla · ${summary.seed}`,
       ),
     )
@@ -696,12 +690,11 @@ export class ScreenManager {
       "div",
       `width: 100%;
     overflow: visible;
-    font-family: ${titleFONT};
-    font-size: clamp(28px, 4.6vw, 58px);
+    font-family: ${TITLE_FONT};
+    font-size: clamp(30px, 4.7vw, 60px);
     font-weight: 900;
     font-stretch: condensed;
     line-height: 1;
-    letter-spacing: -0.02em;
     text-align: center;
     margin-bottom: 40px;
     color: ${color};
@@ -834,16 +827,15 @@ export class ScreenManager {
         "div",
         `min-width: 0;
       font-size: 10px;
-      letter-spacing: 0.13em;
-      text-transform: uppercase;
+      text-transform: capitalize;
       margin-bottom: 2px;
       color: rgba(214, 236, 240, 0.8);`,
         label,
       ),
       el(
         "div",
-        `font-family: ${titleFONT};
-      font-size: clamp(16px, 1.6vw, 22px);
+        `font-family: ${TITLE_FONT};
+      font-size: clamp(17px, 1.7vw, 23px);
       font-weight: 900;
       line-height: 1.1;
       text-align: left;
@@ -908,8 +900,7 @@ export class ScreenManager {
       border-radius: 12px;
       cursor: pointer;
       color: ${palette.color};
-      font: 700 clamp(15px, 1.9vw, 19px) ${titleFONT};
-      letter-spacing: 0.04em;
+      font: 700 clamp(15px, 1.9vw, 20px) ${TITLE_FONT};
       background: rgba(255, 255, 255, 0.02);
       border: 1.5px solid ${palette.border};
       backdrop-filter: blur(6px);
@@ -1075,8 +1066,7 @@ export class ScreenManager {
     border-radius: 12px;
     cursor: pointer;
     color: rgba(220, 245, 255, 0.92);
-    font: 700 clamp(15px, 1.9vw, 20px) ${titleFONT};
-    letter-spacing: 0.04em;
+    font: 700 clamp(15px, 1.9vw, 21px) ${TITLE_FONT};
     background: #013f52;
     border: 1.5px solid rgba(220, 245, 255, 0.28);
     backdrop-filter: blur(6px);
@@ -1091,9 +1081,8 @@ export class ScreenManager {
 
     const keycap = el(
       "span",
-      `font: 700 10px ${paragraphFONT};
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
+      `font: 700 10px ${PARAGRAPH_FONT};
+      text-transform: capitalize;
       padding: 3px 8px;
       border-radius: 6px;
       border: 1px solid rgba(220, 245, 255, 0.28);
@@ -1144,8 +1133,7 @@ export class ScreenManager {
       padding: 9px 14px;
       border-radius: 12px;
       cursor: pointer;
-      font: 13px ${paragraphFONT};
-      letter-spacing: 0.04em;
+      font: 13px ${PARAGRAPH_FONT};
       color: rgba(255, 150, 150, 0.9);
       background: transparent;
       border: 1px solid rgba(255, 120, 120, 0.28);
@@ -1198,8 +1186,7 @@ export class ScreenManager {
       align-items: baseline;
       gap: 12px;
       font-size: 11px;
-      letter-spacing: 0.13em;
-      text-transform: uppercase;
+      text-transform: capitalize;
       color: rgba(214, 236, 240, 0.62);`,
     )
 
@@ -1387,7 +1374,7 @@ export class ScreenManager {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: ${titleFONT};
+  font-family: ${TITLE_FONT};
   font-size: 12px;
   font-weight: 900;
   color: ${isUltra ? "#ffffff" : accent};
@@ -1410,10 +1397,9 @@ export class ScreenManager {
 
     const rarityLabel = el(
       "div",
-      `font-family: ${titleFONT};
+      `font-family: ${TITLE_FONT};
   font-size: 16px;
   font-weight: 900;
-  letter-spacing: 0.28em;
   text-transform: uppercase;
   color: ${isUltra ? "#ffffff" : accent};`,
       label,
@@ -1446,11 +1432,10 @@ export class ScreenManager {
 
     const name = el(
       "div",
-      `font-family: ${titleFONT};
-      font-size: 20px;
+      `font-family: ${TITLE_FONT};
+      font-size: 21px;
       font-weight: 900;
       line-height: 1.1;
-      letter-spacing: 0.02em;
       text-transform: uppercase;
       color: #ffffff;`,
       card.name,
@@ -1458,19 +1443,18 @@ export class ScreenManager {
 
     const value = el(
       "div",
-      `font-family: ${titleFONT};
-  font-size: 22px;
+      `font-family: ${TITLE_FONT};
+  font-size: 23px;
   font-weight: 900;
-  letter-spacing: 0.02em;
   color: ${isUltra ? "#ffffff" : "#4ade80"};`,
       card.value,
     )
 
     const desc = el(
       "div",
-      `font-family: ${paragraphFONT};
+      `font-family: ${PARAGRAPH_FONT};
       font-size: 12px;
-      line-height: 1.4;
+      line-height: 1.45;
       color: rgba(220, 235, 250, 0.75);
       margin-top: 4px;`,
       card.description,

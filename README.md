@@ -266,7 +266,7 @@ oceancidio/
 ├── tsconfig.json
 ├── vite.config.ts        # Config de Vite (alias de importación)
 ├── public/
-│   ├── fonts/            # Fuentes (Pogonia, Montserrat, Geist)
+│   ├── fonts/            # Fuentes (Pogonia para títulos, DM Sans para párrafos)
 │   ├── favicon.svg
 │   └── icons.svg
 └── src/
