@@ -533,6 +533,136 @@ export const CARD_POOL: Card[] = [
       run.reviveCharges += 1
     },
   },
+
+  // Caos: efectos con azar real, reglas alteradas o riesgo inmediato.
+  {
+    id: "mutation",
+    name: "Mutación",
+    description:
+      "El agua reescribe tu cuerpo: una parte florece y otra se atrofia.",
+    rarity: "chaos",
+    value: "1 STAT AL AZAR ↑ / 1 STAT AL AZAR ↓",
+    apply: ({ turtle, run, rng }) => {
+      const traits = [
+        {
+          label: "VEL",
+          buff: () => {
+            turtle.stats.speed *= 1.5
+          },
+          curse: () => {
+            turtle.stats.speed *= 0.8
+          },
+        },
+        {
+          label: "RADIO",
+          buff: () => {
+            turtle.stats.collectionRadius += 1.5
+          },
+          curse: () => {
+            turtle.stats.collectionRadius = Math.max(
+              0.5,
+              turtle.stats.collectionRadius - 0.8,
+            )
+          },
+        },
+        {
+          label: "FILTRO",
+          buff: () => {
+            turtle.stats.filterCapacity += 2
+          },
+          curse: () => {
+            turtle.stats.filterCapacity = Math.max(
+              1,
+              turtle.stats.filterCapacity - 1,
+            )
+          },
+        },
+        {
+          label: "RES",
+          buff: () => {
+            turtle.addToxicityResistance(0.2)
+          },
+          curse: () => {
+            turtle.reduceToxicityResistance(0.15)
+          },
+        },
+        {
+          label: "ECO",
+          buff: () => {
+            run.ecoMultiplier *= 1.5
+          },
+          curse: () => {
+            run.ecoMultiplier *= 0.8
+          },
+        },
+      ]
+
+      const buffIndex = rng.int(traits.length)
+      let curseIndex = rng.int(traits.length - 1)
+      if (curseIndex >= buffIndex) curseIndex++
+
+      traits[buffIndex].buff()
+      traits[curseIndex].curse()
+
+      return `${traits[buffIndex].label} ↑ / ${traits[curseIndex].label} ↓`
+    },
+  },
+  {
+    id: "double_or_nothing",
+    name: "Doble o Nada",
+    description: "La marea decide: el eco se duplica o se parte en dos.",
+    rarity: "chaos",
+    value: "ECO ×2 O ×0.5",
+    apply: ({ run, rng }) => {
+      if (rng.next() < 0.5) {
+        run.ecoMultiplier *= 2
+        return "¡El eco se duplica!"
+      }
+
+      run.ecoMultiplier *= 0.5
+      return "El eco se parte en dos"
+    },
+  },
+  {
+    id: "medusa_pact",
+    name: "Pacto de la Medusa",
+    description:
+      "La colonia te presta una vida, pero cada bioma trae más tentáculos.",
+    rarity: "chaos",
+    value: "+1 REVIVIR / +2 MEDUSAS",
+    apply: ({ run }) => {
+      run.reviveCharges += 1
+      run.enemyCountBonus += 2
+      return "+1 revivir; +2 medusas por bioma"
+    },
+  },
+  {
+    id: "unstable_eco",
+    name: "Eco Inestable",
+    description:
+      "El eco grita tan fuerte que el agua se vuelve más tóxica a tu alrededor.",
+    rarity: "chaos",
+    value: "+100% ECO / +50% TOX PASIVA",
+    apply: ({ run }) => {
+      run.ecoMultiplier *= 2
+      run.toxicityMultiplier *= 1.5
+      return "ECO ×2; toxicidad pasiva ×1.5"
+    },
+  },
+  {
+    id: "black_tide",
+    name: "Marea Negra",
+    description:
+      "Ganas impulso y un filtro extra, pero el agua te envenena al instante.",
+    rarity: "chaos",
+    value: "+25% VEL / +1 FILTRO / +20 TOX",
+    apply: ({ turtle, state }) => {
+      turtle.stats.speed *= 1.25
+      turtle.stats.filterCapacity += 1
+      state.toxicity = Math.min(100, state.toxicity + 20)
+      return "+25% VEL, +1 filtro, +20 toxicidad"
+    },
+  },
 ]
 
 /** Pesos relativos de rareza al hacer el roll. */
@@ -543,4 +673,5 @@ export const RARITY_WEIGHTS: Record<CardRarity, number> = {
   legendary: 7,
   curse: 2,
   ultra_legendary: 1,
+  chaos: 14,
 }

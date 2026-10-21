@@ -68,10 +68,12 @@ export class CardManager {
     return chosen
   }
 
-  // Aplica la carta y la guarda en el RunState.
-  public pick(card: Card, ctx: CardContext): void {
-    card.apply(ctx)
+  // Aplica la carta y la guarda en el RunState. Devuelve el resultado de
+  // efectos aleatorios para que la UI pueda explicarlo.
+  public pick(card: Card, ctx: CardContext): string | void {
+    const outcome = card.apply(ctx)
     ctx.run.cards.push(card)
+    return outcome
   }
 
   // --- Roll base ---

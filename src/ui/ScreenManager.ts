@@ -38,6 +38,7 @@ const RARITY_COLORS: Record<CardRarity, string> = {
   legendary: "#fbbf24",
   curse: "#ef4444",
   ultra_legendary: "#0a9396",
+  chaos: "#fb923c",
 }
 
 const RARITY_LABELS: Record<CardRarity, string> = {
@@ -47,6 +48,7 @@ const RARITY_LABELS: Record<CardRarity, string> = {
   legendary: "Legendaria",
   curse: "Maldición",
   ultra_legendary: "Ultra Legendaria",
+  chaos: "Caos",
 }
 
 const RARITY_BACKGROUNDS: Record<CardRarity, string> = {
@@ -56,6 +58,7 @@ const RARITY_BACKGROUNDS: Record<CardRarity, string> = {
   legendary: "#6e4a10",
   curse: "#6e1c1c",
   ultra_legendary: "#003d4d",
+  chaos: "#2a1008",
 }
 
 const HUD_IDS = [
@@ -165,6 +168,7 @@ export class ScreenManager {
 
     this.ensureBubbleAnimation()
     this.ensureUltraGlowAnimation()
+    this.ensureChaosGlitchAnimation()
     this.ensureEventStyles()
 
     window.addEventListener("keydown", (e) => {
@@ -1164,6 +1168,23 @@ export class ScreenManager {
     document.head.appendChild(style)
   }
 
+  private ensureChaosGlitchAnimation(): void {
+    if (document.getElementById("menu-chaos-glitch")) return
+    const style = document.createElement("style")
+    style.id = "menu-chaos-glitch"
+    style.textContent = `
+    @keyframes chaosGlitch {
+      0%, 100% { border-color: #fb923c; box-shadow: 0 0 12px rgba(251, 146, 60, 0.55), inset 0 0 10px rgba(251, 146, 60, 0.2); }
+      20% { border-color: #22d3ee; box-shadow: 0 0 18px rgba(34, 211, 238, 0.7), inset 0 0 12px rgba(34, 211, 238, 0.28); }
+      40% { border-color: #c084fc; box-shadow: 0 0 24px rgba(192, 132, 252, 0.75), inset 0 0 15px rgba(192, 132, 252, 0.32); }
+      60% { border-color: #ef4444; box-shadow: 0 0 18px rgba(239, 68, 68, 0.7), inset 0 0 12px rgba(239, 68, 68, 0.28); }
+      80% { border-color: #facc15; box-shadow: 0 0 20px rgba(250, 204, 21, 0.72), inset 0 0 13px rgba(250, 204, 21, 0.3); }
+    }
+    @media (prefers-reduced-motion: reduce) { .card-chaos { animation: none !important; } }
+  `
+    document.head.appendChild(style)
+  }
+
   private ensureBubbleAnimation(): void {
     if (document.getElementById("menu-bubble-animation")) return
     const style = document.createElement("style")
@@ -1386,6 +1407,7 @@ export class ScreenManager {
     const bg = RARITY_BACKGROUNDS[card.rarity]
     const label = RARITY_LABELS[card.rarity]
     const isUltra = card.rarity === "ultra_legendary"
+    const isChaos = card.rarity === "chaos"
 
     const btn = el(
       "button",
@@ -1398,6 +1420,9 @@ export class ScreenManager {
     if (isUltra) {
       btn.classList.add("card-ultra-legendary")
       btn.style.animation = "ultraGlow 3s infinite ease-in-out"
+    } else if (isChaos) {
+      btn.classList.add("card-chaos")
+      btn.style.animation = "chaosGlitch 2.6s infinite steps(2, end)"
     }
 
     btn.setAttribute(
@@ -1455,7 +1480,7 @@ export class ScreenManager {
     )
     const value = el(
       "div",
-      `font-family: ${TITLE_FONT}; font-size: 23px; font-weight: 900; color: ${isUltra ? "#ffffff" : "#4ade80"};`,
+      `font-family: ${TITLE_FONT}; font-size: 23px; font-weight: 900; color: ${isUltra ? "#ffffff" : isChaos ? "#fb923c" : "#4ade80"};`,
       card.value,
     )
     const desc = el(

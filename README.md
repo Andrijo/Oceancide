@@ -104,7 +104,9 @@ Desde el primer bioma aparecen **medusas** flotando a la deriva. La cantidad esc
 
 Cuando completas el **60%** de los desechos iniciales de una zona (el HUD lo muestra como 100% de progreso) y no es la última, antes de descender a la siguiente el juego se detiene y te ofrece **3 cartas** entre las que elegir una. En los biomas 2 y 4, antes de las cartas se resuelve un **evento** (ver la sección siguiente). Cada carta aplica una mejora (o maldición) **permanente durante esa run**, y las que vas eligiendo quedan registradas y se muestran en el resumen final.
 
-El mazo tiene **50 cartas** repartidas en 6 rarezas: **común, rara, épica, legendaria, maldición y ultra legendaria**. El reparto es por rareza con pesos (`RARITY_WEIGHTS` en `src/cards/CardPool.ts`): **común 40 · rara 30 · épica 20 · legendaria 7 · maldición 2 · ultra legendaria 1**. El mazo está en `src/cards/CardPool.ts` y la lógica de reparto en `src/cards/CardManager.ts`. Las cartas se eligen con clic/toque o con las teclas `1` / `2` / `3`, y se colorean según su rareza (la ultra legendaria destaca con un brillo especial).
+El mazo tiene **55 cartas** repartidas en 7 rarezas: **común, rara, épica, legendaria, maldición, ultra legendaria y caos**. El reparto es por rareza con pesos (`RARITY_WEIGHTS` en `src/cards/CardPool.ts`): **común 40 · rara 30 · épica 20 · legendaria 7 · maldición 2 · ultra legendaria 1 · caos 14**. El mazo está en `src/cards/CardPool.ts` y la lógica de reparto en `src/cards/CardManager.ts`. Las cartas se eligen con clic/toque o con las teclas `1` / `2` / `3`, y se colorean según su rareza: la ultra legendaria brilla y las de **caos** parpadean con un glitch naranja.
+
+Las cartas de **caos** no son mejoras seguras: pueden duplicar o partir tu eco, mutar dos stats al azar, añadir medusas a los siguientes biomas o subir la toxicidad pasiva. Algunas devuelven un texto con el resultado aleatorio para que sepas qué te ha tocado.
 
 La **resistencia a la toxicidad** de las cartas se acumula con **rendimientos decrecientes**: cada punto adicional vale menos que el anterior, así que apilar caparazones nunca te vuelve inmune.
 
@@ -160,6 +162,11 @@ La **resistencia a la toxicidad** de las cartas se acumula con **rendimientos de
 | Marea Primigenia          | Ultra Legendaria | +80% VEL / +5 FILTROS             | Sobrecarga de energía ancestral: velocidad y filtros       |
 | Corazón del Océano        | Ultra Legendaria | +100% ECO / +3 ECO/S              | Sientes el pulso del mar; el eco fluye hacia ti            |
 | Furia Abisal              | Ultra Legendaria | +1.2 DASH / +30% VEL / +1 REVIVIR | Una criatura ancestral se manifiesta a través del caparazón |
+| Mutación                  | Caos             | 1 STAT ↑ / 1 STAT ↓               | El agua reescribe tu cuerpo: una parte florece y otra se atrofia |
+| Doble o Nada              | Caos             | ECO ×2 O ×0.5                     | La marea decide: el eco se duplica o se parte en dos       |
+| Pacto de la Medusa        | Caos             | +1 REVIVIR / +2 MEDUSAS           | La colonia te presta una vida, pero cada bioma trae más tentáculos |
+| Eco Inestable             | Caos             | +100% ECO / +50% TOX PASIVA       | El eco grita tan fuerte que el agua se vuelve más tóxica   |
+| Marea Negra               | Caos             | +25% VEL / +1 FILTRO / +20 TOX    | Ganas impulso y un filtro extra, pero el agua te envenena al instante |
 
 ### Eventos
 

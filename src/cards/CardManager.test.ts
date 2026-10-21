@@ -15,7 +15,13 @@ function makeContext() {
     isRunning: true,
   }
 
-  return { turtle: new Turtle(), state, run: createRunState() }
+  return { turtle: new Turtle(), state, run: createRunState(), rng: new Rng(1) }
+}
+
+function getCard(id: string): Card {
+  const card = CARD_POOL.find((candidate) => candidate.id === id)
+  if (!card) throw new Error(`Carta no encontrada: ${id}`)
+  return card
 }
 
 describe("CardManager.rollChoices", () => {
@@ -55,6 +61,68 @@ describe("CardManager.pick", () => {
 
     expect(ctx.run.ecoMultiplier).toBe(2)
     expect(ctx.run.cards).toEqual([card])
+  })
+
+  it("devuelve el resultado de las cartas aleatorias", () => {
+    const ctx = makeContext()
+
+    const outcome = new CardManager().pick(getCard("double_or_nothing"), ctx)
+
+    expect(typeof outcome).toBe("string")
+    expect([0.5, 2]).toContain(ctx.run.ecoMultiplier)
+  })
+
+  it("Mutación cambia dos stats distintos y explica el resultado", () => {
+    const ctx = makeContext()
+    const before = {
+      speed: ctx.turtle.stats.speed,
+      radius: ctx.turtle.stats.collectionRadius,
+      filters: ctx.turtle.stats.filterCapacity,
+      resistance: ctx.turtle.stats.toxicityResistance,
+      eco: ctx.run.ecoMultiplier,
+    }
+
+    const outcome = new CardManager().pick(getCard("mutation"), ctx)
+
+    const changed = [
+      ctx.turtle.stats.speed !== before.speed,
+      ctx.turtle.stats.collectionRadius !== before.radius,
+      ctx.turtle.stats.filterCapacity !== before.filters,
+      ctx.turtle.stats.toxicityResistance !== before.resistance,
+      ctx.run.ecoMultiplier !== before.eco,
+    ].filter(Boolean)
+
+    expect(typeof outcome).toBe("string")
+    expect(changed.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it("Pacto de la Medusa añade un revivir y medusas extra", () => {
+    const ctx = makeContext()
+
+    new CardManager().pick(getCard("medusa_pact"), ctx)
+
+    expect(ctx.run.reviveCharges).toBe(1)
+    expect(ctx.run.enemyCountBonus).toBe(2)
+  })
+
+  it("Eco Inestable duplica el eco y sube la toxicidad pasiva", () => {
+    const ctx = makeContext()
+
+    new CardManager().pick(getCard("unstable_eco"), ctx)
+
+    expect(ctx.run.ecoMultiplier).toBe(2)
+    expect(ctx.run.toxicityMultiplier).toBe(1.5)
+  })
+
+  it("Marea Negra sube la toxicidad al instante", () => {
+    const ctx = makeContext()
+    ctx.state.toxicity = 50
+
+    new CardManager().pick(getCard("black_tide"), ctx)
+
+    expect(ctx.state.toxicity).toBe(70)
+    expect(ctx.turtle.stats.speed).toBeCloseTo(11.25)
+    expect(ctx.turtle.stats.filterCapacity).toBe(6)
   })
 })
 

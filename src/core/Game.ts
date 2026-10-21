@@ -346,8 +346,13 @@ export class Game {
 
     const bounds = this.biomeGenerator.getBounds()
     // En modo sin fin `index` sigue creciendo; el módulo mantiene la fauna
-    // entre 2 y 7 medusas en cada vuelta.
-    this.enemyManager.spawn(2 + (index % BIOME_ORDER.length), bounds, rng)
+    // base entre 2 y 7 medusas por vuelta. El pacto caótico puede añadir más,
+    // con un tope para no castigar el rendimiento.
+    const enemyCount = Math.min(
+      12,
+      2 + (index % BIOME_ORDER.length) + this.runState.enemyCountBonus,
+    )
+    this.enemyManager.spawn(enemyCount, bounds, rng)
     this.applyBiomeLighting()
 
     const toxicityFloor =
@@ -747,7 +752,8 @@ export class Game {
       toxicityRate: this.biomeGenerator.getBiome().toxicityRate,
       pollution,
       toxicityResistance: this.turtle.stats.toxicityResistance,
-      toxicityScaleMult: this.toxicityScaleMult,
+      toxicityScaleMult:
+        this.toxicityScaleMult * this.runState.toxicityMultiplier,
       timePressure,
     })
 
@@ -855,17 +861,25 @@ export class Game {
     this.screens.showCardChoice(
       choices,
       (card) => {
-        this.cardManager.pick(card, {
+        const outcome = this.cardManager.pick(card, {
           turtle: this.turtle,
           state: this.state,
           run: this.runState,
+          rng,
         })
 
         if (card.id === "bioluminescence") {
           this.turtle.addGlow(0.5)
         }
 
-        this.uiManager.showMessage(`+ ${card.name}`, 1500)
+        this.uiManager.showMessage(
+          outcome ? `${card.name}: ${outcome}` : `+ ${card.name}`,
+          outcome ? 2400 : 1500,
+        )
+
+        // Las cartas de caos pueden subir la toxicidad al máximo al instante.
+        if (this.state.toxicity >= 100 && !this.tryKill()) return
+
         this.advanceBiome()
       },
       notice,
