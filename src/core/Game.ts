@@ -22,6 +22,8 @@ import {
   type MetaState,
 } from "@core/MetaState"
 import { Rng, deriveSeed, randomSeed } from "@core/rng"
+import { InputController } from "@core/InputController"
+import { CameraRig } from "@core/CameraRig"
 import {
   BIOME_ORDER,
   type GameState,
@@ -29,6 +31,21 @@ import {
   type RunOutcome,
   type RunSummary,
 } from "@core/types"
+import {
+  applyToxicityDelta,
+  computeBiomeToxicityFloor,
+  computeDebrisCleanup,
+  computeEntryToxicity,
+  computeFilterCleanup,
+  computePassiveToxicityRate,
+} from "@core/systems/toxicity"
+import {
+  computeBiomeTimeLimit,
+  computeReviveToxicity,
+  computeReviveTimeRemaining,
+  computeTimePressure,
+  computeZoneProgress,
+} from "@core/systems/progression"
 import { UpgradeManager } from "@/tycoon/UpgradeManager"
 import { ACT_EVENTS } from "@/events/EventPool"
 import {
@@ -39,31 +56,9 @@ import {
 
 const MAX_DELTA = 0.1
 
-const TOXICITY_SCALE = 3
-const TOXICITY_REDUCTION_BASE = 0.4
-const TOXICITY_REDUCTION_PER_POLLUTION = 1.0
-const FILTER_TOXICITY_REDUCTION =
-  TOXICITY_REDUCTION_BASE + 0.5 * TOXICITY_REDUCTION_PER_POLLUTION
-const TOXICITY_CARRYOVER = 0.5
-const TOXICITY_FLOOR_SCALE = 30
-
-const ZONE_COMPLETION_RATIO = 0.6
-const CAMERA_OFFSET = new THREE.Vector3(0, 5, -12)
-const UP = new THREE.Vector3(0, 1, 0)
 const BUILD_DISTANCE = 4
 const DEEP_POINT_LIGHT_BOOST = 25
 const BLOOM_MAX_STRENGTH = 0.5
-
-const BIOME_TIME_BASE = 120
-const BIOME_TIME_DECAY = 2
-const BIOME_TIME_MIN = 80
-const BIOME_TIME_PRESSURE = 4
-/** Los eventos pueden recortar el siguiente bioma por debajo del mínimo normal. */
-const MIN_BIOME_TIME_AFTER_EVENT = 30
-
-const REVIVE_TOXICITY_BASE = 50
-const REVIVE_TOXICITY_STEP = 10
-const REVIVE_TOXICITY_MAX = 90
 
 type Screen = "hub" | "run" | "summary"
 
@@ -83,6 +78,8 @@ export class Game {
   private uiManager: UIManager
   private state: GameState
   private input: InputState
+  private inputController: InputController
+  private cameraRig: CameraRig
   private renderPipeline!: RenderPipeline
   private timer: THREE.Timer
   private ambientLight!: THREE.AmbientLight
@@ -98,8 +95,6 @@ export class Game {
   private godMode = false
   private bubbles: BubbleTrail
   private structures: StructureManager
-  private lookBack = false
-  private lookBackApplied = false
   private paused = false
   private transition: BiomeTransition
   private pendingAdvance = false
@@ -122,7 +117,6 @@ export class Game {
   private runSeed = randomSeed()
   private runTime = 0
 
-  private readonly tmpCameraTarget = new THREE.Vector3()
   private readonly tmpProjected = new THREE.Vector3()
 
   constructor() {
@@ -134,6 +128,7 @@ export class Game {
       0.1,
       1000,
     )
+    this.cameraRig = new CameraRig(this.camera)
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true })
     this.renderer.setSize(window.innerWidth, window.innerHeight)
@@ -192,10 +187,27 @@ export class Game {
       vertical: 0,
     }
 
+    this.inputController = new InputController(this.input, {
+      isOverlayActive: () =>
+        this.screens.isEventActive() || this.screens.isCardChoiceActive(),
+      isPaused: () => this.paused,
+      isPlaying: () => this.screen === "run",
+      blocksGameplay: () => this.transition.blocksGameplay,
+      togglePause: () => this.togglePause(),
+      setPaused: (paused) => this.setPaused(paused),
+      backflip: () => this.turtle.triggerBackflip(),
+      abandonRun: () => this.endRun("abandoned"),
+      build: () => this.tryBuild("filter"),
+      dash: (direction) => this.tryDash(direction),
+      setLookBack: (active) => {
+        this.cameraRig.setLookBack(active)
+      },
+    })
+
     new TouchControls(this.input, {
       onBuild: () => this.tryBuild("filter"),
       onLookBack: (active) => {
-        this.lookBack = active
+        this.cameraRig.setLookBack(active)
       },
       onDash: (direction) => this.tryDash(direction),
     })
@@ -248,7 +260,7 @@ export class Game {
 
   private openActEvent(): void {
     if (this.screen !== "run") return
-    this.clearInput()
+    this.inputController.clear()
 
     const rng = new Rng(deriveSeed(this.runSeed, this.biomeIndex + 2000))
     const event = rng.pick(ACT_EVENTS)
@@ -285,8 +297,10 @@ export class Game {
   }
 
   private setupEventListeners(): void {
-    window.addEventListener("keydown", (e) => this.handleKeyDown(e))
-    window.addEventListener("keyup", (e) => this.handleKeyUp(e))
+    window.addEventListener("keydown", (e) =>
+      this.inputController.handleKeyDown(e),
+    )
+    window.addEventListener("keyup", (e) => this.inputController.handleKeyUp(e))
     window.addEventListener("resize", () => this.handleResize())
 
     document.addEventListener("visibilitychange", () => {
@@ -301,125 +315,8 @@ export class Game {
     })
   }
 
-  private setKey(code: string, pressed: boolean): void {
-    switch (code) {
-      case "KeyW":
-      case "ArrowUp":
-        this.input.forward = pressed
-        break
-      case "KeyS":
-      case "ArrowDown":
-        this.input.backward = pressed
-        break
-      case "KeyA":
-      case "ArrowLeft":
-        this.input.left = pressed
-        break
-      case "KeyD":
-      case "ArrowRight":
-        this.input.right = pressed
-        break
-      case "KeyU":
-        this.input.up = pressed
-        break
-      case "KeyJ":
-        this.input.down = pressed
-        break
-      case "KeyI":
-        this.input.boost = pressed
-        break
-    }
-  }
-
-  private handleKeyDown(e: KeyboardEvent): void {
-    // Durante un evento o una elección de carta, el overlay controla la
-    // interacción (botones, Tab y teclas numéricas). No dejamos que el juego
-    // procese movimiento, pausa, dash, construcción ni el backflip.
-    if (this.screens.isEventActive() || this.screens.isCardChoiceActive()) {
-      return
-    }
-
-    if (e.code === "Escape") {
-      if (!e.repeat) this.togglePause()
-      return
-    }
-
-    if (e.code === "Enter") {
-      if (
-        e.repeat ||
-        e.defaultPrevented ||
-        this.paused ||
-        this.screen !== "run"
-      ) {
-        return
-      }
-
-      // Si hay un control enfocado, Enter debe activarlo a él.
-      const target = e.target
-      if (
-        target instanceof HTMLElement &&
-        target.closest(
-          "button, a[href], [role='button'], input, select, textarea",
-        )
-      ) {
-        return
-      }
-
-      this.setPaused(true)
-      e.preventDefault()
-      return
-    }
-
-    if (e.code === "Space") {
-      if (
-        !e.repeat &&
-        this.screen === "run" &&
-        !this.transition.blocksGameplay
-      ) {
-        this.turtle.triggerBackflip()
-        e.preventDefault()
-      }
-      return
-    }
-
-    if (this.paused) return
-
-    if (e.code === "KeyR") {
-      if (!e.repeat && this.screen === "run") this.endRun("abandoned")
-      return
-    }
-
-    if (e.code === "KeyB") {
-      if (!e.repeat) this.tryBuild("filter")
-      return
-    }
-
-    if (e.code === "KeyC") {
-      this.lookBack = true
-      return
-    }
-
-    if (e.code === "KeyQ" || e.code === "KeyE") {
-      if (!e.repeat) {
-        this.tryDash(e.code === "KeyQ" ? "left" : "right")
-      }
-      return
-    }
-
-    this.setKey(e.code, true)
-  }
-
-  private handleKeyUp(e: KeyboardEvent): void {
-    if (this.screens.isEventActive() || this.screens.isCardChoiceActive()) {
-      return
-    }
-    if (e.code === "KeyC") this.lookBack = false
-    this.setKey(e.code, false)
-  }
-
   private handleResize(): void {
-    this.camera.aspect = window.innerWidth / window.innerHeight
-    this.camera.updateProjectionMatrix()
+    this.cameraRig.resize(window.innerWidth / window.innerHeight)
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     this.renderer.setSize(window.innerWidth, window.innerHeight)
     this.renderPipeline.setSize(window.innerWidth, window.innerHeight)
@@ -433,13 +330,10 @@ export class Game {
     this.loop = Math.floor(index / BIOME_ORDER.length)
     const biomeKey = BIOME_ORDER[index % BIOME_ORDER.length]
 
-    const baseTimeLimit = Math.max(
-      BIOME_TIME_MIN,
-      BIOME_TIME_BASE - (index % BIOME_ORDER.length) * BIOME_TIME_DECAY,
-    )
-    this.biomeTimeLimit = Math.max(
-      MIN_BIOME_TIME_AFTER_EVENT,
-      baseTimeLimit + this.pendingTimeDelta,
+    this.biomeTimeLimit = computeBiomeTimeLimit(
+      index,
+      BIOME_ORDER.length,
+      this.pendingTimeDelta,
     )
     this.biomeTimeRemaining = this.biomeTimeLimit
     this.pendingTimeDelta = 0
@@ -448,12 +342,12 @@ export class Game {
     this.biomeGenerator.generateBiome(biomeKey, rng, this.loop)
     this.applyBiomeLighting()
 
-    const biomeToxicityFloor =
-      this.biomeGenerator.getBiome().toxicityRate * TOXICITY_FLOOR_SCALE
-    const toxicityFloor = this.pendingToxicityFloor ?? biomeToxicityFloor
+    const toxicityFloor =
+      this.pendingToxicityFloor ??
+      computeBiomeToxicityFloor(this.biomeGenerator.getBiome().toxicityRate)
 
-    this.state.toxicity = Math.max(
-      this.state.toxicity * TOXICITY_CARRYOVER,
+    this.state.toxicity = computeEntryToxicity(
+      this.state.toxicity,
       toxicityFloor,
     )
     this.pendingToxicityFloor = null
@@ -475,8 +369,7 @@ export class Game {
 
     this.bubbles.clear()
     this.structures.clear()
-    this.lookBackApplied = this.lookBack
-    this.snapCamera()
+    this.cameraRig.snap(this.turtle.mesh.position, this.turtle.mesh.rotation.y)
     this.devMenu?.refresh()
   }
 
@@ -485,21 +378,6 @@ export class Game {
     this.directionalLight.intensity = sun.intensity
     this.directionalLight.color.setHex(sun.color)
     this.pointLightBoost = 1 + sun.darkness * DEEP_POINT_LIGHT_BOOST
-  }
-
-  private getCameraTarget(): THREE.Vector3 {
-    return this.tmpCameraTarget
-      .copy(CAMERA_OFFSET)
-      .applyAxisAngle(
-        UP,
-        this.turtle.mesh.rotation.y + (this.lookBack ? Math.PI : 0),
-      )
-      .add(this.turtle.mesh.position)
-  }
-
-  private snapCamera(): void {
-    this.camera.position.copy(this.getCameraTarget())
-    this.camera.lookAt(this.turtle.mesh.position)
   }
 
   private computeStructurePhase(): number {
@@ -600,7 +478,7 @@ export class Game {
         return
       }
       this.paused = true
-      this.clearInput()
+      this.inputController.clear()
       this.screens.showPause(
         () => this.setPaused(false),
         () => {
@@ -623,20 +501,6 @@ export class Game {
     setAnimationsPaused(paused)
   }
 
-  private clearInput(): void {
-    this.lookBack = false
-    this.input.forward = false
-    this.input.backward = false
-    this.input.left = false
-    this.input.right = false
-    this.input.up = false
-    this.input.down = false
-    this.input.boost = false
-    this.input.moveX = 0
-    this.input.moveY = 0
-    this.input.vertical = 0
-  }
-
   private showHub(): void {
     this.transition.cancel()
     this.pendingAdvance = false
@@ -644,7 +508,7 @@ export class Game {
     this.endlessMode = false
     this.screen = "hub"
     this.state.isRunning = false
-    this.clearInput()
+    this.inputController.clear()
     this.runSeed = randomSeed()
     this.pendingTimeDelta = 0
     this.pendingToxicityFloor = null
@@ -665,7 +529,7 @@ export class Game {
     this.state.toxicity = 0
     this.state.isRunning = true
     this.screen = "run"
-    this.clearInput()
+    this.inputController.clear()
 
     this.turtle.resetStats()
     this.runState = createRunState()
@@ -691,7 +555,7 @@ export class Game {
     this.pendingAdvance = false
     this.screen = "summary"
     this.state.isRunning = false
-    this.clearInput()
+    this.inputController.clear()
 
     const { base, bonus } = computeEco(this.state.ecoAwareness, outcome)
     const summary: RunSummary = {
@@ -711,17 +575,6 @@ export class Game {
     applyRunToMeta(this.meta, summary)
     this.saveManager.save(this.meta)
     this.screens.showSummary(summary, this.meta)
-  }
-
-  private orbitCamera(time: number): void {
-    const center = this.turtle.mesh.position
-    const angle = time * 0.15
-    this.camera.position.set(
-      center.x + Math.sin(angle) * 14,
-      center.y + 4,
-      center.z + Math.cos(angle) * 14,
-    )
-    this.camera.lookAt(center)
   }
 
   private advanceBiome(): void {
@@ -822,8 +675,7 @@ export class Game {
     // --- Timer por bioma ---
     this.biomeTimeRemaining -= deltaTime
     if (this.biomeTimeRemaining < 0) this.biomeTimeRemaining = 0
-    const timePressure =
-      this.biomeTimeRemaining <= 0 ? 1 + BIOME_TIME_PRESSURE : 1
+    const timePressure = computeTimePressure(this.biomeTimeRemaining)
     this.uiManager.updateBiomeTimer(
       this.biomeTimeRemaining,
       this.biomeTimeLimit,
@@ -832,14 +684,11 @@ export class Game {
     const bounds = this.biomeGenerator.getBounds()
     this.turtle.update(deltaTime, this.input, bounds)
 
-    if (this.lookBack !== this.lookBackApplied) {
-      this.lookBackApplied = this.lookBack
-      this.snapCamera()
-    }
-
-    const smoothing = 1 - Math.exp(-6 * deltaTime)
-    this.camera.position.lerp(this.getCameraTarget(), smoothing)
-    this.camera.lookAt(this.turtle.mesh.position)
+    this.cameraRig.update(
+      deltaTime,
+      this.turtle.mesh.position,
+      this.turtle.mesh.rotation.y,
+    )
 
     // --- Recolección ---
     const collected = this.biomeGenerator.updateDebris(
@@ -850,28 +699,21 @@ export class Game {
       this.input.boost,
     )
 
-    const required = Math.max(
-      1,
-      this.biomeGenerator.getInitialDebrisCount() * ZONE_COMPLETION_RATIO,
-    )
-
     // --- Toxicidad Pasiva (aplicando el multiplicador de la mejora "Sistema Inmune") ---
     this.biomeGenerator.updateVisuals(deltaTime)
     const pollution = this.biomeGenerator.getPollutionRatio()
-    const base =
-      this.biomeGenerator.getBiome().toxicityRate *
-      TOXICITY_SCALE *
-      this.toxicityScaleMult
-    const passiveRate =
-      base *
-      pollution *
-      (1 - this.turtle.stats.toxicityResistance) *
-      timePressure
+    const passiveRate = computePassiveToxicityRate({
+      toxicityRate: this.biomeGenerator.getBiome().toxicityRate,
+      pollution,
+      toxicityResistance: this.turtle.stats.toxicityResistance,
+      toxicityScaleMult: this.toxicityScaleMult,
+      timePressure,
+    })
 
     if (!this.godMode) {
-      this.state.toxicity = Math.max(
-        0,
-        this.state.toxicity + passiveRate * deltaTime,
+      this.state.toxicity = applyToxicityDelta(
+        this.state.toxicity,
+        passiveRate * deltaTime,
       )
     }
 
@@ -886,10 +728,10 @@ export class Game {
       if (!debris.isFragment) this.collectedInZone++
 
       if (!this.godMode) {
-        const reduction =
-          TOXICITY_REDUCTION_BASE +
-          debris.pollution * TOXICITY_REDUCTION_PER_POLLUTION
-        this.state.toxicity = Math.max(0, this.state.toxicity - reduction)
+        this.state.toxicity = applyToxicityDelta(
+          this.state.toxicity,
+          -computeDebrisCleanup(debris.pollution),
+        )
       }
 
       if (eco > 0) this.showFloatingEco(debris, eco)
@@ -911,9 +753,9 @@ export class Game {
     this.state.ecoAwareness += filterEco
 
     if (!this.godMode && credit.count > 0) {
-      this.state.toxicity = Math.max(
-        0,
-        this.state.toxicity - FILTER_TOXICITY_REDUCTION * credit.count,
+      this.state.toxicity = applyToxicityDelta(
+        this.state.toxicity,
+        -computeFilterCleanup(credit.count),
       )
     }
 
@@ -924,9 +766,9 @@ export class Game {
 
     if (this.state.toxicity >= 100 && !this.tryKill()) return
 
-    this.state.zoneProgress = Math.min(
-      100,
-      (this.collectedInZone / required) * 100,
+    this.state.zoneProgress = computeZoneProgress(
+      this.collectedInZone,
+      this.biomeGenerator.getInitialDebrisCount(),
     )
 
     this.uiManager.updateUI(this.state, deltaTime)
@@ -964,7 +806,7 @@ export class Game {
     if (this.screens.isEventActive()) return
     if (this.screen !== "run") return
     if (this.transition.isActive()) return
-    this.clearInput()
+    this.inputController.clear()
 
     const rng = new Rng(deriveSeed(this.runSeed, this.biomeIndex + 1000))
     const choices = this.cardManager.rollChoices(3, rng)
@@ -994,13 +836,11 @@ export class Game {
 
     if (this.runState.reviveCharges > 0) {
       this.runState.reviveCharges--
-      const reviveToxicity = Math.min(
-        REVIVE_TOXICITY_MAX,
-        REVIVE_TOXICITY_BASE + this.revivesUsed * REVIVE_TOXICITY_STEP,
-      )
+      this.state.toxicity = computeReviveToxicity(this.revivesUsed)
       this.revivesUsed++
-      this.state.toxicity = reviveToxicity
-      this.biomeTimeRemaining = Math.max(this.biomeTimeRemaining, 20)
+      this.biomeTimeRemaining = computeReviveTimeRemaining(
+        this.biomeTimeRemaining,
+      )
       this.uiManager.showMessage("¡Revives!", 1800)
       return true
     }
@@ -1019,7 +859,7 @@ export class Game {
     this.update(deltaTime, time)
 
     if (this.screen !== "run") {
-      this.orbitCamera(time)
+      this.cameraRig.orbit(time, this.turtle.mesh.position)
       if (!this.paused) this.biomeGenerator.updateVisuals(deltaTime)
     }
 
