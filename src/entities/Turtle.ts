@@ -8,6 +8,11 @@ const BASE_RIM_COLOR = 0xf0c053
 
 const GLOW_WHITE = new THREE.Color(0xffffff)
 
+/** Reacción de dolor: flash magenta y retroceso breve, sin tapar el control. */
+const HURT_COLOR = new THREE.Color(0xff3b7a)
+const HURT_DURATION = 0.42
+const HURT_FLASH_INTENSITY = 2.2
+
 /** Tope duro de resistencia a la toxicidad (nunca inmunidad total). */
 const TOXICITY_RESISTANCE_CAP = 0.9
 
@@ -143,6 +148,10 @@ export class Turtle {
   private time = 0
   private readonly turnSpeed = 3
 
+  private slowTimer = 0
+  private slowMultiplier = 1
+  private hurtTimer = 0
+
   /* Spinning */
   private isSpinning = false
   private spinProgress = 0
@@ -247,6 +256,28 @@ export class Turtle {
     this.isBackflipping = false
     this.backflipProgress = 0
     this.completedPitch = 0
+
+    this.slowTimer = 0
+    this.slowMultiplier = 1
+    this.hurtTimer = 0
+  }
+
+  /**
+   * Aplica una ralentización temporal. Si ya había una más fuerte activa, se
+   * conserva la más fuerte y solo se extiende el tiempo.
+   */
+  public applySlow(duration: number, multiplier: number): void {
+    if (duration <= 0) return
+    this.slowTimer = Math.max(this.slowTimer, duration)
+    this.slowMultiplier = Math.min(
+      this.slowMultiplier,
+      THREE.MathUtils.clamp(multiplier, 0, 1),
+    )
+  }
+
+  /** Dispara el retroceso y el flash de dolor. Reinicia la animación si ya estaba activa. */
+  public playHurt(): void {
+    this.hurtTimer = HURT_DURATION
   }
 
   public addSpinBoostMultiplier(delta: number): void {
@@ -303,6 +334,11 @@ export class Turtle {
   ): void {
     this.time += deltaTime
 
+    if (this.slowTimer > 0) {
+      this.slowTimer = Math.max(0, this.slowTimer - deltaTime)
+      if (this.slowTimer === 0) this.slowMultiplier = 1
+    }
+
     // Decaimiento del boost de giro
     if (this.spinBoost > 0) {
       this.spinBoost *= Math.exp(-this.spinBoostDecay * deltaTime)
@@ -329,7 +365,7 @@ export class Turtle {
 
     const inputBoost = isBoosting ? 2 : 1
     const totalBoost = inputBoost * (1 + this.spinBoost)
-    const maxSpeed = this.stats.speed * totalBoost
+    const maxSpeed = this.stats.speed * totalBoost * this.slowMultiplier
 
     // Ejes analógicos si el stick está activo; si no, booleanos del teclado.
     const throttle =
@@ -432,9 +468,10 @@ export class Turtle {
     )
     position.y = THREE.MathUtils.clamp(position.y, bounds.minY, bounds.maxY)
 
+    this.updateGlow(deltaTime)
+    this.updateHurt(deltaTime)
     // Pasamos extraPitch a la animación
     this.animateSwimming(deltaTime, steer, vertical, extraRollAngle, extraPitch)
-    this.updateGlow(deltaTime)
   }
 
   public getSpeed(): number {
@@ -664,6 +701,7 @@ export class Turtle {
     const swimFrequency = 2.2 + speedRatio * 2.4
     const swimAmplitude = 0.22 + speedRatio * 0.24
     const paddle = Math.sin(this.time * swimFrequency)
+    const hurt = this.hurtTimer > 0 ? this.hurtTimer / HURT_DURATION : 0
 
     this.leftFrontFlipper.rotation.x = paddle * swimAmplitude
     this.rightFrontFlipper.rotation.x = -paddle * swimAmplitude
@@ -676,7 +714,8 @@ export class Turtle {
       -vertical * 0.38 +
       Math.sin(this.time * 2.6) * 0.035 +
       this.completedPitch +
-      extraPitch
+      extraPitch +
+      hurt * 0.12
 
     this.model.rotation.x +=
       (pitchTarget - this.model.rotation.x) * (1 - Math.exp(-6 * deltaTime))
@@ -684,24 +723,54 @@ export class Turtle {
     const bankTarget = -steer * 0.28
     const baseRoll = Math.sin(this.time * 4.5) * 0.07
     const targetRoll =
-      bankTarget + baseRoll + this.completedRoll + extraRollAngle
+      bankTarget + baseRoll + this.completedRoll + extraRollAngle + hurt * 0.1
 
     this.model.rotation.z +=
       (targetRoll - this.model.rotation.z) * (1 - Math.exp(-7 * deltaTime))
 
     // --- Flotación + squash & stretch del body ---
-    this.body.position.y = Math.sin(this.time * 1.8) * 0.06
-    this.body.rotation.x = Math.sin(this.time * 1.4) * 0.03
+    this.body.position.y = Math.sin(this.time * 1.8) * 0.06 - hurt * 0.08
+    this.body.position.z = -hurt * 0.18
+    this.body.rotation.x = Math.sin(this.time * 1.4) * 0.03 + hurt * 0.2
+    this.body.rotation.z = hurt * 0.12
 
     const boostVisual = Math.min(1, this.spinBoost / this.spinBoostMultiplier)
-    const targetScaleX = 1 - boostVisual * 0.05
-    const targetScaleY = 1 - boostVisual * 0.08
-    const targetScaleZ = 1 + boostVisual * 0.15
+    const hurtScale = 1 - hurt * 0.06
+    const targetScaleX = (1 - boostVisual * 0.05) * hurtScale
+    const targetScaleY = (1 - boostVisual * 0.08) * hurtScale
+    const targetScaleZ = (1 + boostVisual * 0.15) * (1 + hurt * 0.04)
 
     const scaleSmoothing = 1 - Math.exp(-8 * deltaTime)
     this.body.scale.x += (targetScaleX - this.body.scale.x) * scaleSmoothing
     this.body.scale.y += (targetScaleY - this.body.scale.y) * scaleSmoothing
     this.body.scale.z += (targetScaleZ - this.body.scale.z) * scaleSmoothing
+  }
+
+  /** Flash magenta y luz de impacto; se aplica después del glow para no pisarlo. */
+  private updateHurt(deltaTime: number): void {
+    if (this.hurtTimer <= 0) return
+
+    this.hurtTimer = Math.max(0, this.hurtTimer - deltaTime)
+    const strength = this.hurtTimer / HURT_DURATION
+    if (strength <= 0) return
+
+    const flash = Math.sin(strength * Math.PI * 0.5)
+
+    for (const material of [
+      this.shellMaterial,
+      this.skinMaterial,
+      this.plateMaterial,
+      this.rimMaterial,
+    ]) {
+      material.emissive.lerp(HURT_COLOR, flash * 0.9)
+      material.emissiveIntensity = Math.max(
+        material.emissiveIntensity,
+        flash * HURT_FLASH_INTENSITY,
+      )
+    }
+
+    this.glowLight.color.lerp(HURT_COLOR, flash * 0.9)
+    this.glowLight.intensity = Math.max(this.glowLight.intensity, flash * 8)
   }
 
   /** Bioluminiscencia en 5 fases: color propio → saturación → blanqueo → blanco puro. */

@@ -89,6 +89,17 @@ La Conciencia Ecológica sobrante se guarda como progreso persistente en el **Re
 
 Con `Q` / `E` la tortuga realiza un giro completo de 360° en menos de un segundo. Al iniciarlo recibe un **impulso temporal de velocidad** (hasta ×1.6) que decae de forma exponencial, y el giro fuerza un avance mínimo aunque sueltes las teclas: úsalo para encadenar giros y desplazarte rápido. El HUD muestra el multiplicador activo como `DASH ×N`.
 
+### Medusas
+
+Desde el primer bioma aparecen **medusas** flotando a la deriva. La cantidad escala con la profundidad: **2 medusas en el Epipelágico Superior** y una más por cada zona, hasta **7 en el Mar Profundo**. En la Inmersión sin fin el contador se mantiene entre 2 y 7 en cada vuelta.
+
+- Se mueven con una flotación vertical y una deriva horizontal propias, con fase y velocidad derivadas de la semilla de la run.
+- Respetan los límites del bioma y nunca aparecen en el centro, donde se coloca la tortuga al entrar.
+- Si tocan a la tortuga, aplican **+15 de toxicidad**, la **ralentizan un 50% durante 2 s** y muestran el aviso **"¡MEDUSA!"**.
+- El golpe dispara una **animación de dolor** de 0,42 s: la tortuga retrocede, se comprime y emite un flash magenta con una luz de impacto.
+- Tras golpear entran en un **cooldown de 3 s**: se vuelven casi transparentes y su luz rosa se apaga, así que no pueden encadenar golpes.
+- En **modo dios** el impacto no aplica daño ni ralentización.
+
 ### Cartas
 
 Cuando completas el **60%** de los desechos iniciales de una zona (el HUD lo muestra como 100% de progreso) y no es la última, antes de descender a la siguiente el juego se detiene y te ofrece **3 cartas** entre las que elegir una. En los biomas 2 y 4, antes de las cartas se resuelve un **evento** (ver la sección siguiente). Cada carta aplica una mejora (o maldición) **permanente durante esa run**, y las que vas eligiendo quedan registradas y se muestran en el resumen final.
@@ -224,6 +235,7 @@ El agua no es un simple fondo: hay una capa de efectos (`src/world/WaterEffects.
 - **Brillo de la tortuga**: la carta *Bioluminiscencia* enciende un glow propio en la tortuga que sube en 5 fases (color propio → saturación → blanqueo → blanco puro), con un pulso biológico y una luz puntual que pasa de cian a blanco puro; cada carta adicional intensifica el brillo.
 - **Props por bioma**: cada zona tiene su propia mezcla y paleta. Las aguas someras usan kelp, abanicos de mar, corales y arrecifes; el mesopelágico, plumas y esponjas de vidrio; el batipelágico, gusanos de tubo y huesos de ballena; y el abisal, nódulos, chimeneas hidrotermales y agujas de roca.
 - **Vida sésil animada**: corales, algas, kelp, abanicos, plumas y gusanos se balancean con una fase y velocidad propias, sin abandonar su posición en el fondo.
+- **Fauna libre**: las medusas rosas combinan un domo semitransparente con transmisión, seis tentáculos y una luz puntual propia. Se mecen y derivan de forma errática; durante su cooldown de 3 s se vuelven casi invisibles.
 
 A medida que limpias un bioma, **el agua se aclara**: sube el brillo, baja la densidad de la niebla y se refuerzan los rayos. Al pasar de zona se reproduce una **transición** en la que una masa negra de borde irregular barre la pantalla y muestra el nombre del nuevo bioma y su **profundidad**.
 
@@ -291,6 +303,8 @@ La lógica pura y los controladores se prueban con **Vitest** en entorno `node` 
 - `src/cards/CardManager.ts`.
 - `src/tycoon/UpgradeManager.ts` y `src/tycoon/Upgrades.ts`.
 
+También hay tests de comportamiento para `BiomeProps`, el catálogo de desechos, `EnemyManager` y la ralentización de `Turtle`. Esos archivos no forman parte del porcentaje de cobertura, que se reserva para lógica pura y controladores.
+
 Los umbrales configurados en `vitest.config.ts` son **90% statements, 80% branches, 90% functions y 90% lines**. `Game.ts` y la UI quedan fuera de la cobertura hasta que se extraigan más sistemas.
 
 El CI (`.github/workflows/ci.yml`) se ejecuta en cada push a `main` y en cada pull request: instala dependencias con el lockfile y pasa `typecheck`, `lint`, `format:check`, `test:run` y `build`.
@@ -330,12 +344,14 @@ oceancidio/
     │   ├── BiomeGenerator.ts   # Generación de biomas, terreno, partículas y desechos
     │   ├── BiomeProps.ts       # Props decorativos por bioma
     │   ├── BiomeTransition.ts  # Transición animada entre biomas
+    │   ├── EnemyManager.ts     # Spawn, límites, colisión y cooldown de la fauna hostil
     │   ├── WaterEffects.ts     # Cúpula, niebla con absorción, rayos y nieve marina
     │   ├── Structure.ts        # Esfera filtradora colocada en el agua
     │   ├── StructureConfig.ts  # Configuración de estructuras
     │   └── StructureManager.ts # Ciclo de vida de las estructuras
     ├── entities/         # Entidades del juego
     │   ├── Turtle.ts           # Modelo y movimiento de la tortuga
+    │   ├── Enemy.ts            # Medusa: domo, tentáculos, luz, deriva y cooldown
     │   ├── Debris.ts           # Desechos recolectables
     │   ├── DebrisVisuals.ts    # Aspecto visual de cada tipo de desecho
     │   ├── debrisCatalog.ts    # Catálogo de desechos por bioma

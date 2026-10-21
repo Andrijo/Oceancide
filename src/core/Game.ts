@@ -1,6 +1,7 @@
 import * as THREE from "three"
 import { Turtle } from "@entities/Turtle"
 import { BiomeGenerator } from "@world/BiomeGenerator"
+import { EnemyManager } from "@world/EnemyManager"
 import { SUN_DIRECTION } from "@world/WaterEffects"
 import { UIManager } from "@ui/UIManager"
 import { DevMenu } from "@ui/DevMenu"
@@ -75,6 +76,7 @@ export class Game {
   private renderer: THREE.WebGLRenderer
   private turtle: Turtle
   private biomeGenerator: BiomeGenerator
+  private enemyManager: EnemyManager
   private uiManager: UIManager
   private state: GameState
   private input: InputState
@@ -149,6 +151,7 @@ export class Game {
     this.structures = new StructureManager(this.scene)
 
     this.biomeGenerator = new BiomeGenerator(this.scene)
+    this.enemyManager = new EnemyManager(this.scene)
     this.uiManager = new UIManager()
     this.uiManager.createPauseButton(() => this.togglePause())
     this.transition = new BiomeTransition()
@@ -340,6 +343,11 @@ export class Game {
 
     const rng = new Rng(deriveSeed(this.runSeed, index))
     this.biomeGenerator.generateBiome(biomeKey, rng, this.loop)
+
+    const bounds = this.biomeGenerator.getBounds()
+    // En modo sin fin `index` sigue creciendo; el módulo mantiene la fauna
+    // entre 2 y 7 medusas en cada vuelta.
+    this.enemyManager.spawn(2 + (index % BIOME_ORDER.length), bounds, rng)
     this.applyBiomeLighting()
 
     const toxicityFloor =
@@ -355,7 +363,6 @@ export class Game {
     const sun = this.biomeGenerator.getSun()
     this.renderPipeline.setBloomStrength(sun.darkness * BLOOM_MAX_STRENGTH)
 
-    const bounds = this.biomeGenerator.getBounds()
     this.turtle.reset(new THREE.Vector3(0, (bounds.minY + bounds.maxY) / 2, 0))
 
     const lightAnchors = this.biomeGenerator.getLightAnchors()
@@ -529,6 +536,9 @@ export class Game {
     this.pendingTimeDelta = 0
     this.pendingToxicityFloor = null
     this.loadBiome(0)
+    // El hub reutiliza el bioma 0 como fondo, pero no debe quedarse con fauna
+    // hostil congelada detrás del menú.
+    this.enemyManager.clear()
     this.screens.showHub(this.meta)
   }
 
@@ -572,6 +582,7 @@ export class Game {
     this.screen = "summary"
     this.state.isRunning = false
     this.inputController.clear()
+    this.enemyManager.clear()
 
     const { base, bonus } = computeEco(this.state.ecoAwareness, outcome)
     const summary: RunSummary = {
@@ -699,6 +710,20 @@ export class Game {
 
     const bounds = this.biomeGenerator.getBounds()
     this.turtle.update(deltaTime, this.input, bounds)
+
+    const hitByEnemy = this.enemyManager.update(
+      deltaTime,
+      time,
+      this.turtle.mesh.position,
+      bounds,
+    )
+    if (hitByEnemy && !this.godMode) {
+      this.state.toxicity = Math.min(100, this.state.toxicity + 15)
+      this.turtle.applySlow(2, 0.5)
+      this.turtle.playHurt()
+      this.uiManager.showMessage("¡MEDUSA!", 1000)
+      if (this.state.toxicity >= 100 && !this.tryKill()) return
+    }
 
     this.cameraRig.update(
       deltaTime,
