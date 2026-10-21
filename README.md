@@ -220,9 +220,10 @@ El agua no es un simple fondo: hay una capa de efectos (`src/world/WaterEffects.
 - **Nieve marina**: partículas cercanas a la cámara que dan sensación de volumen y parallax.
 - **Viñeta** tintada con el color del agua.
 - **Cáusticas animadas** sobre el fondo en las zonas donde llega la luz.
-- **Bioluminiscencia**: en las zonas profundas (sin sol) las luces puntuales de color de acento pasan a ser la iluminación principal.
+- **Bioluminiscencia**: en las zonas profundas (sin sol) las luces puntuales nacen de props luminosos (fuentes hidrotermales, esponjas de vidrio, plumas de mar) y pasan a ser la iluminación principal.
 - **Brillo de la tortuga**: la carta *Bioluminiscencia* enciende un glow propio en la tortuga que sube en 5 fases (color propio → saturación → blanqueo → blanco puro), con un pulso biológico y una luz puntual que pasa de cian a blanco puro; cada carta adicional intensifica el brillo.
-- **Props por bioma**: rocas, corales, conchas, algas, esponjas y montículos de arrecife, con más relieve y detalle cuanto más profundo.
+- **Props por bioma**: cada zona tiene su propia mezcla y paleta. Las aguas someras usan kelp, abanicos de mar, corales y arrecifes; el mesopelágico, plumas y esponjas de vidrio; el batipelágico, gusanos de tubo y huesos de ballena; y el abisal, nódulos, chimeneas hidrotermales y agujas de roca.
+- **Vida sésil animada**: corales, algas, kelp, abanicos, plumas y gusanos se balancean con una fase y velocidad propias, sin abandonar su posición en el fondo.
 
 A medida que limpias un bioma, **el agua se aclara**: sube el brillo, baja la densidad de la niebla y se refuerzan los rayos. Al pasar de zona se reproduce una **transición** en la que una masa negra de borde irregular barre la pantalla y muestra el nombre del nuevo bioma y su **profundidad**.
 

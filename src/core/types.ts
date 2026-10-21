@@ -55,6 +55,8 @@ export interface WorldBounds {
 export interface BiomeConfig {
   name: string
   waterColor: [number, number, number]
+  // Densidad de FogExp2. Crece con la profundidad, pero se mantiene por debajo
+  // del punto en que la absorción por canal oculta las siluetas cercanas.
   fogDensity: number
   debrisDensity: number
   toxicityRate: number
@@ -108,7 +110,7 @@ export const BIOMES: Record<BiomeKey, BiomeConfig> = {
   subphotic: {
     name: "Subfótico",
     waterColor: [0.05, 0.3, 0.7],
-    fogDensity: 0.026,
+    fogDensity: 0.024,
     debrisDensity: 0.3,
     toxicityRate: 0.05,
     depth: 200,
@@ -118,7 +120,7 @@ export const BIOMES: Record<BiomeKey, BiomeConfig> = {
   mesopelagic_upper: {
     name: "Mesopelágico Superior",
     waterColor: [0.2, 0.18, 0.6],
-    fogDensity: 0.032,
+    fogDensity: 0.026,
     debrisDensity: 0.45,
     toxicityRate: 0.1,
     depth: 500,
@@ -128,7 +130,7 @@ export const BIOMES: Record<BiomeKey, BiomeConfig> = {
   mesopelagic_deep: {
     name: "Mesopelágico Profundo",
     waterColor: [0.35, 0.12, 0.55],
-    fogDensity: 0.038,
+    fogDensity: 0.028,
     debrisDensity: 0.6,
     toxicityRate: 0.2,
     depth: 1000,
@@ -138,7 +140,7 @@ export const BIOMES: Record<BiomeKey, BiomeConfig> = {
   bathypelagic_upper: {
     name: "Batipelágico Superior",
     waterColor: [0.3, 0.1, 0.45],
-    fogDensity: 0.044,
+    fogDensity: 0.03,
     debrisDensity: 0.7,
     toxicityRate: 0.35,
     depth: 2000,
@@ -148,7 +150,7 @@ export const BIOMES: Record<BiomeKey, BiomeConfig> = {
   bathypelagic_deep: {
     name: "Batipelágico Profundo",
     waterColor: [0.4, 0.08, 0.3],
-    fogDensity: 0.05,
+    fogDensity: 0.031,
     debrisDensity: 0.8,
     toxicityRate: 0.5,
     depth: 4000,
@@ -158,7 +160,7 @@ export const BIOMES: Record<BiomeKey, BiomeConfig> = {
   abyssopelagic: {
     name: "Abisopelágico",
     waterColor: [0.08, 0.22, 0.32],
-    fogDensity: 0.055,
+    fogDensity: 0.032,
     debrisDensity: 0.9,
     toxicityRate: 0.7,
     depth: 6000,
@@ -168,7 +170,7 @@ export const BIOMES: Record<BiomeKey, BiomeConfig> = {
   hadopelagic: {
     name: "Hadopelágico",
     waterColor: [0.28, 0.22, 0.06],
-    fogDensity: 0.06,
+    fogDensity: 0.033,
     debrisDensity: 0.95,
     toxicityRate: 0.85,
     depth: 8000,
@@ -178,7 +180,7 @@ export const BIOMES: Record<BiomeKey, BiomeConfig> = {
   deepSea: {
     name: "Mar Profundo",
     waterColor: [0.35, 0.08, 0.06],
-    fogDensity: 0.065,
+    fogDensity: 0.034,
     debrisDensity: 1.0,
     toxicityRate: 1.0,
     depth: 11000,

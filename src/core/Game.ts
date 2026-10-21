@@ -358,8 +358,24 @@ export class Game {
     const bounds = this.biomeGenerator.getBounds()
     this.turtle.reset(new THREE.Vector3(0, (bounds.minY + bounds.maxY) / 2, 0))
 
-    for (const light of this.pointLights) {
+    const lightAnchors = this.biomeGenerator.getLightAnchors()
+
+    for (let i = 0; i < this.pointLights.length; i++) {
+      const light = this.pointLights[i]
+      const anchor = lightAnchors[i]
+
+      // Las luces de bioluminiscencia nacen del propio prop (fuente hidrotermal,
+      // esponja de vidrio, pluma de mar). Si no hay anclas, se usa un punto
+      // aleatorio como acento ambiental.
+      if (anchor) {
+        light.color.setHex(anchor.color)
+        light.position.copy(anchor.position)
+        light.userData.baseIntensity = anchor.intensity
+        continue
+      }
+
       light.color.setHex(this.biomeGenerator.getBiome().accentColor)
+      light.userData.baseIntensity = 1
       light.position.set(
         rng.range(-bounds.halfSize, bounds.halfSize),
         rng.range(bounds.minY, bounds.maxY),
@@ -901,7 +917,11 @@ export class Game {
     )
 
     this.pointLights.forEach((light, i) => {
-      light.intensity = (0.3 + Math.sin(time + i) * 0.2) * this.pointLightBoost
+      const baseIntensity =
+        (light.userData.baseIntensity as number | undefined) ?? 1
+
+      light.intensity =
+        (0.3 + Math.sin(time + i) * 0.2) * this.pointLightBoost * baseIntensity
     })
 
     this.biomeGenerator.updateWater(simDelta, this.camera.position)
