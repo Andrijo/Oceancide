@@ -46,6 +46,9 @@ export const MICROFRAGMENT: OceanDebrisType = {
   toxicityImpact: 0.02,
 }
 
+// En las fosas, evita que `reposa`/`hunde` dominen el peso total: si casi todo
+// cae al fondo, el jugador puede limpiar la zona sin usar los controles
+// verticales. Deja una parte en la columna de agua (`deriva` o sin movimiento).
 export const BIOME_DEBRIS: Record<BiomeKey, OceanDebrisType[]> = {
   epipelagic_upper: [
     {
@@ -322,15 +325,16 @@ export const BIOME_DEBRIS: Record<BiomeKey, OceanDebrisType[]> = {
       name: "Esqueleto antiguo",
       description: "Huesos viejos cubiertos de bacterias del fondo marino.",
       toxicityImpact: 0.08,
-      weight: 1.5,
+      weight: 1,
       motion: "reposa",
     },
     {
       id: "mercury_slag_deposit",
       name: "Mancha química",
-      description: "Mugre venenosa que se quedó estancada en el fondo.",
+      description:
+        "Mugre venenosa suspendida en el agua. No se disuelve y envenena todo lo que roza.",
       toxicityImpact: 0.65,
-      weight: 1,
+      weight: 2.5,
     },
     {
       id: "ancient_anchor_rust",
@@ -338,7 +342,7 @@ export const BIOME_DEBRIS: Record<BiomeKey, OceanDebrisType[]> = {
       description:
         "Un fierro viejo soltando nubes de óxido bajo tanta presión.",
       toxicityImpact: 0.1,
-      weight: 2,
+      weight: 1,
       motion: "reposa",
     },
     {
@@ -346,7 +350,7 @@ export const BIOME_DEBRIS: Record<BiomeKey, OceanDebrisType[]> = {
       name: "Ceniza del fondo",
       description: "Polvo mineral que escupieron los volcanes sumergidos.",
       toxicityImpact: 0.14,
-      weight: 3,
+      weight: 1.5,
       motion: "hunde",
     },
     {
@@ -354,7 +358,7 @@ export const BIOME_DEBRIS: Record<BiomeKey, OceanDebrisType[]> = {
       name: "Bote de veneno",
       description: "Bote industrial aplastado que no deja de soltar químicos.",
       toxicityImpact: 0.8,
-      weight: 0.5,
+      weight: 1,
       hazard: "lixivia",
     },
   ],
@@ -366,7 +370,7 @@ export const BIOME_DEBRIS: Record<BiomeKey, OceanDebrisType[]> = {
       description:
         "Polvareda espesa que dejaron las máquinas al raspar el suelo.",
       toxicityImpact: 0.7,
-      weight: 1,
+      weight: 3,
       motion: "deriva",
     },
     {
@@ -374,7 +378,7 @@ export const BIOME_DEBRIS: Record<BiomeKey, OceanDebrisType[]> = {
       name: "Piedra volcánica",
       description: "Pedazo de roca pesada que nació del calor de la tierra.",
       toxicityImpact: 0.25,
-      weight: 2,
+      weight: 1.5,
       motion: "reposa",
     },
     {
@@ -383,17 +387,17 @@ export const BIOME_DEBRIS: Record<BiomeKey, OceanDebrisType[]> = {
       description:
         "Lodo viejo que se fue juntando durante años en la planicie.",
       toxicityImpact: 0.05,
-      weight: 3,
+      weight: 1.5,
       motion: "reposa",
     },
     {
       id: "deep_sea_cable_junk",
       name: "Cable submarino roto",
       description:
-        "Un tramo de cable de internet o de teléfono que quedó olvidado a miles de metros.",
+        "Un tramo de cable de internet o de teléfono que quedó meciéndose en la oscuridad.",
       toxicityImpact: 0.2,
-      weight: 2,
-      motion: "reposa",
+      weight: 1.5,
+      motion: "deriva",
     },
     {
       id: "heavy_radioactive_cask",
@@ -401,7 +405,7 @@ export const BIOME_DEBRIS: Record<BiomeKey, OceanDebrisType[]> = {
       description:
         "Una cosa pesadísima que quema de lo caliente y tóxica que está.",
       toxicityImpact: 0.9,
-      weight: 0.6,
+      weight: 0.5,
       motion: "reposa",
       hazard: "lixivia",
     },
@@ -453,11 +457,11 @@ export const BIOME_DEBRIS: Record<BiomeKey, OceanDebrisType[]> = {
   deepSea: [
     {
       id: "mariana_pcb_deposit",
-      name: "Suelo de químicos concentrados",
+      name: "Pluma de químicos",
       description:
-        "Toxinas acumuladas en el punto más hondo y escondido del mundo.",
+        "Toxinas concentradas que se quedaron suspendidas en el punto más hondo y escondido del mundo.",
       toxicityImpact: 1.0,
-      weight: 0.5,
+      weight: 1,
       hazard: "lixivia",
     },
     {
@@ -466,7 +470,7 @@ export const BIOME_DEBRIS: Record<BiomeKey, OceanDebrisType[]> = {
       description:
         "Pedazos de metal durísimo que la presión dobló como si fueran papel.",
       toxicityImpact: 0.4,
-      weight: 2.5,
+      weight: 1.2,
       motion: "reposa",
     },
     {
@@ -475,7 +479,7 @@ export const BIOME_DEBRIS: Record<BiomeKey, OceanDebrisType[]> = {
       description:
         "Mezcla de plástico y tierra aplastada por todo el peso del agua.",
       toxicityImpact: 0.9,
-      weight: 2,
+      weight: 1.2,
       motion: "reposa",
     },
     {
@@ -484,16 +488,16 @@ export const BIOME_DEBRIS: Record<BiomeKey, OceanDebrisType[]> = {
       description:
         "Roca mineral bien cargada de metales pesados del lecho marino.",
       toxicityImpact: 0.5,
-      weight: 2.5,
+      weight: 1.2,
       motion: "reposa",
     },
     {
       id: "hadal_trench_debris_cluster",
-      name: "Bola de mugre fosilizada",
+      name: "Bola de mugre flotante",
       description:
-        "Mezcolanza de plásticos y fierros que quedó atorada al final del mar.",
+        "Mezcolanza de plásticos y fierros que se quedó suspendida en la fosa.",
       toxicityImpact: 0.95,
-      weight: 1,
+      weight: 3,
     },
   ],
 }

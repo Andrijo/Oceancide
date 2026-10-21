@@ -6,7 +6,7 @@ import {
   type BiomeKey,
   type WorldBounds,
 } from "@core/types"
-import { BiomeProps } from "./BiomeProps"
+import { BiomeProps, type BiomeLightAnchor } from "./BiomeProps"
 import { WaterEffects, getSoftDot } from "./WaterEffects"
 import { Debris, updateLeakPulse } from "@entities/Debris"
 import type { Rng } from "@core/rng"
@@ -526,6 +526,7 @@ export class BiomeGenerator {
       this.causticBase * (0.4 + 0.6 * (1 - this.visualRatio))
 
     this.updateParticles(deltaTime)
+    this.props.update(deltaTime)
   }
 
   /** Efectos del volumen de agua; llamar cada frame. Con deltaTime = 0 la animación se congela. */
@@ -559,6 +560,11 @@ export class BiomeGenerator {
       color: sun.color,
       darkness: 1 - sun.intensity / MAX_SUN_INTENSITY,
     }
+  }
+
+  /** Luces puntuales sugeridas por props bioluminiscentes del bioma actual. */
+  public getLightAnchors(): readonly BiomeLightAnchor[] {
+    return this.props.getLightAnchors()
   }
 
   /** Libera todos los recursos del bioma actual. Llamar al destruir el juego. */
