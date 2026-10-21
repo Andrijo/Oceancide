@@ -12,22 +12,22 @@ Al limpiar cada zona eliges una **carta de mejora** (o maldición) que potencia 
 
 ## Zonas
 
-El juego recorre 10 biomas, desde la superficie hasta las fosas más profundas:
+El catálogo define 10 zonas, desde la superficie hasta las fosas más profundas. Cada run recorre **6** en este orden: **Epipelágico Superior → Subfótico → Mesopelágico Profundo → Batipelágico Profundo → Abisopelágico → Mar Profundo**.
 
-| Zona                  | Desechos | Tasa de toxicidad | Profundidad |
-| --------------------- | -------- | ----------------- | ----------- |
-| Epipelágico Superior  | 0.1      | 0.00              | 20 m        |
-| Pelágico Medio        | 0.2      | 0.00              | 100 m       |
-| Subfótico             | 0.3      | 0.05              | 200 m       |
-| Mesopelágico Superior | 0.45     | 0.10              | 500 m       |
-| Mesopelágico Profundo | 0.6      | 0.20              | 1000 m      |
-| Batipelágico Superior | 0.7      | 0.35              | 2000 m      |
-| Batipelágico Profundo | 0.8      | 0.50              | 4000 m      |
-| Abisopelágico         | 0.9      | 0.70              | 6000 m      |
-| Hadopelágico          | 0.95     | 0.85              | 8000 m      |
-| Mar Profundo          | 1.0      | 1.00              | 11000 m     |
+| Zona                  | Run | Desechos | Tasa de toxicidad | Profundidad |
+| --------------------- | --- | -------- | ----------------- | ----------- |
+| Epipelágico Superior  | Sí  | 0.1      | 0.00              | 20 m        |
+| Pelágico Medio        | —   | 0.2      | 0.00              | 100 m       |
+| Subfótico             | Sí  | 0.3      | 0.05              | 200 m       |
+| Mesopelágico Superior | —   | 0.45     | 0.10              | 500 m       |
+| Mesopelágico Profundo | Sí  | 0.6      | 0.20              | 1000 m      |
+| Batipelágico Superior | —   | 0.7      | 0.35              | 2000 m      |
+| Batipelágico Profundo | Sí  | 0.8      | 0.50              | 4000 m      |
+| Abisopelágico         | Sí  | 0.9      | 0.70              | 6000 m      |
+| Hadopelágico          | —   | 0.95     | 0.85              | 8000 m      |
+| Mar Profundo          | Sí  | 1.0      | 1.00              | 11000 m     |
 
-La columna **Desechos** es la densidad relativa con la que se generan (sobre una base de 200 por zona) y **Tasa de toxicidad** multiplica la subida pasiva de toxicidad del bioma.
+La columna **Run** marca las zonas que aparecen en el recorrido actual; el resto de configuraciones existe en `src/core/types.ts`, pero no se usa en la run. **Desechos** es la densidad relativa con la que se generan (sobre una base de 200 por zona) y **Tasa de toxicidad** multiplica la subida pasiva de toxicidad del bioma.
 
 Cada bioma tiene su propio catálogo de desechos (botellas, redes fantasma, microplásticos, barriles, vertidos de petróleo...) con aspecto, valor ecológico y toxicidad propios. El catálogo completo está en `src/entities/debrisCatalog.ts`.
 
@@ -91,7 +91,7 @@ Con `Q` / `E` la tortuga realiza un giro completo de 360° en menos de un segund
 
 ### Cartas
 
-Cuando completas el **70%** de la limpieza de una zona (y no es la última), antes de descender a la siguiente el juego se detiene y te ofrece **3 cartas** entre las que elegir una. Cada carta aplica una mejora (o maldición) **permanente durante esa run**, y las que vas eligiendo quedan registradas y se muestran en el resumen final.
+Cuando completas el **60%** de los desechos iniciales de una zona (el HUD lo muestra como 100% de progreso) y no es la última, antes de descender a la siguiente el juego se detiene y te ofrece **3 cartas** entre las que elegir una. En los biomas 2 y 4, antes de las cartas se resuelve un **evento** (ver la sección siguiente). Cada carta aplica una mejora (o maldición) **permanente durante esa run**, y las que vas eligiendo quedan registradas y se muestran en el resumen final.
 
 El mazo tiene **50 cartas** repartidas en 6 rarezas: **común, rara, épica, legendaria, maldición y ultra legendaria**. El reparto es por rareza con pesos (`RARITY_WEIGHTS` en `src/cards/CardPool.ts`): **común 40 · rara 30 · épica 20 · legendaria 7 · maldición 2 · ultra legendaria 1**. El mazo está en `src/cards/CardPool.ts` y la lógica de reparto en `src/cards/CardManager.ts`. Las cartas se eligen con clic/toque o con las teclas `1` / `2` / `3`, y se colorean según su rareza (la ultra legendaria destaca con un brillo especial).
 
@@ -150,9 +150,17 @@ La **resistencia a la toxicidad** de las cartas se acumula con **rendimientos de
 | Corazón del Océano        | Ultra Legendaria | +100% ECO / +3 ECO/S              | Sientes el pulso del mar; el eco fluye hacia ti            |
 | Furia Abisal              | Ultra Legendaria | +1.2 DASH / +30% VEL / +1 REVIVIR | Una criatura ancestral se manifiesta a través del caparazón |
 
+### Eventos
+
+En las runs normales, al completar el **Subfótico** (bioma 2) y el **Batipelágico Profundo** (bioma 4) aparece un **evento narrativo** antes de la elección de carta. El pool actual tiene **5 eventos** y cada uno ofrece **2 opciones**; la interfaz muestra una **previsualización** de los efectos de cada opción (eco, toxicidad, filtros, radio, velocidad, brillo o tiempo del siguiente bioma) antes de decidir.
+
+Los efectos son declarativos (`src/events/EventEffects.ts`): una opción puede modificar la eco, subir o bajar la toxicidad, fijarla a un valor, alterar la capacidad de filtros, el radio de recogida, la velocidad, el glow, o recortar/ajustar el tiempo y el suelo de toxicidad del siguiente bioma. Si una opción lleva la toxicidad al 100%, la muerte o el revive se resuelven antes de abrir las cartas.
+
+Los eventos no aparecen en la **Inmersión sin fin**. Su elección se deriva de la semilla de la run (índice de bioma incluido), así que al reproducir una run con `?seed=` también se repiten los eventos.
+
 ### Modo sin fin
 
-Desde el Refugio puedes lanzar una **Inmersión sin fin** en lugar de la run normal. No termina al limpiar los 10 biomas: al llegar al fondo vuelve a empezar desde el primero en un nuevo **loop**, y la dificultad escala en cada vuelta (`BiomeGenerator.generateBiome(biomeKey, rng, loop)`):
+Desde el Refugio puedes lanzar una **Inmersión sin fin** en lugar de la run normal. No termina al limpiar los **6 biomas de la vuelta**: al llegar al fondo vuelve a empezar desde el primero en un nuevo **loop**, y la dificultad escala en cada vuelta (`BiomeGenerator.generateBiome(biomeKey, rng, loop)`):
 
 - La **tasa de toxicidad** se multiplica por `1 + loop`.
 - La **densidad de niebla** se multiplica por `1 + 0.2 · loop`.
@@ -229,11 +237,11 @@ Al terminar cada run se muestra un resumen (zona alcanzada, desechos, duración,
 - **Runs jugadas / completadas**.
 - **Total de desechos** recolectados.
 
-Completar los 10 biomas otorga un **bono del 25%** sobre la conciencia obtenida en la run. Desde el Refugio puedes empezar una nueva inmersión o eliminar el progreso guardado.
+Completar todos los biomas de la run otorga un **bono del 25%** sobre la conciencia obtenida en la run. Desde el Refugio puedes empezar una nueva inmersión o eliminar el progreso guardado.
 
 ### Reproducir una run
 
-Cada run usa una semilla aleatoria (que se muestra en el resumen). Puedes fijarla desde la URL para reproducir exactamente la misma disposición de biomas (y las mismas cartas ofrecidas):
+Cada run usa una semilla aleatoria (que se muestra en el resumen). Puedes fijarla desde la URL para reproducir exactamente la misma disposición de biomas, las mismas cartas ofrecidas y los mismos eventos:
 
 ```
 http://localhost:5173/?seed=123
@@ -266,8 +274,25 @@ bun run test:coverage
 
 # Lint y formato
 bun run lint
+bun run lint:fix
+bun run format
 bun run format:check
 ```
+
+## Calidad y tests
+
+La lógica pura y los controladores se prueban con **Vitest** en entorno `node` (sin WebGL ni DOM). La cobertura se centra en los módulos extraíbles y testables:
+
+- `src/core/systems/*`: toxicidad, tiempo de bioma, progreso y revives.
+- `src/core/InputController.ts` y `src/core/CameraRig.ts`.
+- `src/core/MetaState.ts` y `src/core/rng.ts`.
+- `src/events/EventEffects.ts` y `src/events/EventPool.ts`.
+- `src/cards/CardManager.ts`.
+- `src/tycoon/UpgradeManager.ts` y `src/tycoon/Upgrades.ts`.
+
+Los umbrales configurados en `vitest.config.ts` son **90% statements, 80% branches, 90% functions y 90% lines**. `Game.ts` y la UI quedan fuera de la cobertura hasta que se extraigan más sistemas.
+
+El CI (`.github/workflows/ci.yml`) se ejecuta en cada push a `main` y en cada pull request: instala dependencias con el lockfile y pasa `typecheck`, `lint`, `format:check`, `test:run` y `build`.
 
 ## Estructura del proyecto
 
@@ -279,6 +304,8 @@ oceancidio/
 ├── vite.config.ts        # Config de Vite (alias de importación)
 ├── vitest.config.ts      # Config de tests y cobertura
 ├── eslint.config.js      # Reglas de lint (flat config)
+├── .prettierrc.json      # Config de Prettier
+├── .prettierignore
 ├── .github/workflows/    # CI: typecheck, lint, formato, tests y build
 ├── public/
 │   ├── fonts/            # Fuentes (Pogonia para títulos, DM Sans para párrafos)
@@ -288,10 +315,15 @@ oceancidio/
     ├── main.ts           # Bootstrap del juego
     ├── styles.css        # @font-face
     ├── core/             # Núcleo y estado global
-    │   ├── Game.ts             # Lógica principal, loop, cámara y pantallas
+    │   ├── Game.ts             # Lógica principal, loop y orquestación
+    │   ├── InputController.ts  # Teclado → InputState y acciones
+    │   ├── CameraRig.ts        # Seguimiento, look-back y órbita
     │   ├── RenderPipeline.ts   # Tonemapping + bloom dinámico
     │   ├── MetaState.ts        # Progreso persistente (Refugio) y guardado
     │   ├── rng.ts              # Generador pseudoaleatorio con semilla
+    │   ├── systems/            # Fórmulas puras y testeables
+    │   │   ├── toxicity.ts     # Toxicidad pasiva, entrada y limpieza
+    │   │   └── progression.ts  # Tiempo de bioma, progreso y revives
     │   └── types.ts            # Tipos y configuración de biomas
     ├── world/            # Generación y elementos del mundo
     │   ├── BiomeGenerator.ts   # Generación de biomas, terreno, partículas y desechos
@@ -319,9 +351,9 @@ oceancidio/
     │   └── UpgradeManager.ts   # Compra y aplicación de mejoras
     └── ui/               # Interfaz y controles
         ├── UIManager.ts        # HUD, números flotantes, calavera y mensajes
-        ├── ScreenManager.ts    # Menús (hub, resumen, pausa y elección de cartas)
+        ├── ScreenManager.ts    # Menús (hub, resumen, pausa, eventos y elección de cartas)
         ├── TouchControls.ts    # Controles táctiles (joysticks)
-        └── DevMenu.ts          # Menú de desarrollo (componente, no conectado por defecto)
+        └── DevMenu.ts          # Menú de desarrollo (solo en DEV o con ?dev)
 ```
 
 ## Alias de importación
@@ -347,4 +379,7 @@ Los imports entre carpetas usan alias configurados en `tsconfig.json` y `vite.co
 - [GSAP](https://gsap.com/) — animaciones UI (revelado de cartas; se congela junto con la pausa)
 - [TypeScript](https://www.typescriptlang.org/) — tipado estático
 - [Vite](https://vite.dev/) — bundler y servidor de desarrollo
+- [Vitest](https://vitest.dev/) — tests unitarios y cobertura
+- [ESLint](https://eslint.org/) — lint
+- [Prettier](https://prettier.io/) — formato
 - [Bun](https://bun.sh) — runtime y gestor de paquetes

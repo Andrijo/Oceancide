@@ -10,11 +10,14 @@ export default mergeConfig(
       coverage: {
         provider: "v8",
         reporter: ["text", "html"],
-        // Fase 0: solo la lógica pura. Game/UI entrarán cuando se extraigan
+        // Cobertura de la lógica pura. Game/UI entrarán cuando se extraigan
         // sus sistemas en la fase 1.
         include: [
           "src/core/MetaState.ts",
           "src/core/rng.ts",
+          "src/core/InputController.ts",
+          "src/core/CameraRig.ts",
+          "src/core/systems/**/*.ts",
           "src/events/EventEffects.ts",
           "src/events/EventPool.ts",
           "src/cards/CardManager.ts",
