@@ -77,6 +77,40 @@ describe("EnemyManager", () => {
     expect(jellyfish.position.y).toBeLessThanOrEqual(1)
   })
 
+  it("las medusas nadan: se desplazan y no se salen del bioma", () => {
+    const { scene, manager } = createManager()
+    manager.spawn(4, BOUNDS, new Rng(5))
+
+    const far = new THREE.Vector3(999, 999, 999)
+    const starts = scene.children.map((child) => child.position.clone())
+    const travelled = scene.children.map(() => 0)
+    const previous = starts.map((start) => start.clone())
+
+    // Dos minutos de juego a 30 fps.
+    const dt = 1 / 30
+    for (let frame = 0; frame < 3600; frame++) {
+      manager.update(dt, frame * dt, far, BOUNDS)
+
+      scene.children.forEach((child, i) => {
+        const position = child.position
+        travelled[i] += position.distanceTo(previous[i])
+        previous[i].copy(position)
+
+        expect(Number.isFinite(position.x + position.y + position.z)).toBe(true)
+        expect(Math.abs(position.x)).toBeLessThanOrEqual(BOUNDS.halfSize)
+        expect(Math.abs(position.z)).toBeLessThanOrEqual(BOUNDS.halfSize)
+        expect(position.y).toBeGreaterThanOrEqual(BOUNDS.minY)
+        expect(position.y).toBeLessThanOrEqual(BOUNDS.maxY)
+      })
+    }
+
+    for (const distance of travelled) {
+      // Avanzan de verdad, pero despacio: la tortuga (9 u/s) siempre puede esquivarlas.
+      expect(distance).toBeGreaterThan(20)
+      expect(distance / 120).toBeLessThan(2.5)
+    }
+  })
+
   it("limpia y reemplaza la generación anterior", () => {
     const { scene, manager } = createManager()
 

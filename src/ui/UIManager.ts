@@ -86,9 +86,9 @@ export class UIManager {
       font-family: ${PARAGRAPH_FONT};
       font-size: 17px;
       font-weight: bold;
-      color: #f7f7ff;
+      color: #f5eedd;
       background: rgba(0, 0, 0, 0.55);
-      border: 2px solid rgba(255, 255, 255, 0.35);
+      border: 2px solid rgba(245, 238, 221, 0.35);
       border-radius: 10px;
       pointer-events: none;
       text-shadow: 0 0 10px rgba(0, 0, 0, 0.9);
@@ -116,7 +116,7 @@ export class UIManager {
       width: 180px;
       height: 8px;
       background: rgba(0, 0, 0, 0.55);
-      border: 1px solid rgba(255, 255, 255, 0.28);
+      border: 1px solid rgba(245, 238, 221, 0.28);
       border-radius: 4px;
       overflow: hidden;
       pointer-events: none;
@@ -128,7 +128,7 @@ export class UIManager {
     this.boostBarFillEl.style.cssText = `
       height: 100%;
       width: 100%;
-      background: linear-gradient(90deg, #22d3ee, #38bdf8, #a78bfa);
+      background: linear-gradient(90deg, #84b3c3, #f5eedd);
       transition: width 0.08s linear, background 0.2s ease;
     `
     this.boostBarEl.appendChild(this.boostBarFillEl)
@@ -146,7 +146,7 @@ export class UIManager {
       font-family: ${PARAGRAPH_FONT};
       font-size: 15px;
       white-space: nowrap;
-      color: #f7f7ff;
+      color: #f5eedd;
       background: rgba(0, 0, 0, 0.45);
       border-radius: 8px;
       pointer-events: none;
@@ -165,14 +165,14 @@ export class UIManager {
       padding: 6px 18px;
       font-family: ${PARAGRAPH_FONT};
       font-size: 14px;
-      color: #0ff;
-      background: rgba(0, 40, 60, 0.65);
-      border: 1px solid rgba(0, 255, 255, 0.5);
+      color: #f5eedd;
+      background: rgba(22, 88, 123, 0.78);
+      border: 1px solid rgba(132, 179, 195, 0.75);
       border-radius: 8px;
       pointer-events: none;
       z-index: 100;
       display: none;
-      text-shadow: 0 0 8px rgba(0, 255, 255, 0.6);
+      text-shadow: 0 0 8px rgba(132, 179, 195, 0.6);
     `
     document.getElementById("game-container")!.appendChild(this.spinBoostHudEl)
 
@@ -208,9 +208,9 @@ export class UIManager {
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #f7f7ff;
+      color: #f5eedd;
       background: none;
-      border: 2px solid #f7f7ff;
+      border: 2px solid #f5eedd;
       border-radius: 50%;
       cursor: pointer;
       z-index: 300;
@@ -234,7 +234,7 @@ export class UIManager {
     if (key === this.lastBuildHud) return
     this.lastBuildHud = key
     this.buildHudEl.textContent = text
-    this.buildHudEl.style.color = available ? "#f7f7ff" : "#ff9a9a"
+    this.buildHudEl.style.color = available ? "#f5eedd" : "#ff9a9a"
   }
 
   public updateSpinBoostHud(boost: number, active: boolean): void {
@@ -257,7 +257,7 @@ export class UIManager {
       this.boostBarFillEl.style.background = "#f97316"
     } else {
       this.boostBarFillEl.style.background =
-        "linear-gradient(90deg, #22d3ee, #38bdf8, #a78bfa)"
+        "linear-gradient(90deg, #84b3c3, #f5eedd)"
     }
 
     const visible = active || energy < 0.99
@@ -290,8 +290,8 @@ export class UIManager {
       this.biomeTimerEl.style.color = "#f97316"
       this.biomeTimerEl.style.borderColor = "rgba(249, 115, 22, 0.7)"
     } else {
-      this.biomeTimerEl.style.color = "#f7f7ff"
-      this.biomeTimerEl.style.borderColor = "rgba(255, 255, 255, 0.35)"
+      this.biomeTimerEl.style.color = "#f5eedd"
+      this.biomeTimerEl.style.borderColor = "rgba(245, 238, 221, 0.35)"
     }
   }
 
@@ -438,7 +438,7 @@ export class UIManager {
       top: 20%;
       left: 50%;
       transform: translate(-50%, -50%);
-      color: #f7f7ff;
+      color: #f5eedd;
       font-family: ${TITLE_FONT};
       font-size: 38px;
       font-weight: bold;
@@ -461,13 +461,77 @@ export class UIManager {
     }, duration)
   }
 
+  /**
+   * Aviso de reliquia encontrada: nombre, texto de ambientación y recompensa.
+   * Ocupa el hueco del mensaje central (lo sustituye) y se va solo.
+   */
+  public showRelicToast(
+    name: string,
+    description: string,
+    reward: string,
+    duration: number = 4200,
+  ): void {
+    this.currentMessage?.remove()
+    window.clearTimeout(this.messageTimeout)
+
+    const toast = document.createElement("div")
+    toast.setAttribute("aria-hidden", "true") // lo lee la región viva (announce)
+    toast.style.cssText = `
+      position: absolute;
+      top: 20%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(420px, calc(100vw - 32px));
+      box-sizing: border-box;
+      padding: 14px 20px 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      text-align: center;
+      background: rgba(22, 88, 123, 0.92);
+      border: 2px solid #84b3c3;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+      pointer-events: none;
+      z-index: 1000;
+      animation: fadeInOut ${duration}ms ease-in-out forwards;
+    `
+
+    const label = document.createElement("div")
+    label.textContent = "Reliquia encontrada"
+    label.style.cssText = `font: 700 11px ${PARAGRAPH_FONT}; letter-spacing: 0.14em; text-transform: uppercase; color: #84b3c3;`
+
+    const title = document.createElement("div")
+    title.textContent = name
+    title.style.cssText = `font: 900 24px ${TITLE_FONT}; line-height: 1.1; color: #f5eedd;`
+
+    const flavor = document.createElement("div")
+    flavor.textContent = description
+    flavor.style.cssText = `font: italic 13px/1.4 ${PARAGRAPH_FONT}; color: rgba(245, 238, 221, 0.82);`
+
+    const rewardEl = document.createElement("div")
+    rewardEl.textContent = reward
+    rewardEl.style.cssText = `margin-top: 4px; padding: 4px 12px; border-radius: 999px; font: 700 14px ${PARAGRAPH_FONT}; color: #16587b; background: #f5eedd;`
+
+    toast.append(label, title, flavor, rewardEl)
+    document.getElementById("game-container")!.appendChild(toast)
+    this.currentMessage = toast
+
+    this.messageTimeout = window.setTimeout(() => {
+      toast.remove()
+      if (this.currentMessage === toast) this.currentMessage = undefined
+      this.messageTimeout = undefined
+    }, duration)
+  }
+
   public showFloatingEco(
     value: number,
     screenX: number,
     screenY: number,
   ): void {
     const size = Math.min(36, 17 + value * 0.6)
-    const color = value >= 20 ? "#ffd166" : value >= 12 ? "#7cf7d4" : "#a5f3fc"
+    const color = value >= 20 ? "#ffd166" : value >= 12 ? "#7cf7d4" : "#f5eedd"
     const duration = 1.1 + Math.min(0.5, value * 0.015)
 
     // Pool fijo reciclado en round-robin: sin crear nodos ni timers por desecho.

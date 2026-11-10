@@ -8,7 +8,7 @@
     <meta
       name="description"
       content="Oceancide: sumérgete en el océano, recoge desechos y devuelve la vida al ecosistema." />
-    <meta name="theme-color" content="#020a12" />
+    <meta name="theme-color" content="#08222f" />
     <meta name="color-scheme" content="dark" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Oceancide" />
@@ -44,7 +44,7 @@
 
       html,
       body {
-        background-color: #020a12;
+        background-color: #08222f;
       }
 
       .sr-only {
@@ -78,7 +78,7 @@
         display: flex;
         flex-direction: column;
         font-family: "DMSans", Tahoma, Geneva, Verdana, sans-serif;
-        color: #f7f7ff;
+        color: #f5eedd;
         line-height: 1.2;
         pointer-events: none;
         z-index: 100;
@@ -342,7 +342,7 @@
         height: 140px;
         border-radius: 50%;
         background: none;
-        border: 2px solid #f7f7ff;
+        border: 2px solid #f5eedd;
         opacity: 0.6;
         pointer-events: none;
         transition: opacity 0.15s;
@@ -351,7 +351,7 @@
       #joystick-base.active {
         opacity: 1;
         background: none;
-        border-color: #ffffff;
+        border-color: #f5eedd;
       }
 
       #joystick-knob {
@@ -361,8 +361,8 @@
         width: 60px;
         height: 60px;
         border-radius: 50%;
-        background: rgba(180, 240, 255, 0.85);
-        border: 2px solid rgba(255, 255, 255, 0.9);
+        background: rgba(132, 179, 195, 0.85);
+        border: 2px solid rgba(245, 238, 221, 0.9);
         transform: translate(-50%, -50%);
         pointer-events: none;
       }
@@ -386,7 +386,7 @@
         height: 160px;
         border-radius: 35px;
         background: none;
-        border: 2px solid #f7f7ff;
+        border: 2px solid #f5eedd;
         opacity: 0.6;
         pointer-events: none;
         transition: opacity 0.15s;
@@ -395,7 +395,7 @@
       #depth-base.active {
         opacity: 1;
         background: none;
-        border-color: #ffffff;
+        border-color: #f5eedd;
       }
 
       #depth-base::before,
@@ -403,7 +403,7 @@
         position: absolute;
         left: 50%;
         transform: translateX(-50%);
-        color: rgba(255, 255, 255, 0.7);
+        color: rgba(245, 238, 221, 0.7);
         font-size: 15px;
         line-height: 1;
       }
@@ -425,8 +425,8 @@
         width: 54px;
         height: 54px;
         border-radius: 50%;
-        background: #f7f7ff;
-        border: 2px solid rgba(255, 255, 255, 0.9);
+        background: #f5eedd;
+        border: 2px solid rgba(245, 238, 221, 0.9);
         transform: translate(-50%, -50%);
         pointer-events: none;
       }
@@ -445,14 +445,14 @@
         font-size: 28px;
         color: white;
         background: none;
-        border: 2px solid #f7f7ff;
+        border: 2px solid #f5eedd;
         pointer-events: auto;
         touch-action: none;
         -webkit-tap-highlight-color: transparent;
       }
 
       .touch-btn.active {
-        background: #ffffff;
+        background: #f5eedd;
       }
 
       @media (max-width: 700px) {

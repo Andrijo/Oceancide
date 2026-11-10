@@ -91,9 +91,9 @@ Con `Q` / `E` la tortuga realiza un giro completo de 360° en menos de un segund
 
 ### Medusas
 
-Desde el primer bioma aparecen **medusas** flotando a la deriva. La cantidad escala con la profundidad: **2 medusas en el Epipelágico Superior** y una más por cada zona, hasta **7 en el Mar Profundo**. En la Inmersión sin fin el contador se mantiene entre 2 y 7 en cada vuelta.
+Desde el primer bioma aparecen **medusas** que nadan por el bioma. La cantidad escala con la profundidad: **2 medusas en el Epipelágico Superior** y una más por cada zona, hasta **7 en el Mar Profundo**. En la Inmersión sin fin el contador se mantiene entre 2 y 7 en cada vuelta.
 
-- Se mueven con una flotación vertical y una deriva horizontal propias, con fase y velocidad derivadas de la semilla de la run.
+- **Nadan a pulsos**: contraen la campana para impulsarse hacia su rumbo y planean mientras se relajan, con los tentáculos recogiéndose y estirándose detrás. El rumbo vaga solo, se inclinan hacia donde avanzan y dan la vuelta al acercarse a los bordes. Ritmo, fuerza y rumbo inicial salen de la semilla de la run.
 - Respetan los límites del bioma y nunca aparecen en el centro, donde se coloca la tortuga al entrar.
 - Si tocan a la tortuga, aplican **+15 de toxicidad**, la **ralentizan un 50% durante 2 s** y muestran el aviso **"¡MEDUSA!"**.
 - El golpe dispara una **animación de dolor** de 0,42 s: la tortuga retrocede, se comprime y emite un flash magenta con una luz de impacto.
@@ -170,6 +170,28 @@ Cada carta declara sus efectos (`effects` en `src/cards/CardPool.ts`) y de ahí 
 | Eco Inestable             | Caos             | +100% ECO / +50% TOX PASIVA       | El eco grita tan fuerte que el agua se vuelve más tóxica   |
 | Marea Negra               | Caos             | +25% VEL / +1 FILTRO / +20 TOX    | Ganas impulso y un filtro extra, pero el agua te envenena al instante |
 
+### Reliquias
+
+A partir de la **primera carta elegida**, cada bioma esconde una **reliquia** dentro de uno de sus desechos. Un pequeño **destello dorado** que gira sobre él lo delata: hay que buscarlo entre la niebla.
+
+- Al recoger ese desecho —a mano o con una esfera filtradora— la reliquia entrega su **recompensa** y aparece un aviso con su nombre, un texto de ambientación y lo que has ganado.
+- Las recompensas son siempre positivas y usan los mismos efectos declarativos que los eventos: Eco, menos toxicidad, radio, velocidad, un filtro extra, brillo o tiempo para el siguiente bioma.
+- Si avanzas de zona sin encontrarla, se pierde. No se repiten dentro de una run hasta haberlas encontrado todas.
+- Qué reliquia toca y en qué desecho se esconde sale de la semilla de la run.
+
+| Reliquia               | Recompensa                   |
+| ---------------------- | ---------------------------- |
+| Brújula del Náufrago   | +0.5 radio                   |
+| Mensaje en una Botella | +200 Eco                     |
+| Patito de Goma         | +5% velocidad                |
+| Moneda de Galeón       | +350 Eco                     |
+| Perla Antigua          | -30 toxicidad                |
+| Ampolleta de Arena     | +20s en el siguiente bioma   |
+| Farol de Buzo          | +30% brillo y +100 Eco       |
+| Diente de Megalodón    | +1 filtro                    |
+| Caracola Susurrante    | -15 toxicidad y +100 Eco     |
+| Caparazón Vacío        | +3% velocidad y +0.3 radio   |
+
 ### Eventos
 
 En las runs normales, al completar el **Subfótico** (bioma 2) y el **Batipelágico Profundo** (bioma 4) aparece un **evento narrativo** antes de la elección de carta. El pool actual tiene **5 eventos** y cada uno ofrece **2 opciones**; la interfaz muestra una **previsualización** de los efectos de cada opción (eco, toxicidad, filtros, radio, velocidad, brillo o tiempo del siguiente bioma) antes de decidir.
@@ -232,6 +254,8 @@ Los controles táctiles aparecen al detectar el primer toque y se colocan donde 
 
 ## Visuales y ambientación
 
+La interfaz usa una paleta de tres colores definida en `src/ui/palette.ts`: **crema** `#F5EEDD` (texto y superficies claras), **azul niebla** `#84B3C3` (acentos, bordes y foco) y **azul profundo** `#16587B` (botones, paneles y avisos). Los colores con significado propio —rarezas de las cartas, peligro, toxicidad y positivo/negativo— se mantienen aparte para que se distingan.
+
 El agua no es un simple fondo: hay una capa de efectos (`src/world/WaterEffects.ts`) que simula el medio marino y que se adapta a cada bioma.
 
 - **Cúpula con gradiente** (horizonte, cenit y nadir) con el brillo del sol, que sigue a la cámara.
@@ -241,6 +265,7 @@ El agua no es un simple fondo: hay una capa de efectos (`src/world/WaterEffects.
 - **Viñeta** tintada con el color del agua.
 - **Cáusticas animadas** sobre el fondo en las zonas donde llega la luz.
 - **Bioluminiscencia**: en las zonas profundas (sin sol) las luces puntuales nacen de props luminosos (fuentes hidrotermales, esponjas de vidrio, plumas de mar) y pasan a ser la iluminación principal.
+- **Estela de burbujas del color del bioma**: las burbujas que deja la tortuga al nadar se tiñen con el agua y el acento bioluminiscente de cada zona (aclarados para que destaquen), así que cambian de cian en la superficie a violetas, rosas o naranjas en las profundidades.
 - **Brillo de la tortuga**: la carta *Bioluminiscencia* enciende un brillo propio en la tortuga que sube en 5 fases (color propio → saturación → blanqueo → blanco puro), con un pulso biológico y una luz puntual que pasa de cian a blanco puro; cada carta adicional intensifica el brillo.
 - **Props por bioma**: cada zona tiene su propia mezcla y paleta. Las aguas someras usan kelp, abanicos de mar, corales y arrecifes; el mesopelágico, plumas y esponjas de vidrio; el batipelágico, gusanos de tubo y huesos de ballena; y el abisal, nódulos, chimeneas hidrotermales y agujas de roca.
 - **Vida sésil animada**: corales, algas, kelp, abanicos, plumas y gusanos se balancean con una fase y velocidad propias, sin abandonar su posición en el fondo.

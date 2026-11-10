@@ -58,7 +58,7 @@ export class EnemyManager {
     const hitDistanceSq = HIT_DISTANCE * HIT_DISTANCE
 
     for (const enemy of this.enemies) {
-      enemy.update(time, deltaTime)
+      enemy.update(time, deltaTime, bounds)
 
       const position = enemy.mesh.position
       position.x = THREE.MathUtils.clamp(

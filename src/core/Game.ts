@@ -64,6 +64,7 @@ import {
 } from "@core/systems/progression"
 import { UpgradeManager } from "@/tycoon/UpgradeManager"
 import { ACT_EVENTS } from "@/events/EventPool"
+import { pickRelic, type Relic } from "@/relics/RelicPool"
 import {
   applyEventEffects,
   previewEventEffects,
@@ -71,6 +72,11 @@ import {
 } from "@/events/EventEffects"
 
 const MAX_DELTA = 0.1
+// Colores temporales para teñir la estela de burbujas (sin allocations).
+const bubbleWater = new THREE.Color()
+const bubbleAccent = new THREE.Color()
+// Sal de la semilla de las reliquias (0 = bioma, 1000 = cartas, 2000 = eventos).
+const RELIC_SEED_SALT = 3000
 
 const BUILD_DISTANCE = 4
 const DEEP_POINT_LIGHT_BOOST = 25
@@ -434,6 +440,7 @@ export class Game {
 
     const rng = new Rng(deriveSeed(this.runSeed, index))
     this.biomeGenerator.generateBiome(biomeKey, rng, this.loop)
+    this.hideRelic(index)
     // La carga del bioma no debe contar como bajo rendimiento.
     this.adaptiveQuality.reset()
 
@@ -489,6 +496,7 @@ export class Game {
     }
 
     this.bubbles.clear()
+    this.applyBubbleColors()
     this.structures.clear()
     this.cameraRig.snap(this.turtle.mesh.position, this.turtle.mesh.rotation.y)
     this.devMenu?.refresh()
@@ -884,6 +892,7 @@ export class Game {
       }
 
       if (eco > 0) this.showFloatingEco(debris, eco)
+      if (debris.relic) this.claimRelic(debris.relic)
     }
 
     // --- Simbiosis ---
@@ -911,6 +920,7 @@ export class Game {
     for (const absorption of credit.absorptions) {
       const value = Math.round(absorption.eco * this.runState.ecoMultiplier)
       this.showFloatingEcoAt(absorption.position, value)
+      if (absorption.relic) this.claimRelic(absorption.relic)
     }
 
     if (this.state.toxicity >= 100 && !this.tryKill()) return
@@ -948,6 +958,49 @@ export class Game {
       this.turtle.getBoostEnergy(),
       this.turtle.isBoosting(),
     )
+  }
+
+  /** La estela de burbujas toma los colores del agua y del acento del bioma. */
+  private applyBubbleColors(): void {
+    const biome = this.biomeGenerator.getBiome()
+    this.bubbles.setBiomeColors(
+      bubbleWater.setRGB(...biome.waterColor),
+      bubbleAccent.setHex(biome.accentColor),
+    )
+  }
+
+  /**
+   * Una vez elegida la primera carta, cada bioma esconde una reliquia dentro
+   * de uno de sus desechos. Usa su propia semilla para no alterar el resto de
+   * la generación del bioma.
+   */
+  private hideRelic(index: number): void {
+    if (this.screen !== "run") return
+    if (this.runState.cards.length === 0) return
+
+    const rng = new Rng(deriveSeed(this.runSeed, index + RELIC_SEED_SALT))
+    const relic = pickRelic(rng, this.runState.relics)
+    this.biomeGenerator.hideRelic(relic, rng)
+  }
+
+  /** Entrega la recompensa de una reliquia recogida (a mano o con un filtro). */
+  private claimRelic(relic: Relic): void {
+    const result = applyEventEffects(relic.effects, {
+      turtle: this.turtle,
+      state: this.state,
+      run: this.runState,
+      rng: new Rng(deriveSeed(this.runSeed, this.biomeIndex + RELIC_SEED_SALT)),
+    })
+
+    if (result.nextBiomeTimeDelta) {
+      this.pendingTimeDelta += result.nextBiomeTimeDelta
+    }
+
+    this.runState.relics.push(relic.id)
+    this.uiManager.announce(
+      `Reliquia encontrada: ${relic.name}. ${relic.description} ${result.summary}`,
+    )
+    this.uiManager.showRelicToast(relic.name, relic.description, result.summary)
   }
 
   private openCardChoice(notice?: string): void {

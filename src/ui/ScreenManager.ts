@@ -16,6 +16,7 @@ import {
 import { CARD_POOL } from "@cards/CardPool"
 import { revealCards } from "@ui/animations"
 import { PARAGRAPH_FONT, TITLE_FONT } from "@ui/fonts"
+import { MIST } from "@ui/palette"
 import { UPGRADES } from "@/tycoon/Upgrades"
 import { UpgradeManager } from "@/tycoon/UpgradeManager"
 import { type GameEvent, type EventOption } from "@/events/EventPool"
@@ -87,7 +88,7 @@ const OUTCOME_TITLES: Record<RunOutcome, string> = {
 const OUTCOME_COLORS: Record<RunOutcome, string> = {
   died: "#ff7a6b",
   completed: "#7cf7d4",
-  abandoned: "#d9fbff",
+  abandoned: "#f5eedd",
 }
 
 const CARD_KEYS: Record<string, number> = {
@@ -99,9 +100,9 @@ const CARD_KEYS: Record<string, number> = {
   Numpad3: 2,
 }
 
-const HUB_ACCENT = "#a855f7"
+const HUB_ACCENT = MIST
 const UPGRADE_ACCENT = HUB_ACCENT
-const UPGRADE_TEXT = "#d8b4fe"
+const UPGRADE_TEXT = MIST
 
 const ICONS = {
   trash: [
@@ -351,7 +352,7 @@ export class ScreenManager {
     title.append(
       el(
         "span",
-        `color: #efffff;
+        `color: #f5eedd;
         text-shadow:
           0 5px 0 rgba(0, 44, 70, 0.72),
           0 11px 18px rgba(0, 5, 18, 0.65),
@@ -360,10 +361,10 @@ export class ScreenManager {
       ),
       el(
         "span",
-        `color: #efffff;
+        `color: #f5eedd;
         background: linear-gradient(
           180deg,
-          #ffffff 0%,
+          #f5eedd 0%,
           #d8fbff 25%,
           #7cecff 55%,
           #129ec5 100%
@@ -459,7 +460,7 @@ export class ScreenManager {
 
     const desc = el(
       "div",
-      `font-size: 16px; line-height: 1.5; color: #d9fbff; max-width: 600px; margin-bottom: 20px; text-align: center; font-family: ${PARAGRAPH_FONT};`,
+      `font-size: 16px; line-height: 1.5; color: #f5eedd; max-width: 600px; margin-bottom: 20px; text-align: center; font-family: ${PARAGRAPH_FONT};`,
       event.description,
     )
     desc.id = "event-dialog-desc"
@@ -484,7 +485,7 @@ export class ScreenManager {
         "button",
         `display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
        width: 100%; padding: 16px 20px; text-align: left; cursor: pointer;
-       background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.15);
+       background: rgba(245, 238, 221, 0.03); border: 1px solid rgba(245, 238, 221, 0.15);
        border-radius: 12px; transition: background 160ms ease, border-color 160ms ease;`,
       )
       btn.type = "button"
@@ -499,9 +500,9 @@ export class ScreenManager {
         "span",
         `flex: none; display: inline-flex; align-items: center; justify-content: center;
          min-width: 22px; height: 22px; padding: 0 6px; border-radius: 6px;
-         border: 1px solid rgba(220, 245, 255, 0.25);
-         background: rgba(220, 245, 255, 0.08);
-         color: rgba(220, 245, 255, 0.75);
+         border: 1px solid rgba(132, 179, 195, 0.38);
+         background: rgba(245, 238, 221, 0.08);
+         color: rgba(245, 238, 221, 0.75);
          font-family: ${PARAGRAPH_FONT}; font-size: 11px; font-weight: bold;`,
         String(index + 1),
       )
@@ -509,12 +510,12 @@ export class ScreenManager {
 
       const btnTitle = el(
         "div",
-        `flex: 1; font-family: ${TITLE_FONT}; font-size: 20px; color: #fff;`,
+        `flex: 1; font-family: ${TITLE_FONT}; font-size: 20px; color: #f5eedd;`,
         opt.label,
       )
       const btnDesc = el(
         "div",
-        `font-size: 13px; color: rgba(220, 235, 250, 0.7);`,
+        `font-size: 13px; color: rgba(245, 238, 221, 0.7);`,
         opt.description,
       )
 
@@ -543,9 +544,9 @@ export class ScreenManager {
                     background: "rgba(239, 68, 68, 0.10)",
                   }
                 : {
-                    color: "rgba(220, 235, 250, 0.72)",
-                    border: "rgba(220, 235, 250, 0.18)",
-                    background: "rgba(255, 255, 255, 0.04)",
+                    color: "rgba(245, 238, 221, 0.72)",
+                    border: "rgba(132, 179, 195, 0.27)",
+                    background: "rgba(245, 238, 221, 0.04)",
                   }
 
           previewBox.append(
@@ -575,12 +576,12 @@ export class ScreenManager {
       }
 
       btn.addEventListener("mouseenter", () => {
-        btn.style.background = "rgba(220, 245, 255, 0.10)"
-        btn.style.borderColor = "rgba(220, 245, 255, 0.55)"
+        btn.style.background = "rgba(245, 238, 221, 0.10)"
+        btn.style.borderColor = "rgba(132, 179, 195, 0.83)"
       })
       btn.addEventListener("mouseleave", () => {
-        btn.style.background = "rgba(255, 255, 255, 0.03)"
-        btn.style.borderColor = "rgba(255, 255, 255, 0.15)"
+        btn.style.background = "rgba(245, 238, 221, 0.03)"
+        btn.style.borderColor = "rgba(245, 238, 221, 0.15)"
       })
       btn.addEventListener("click", () => choose(index))
 
@@ -629,8 +630,8 @@ export class ScreenManager {
         "div",
         `display: flex;
         flex-direction: column;
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid ${isMax ? UPGRADE_ACCENT : "rgba(255, 255, 255, 0.1)"};
+        background: rgba(245, 238, 221, 0.03);
+        border: 1px solid ${isMax ? UPGRADE_ACCENT : "rgba(245, 238, 221, 0.1)"};
         border-radius: 14px;
         padding: 16px;
         gap: 12px;`,
@@ -643,13 +644,13 @@ export class ScreenManager {
 
       const name = el(
         "div",
-        `font-family: ${TITLE_FONT}; font-size: 18px; color: #fff;`,
+        `font-family: ${TITLE_FONT}; font-size: 18px; color: #f5eedd;`,
         upgrade.name,
       )
 
       const badge = el(
         "div",
-        `font-size: 12px; padding: 2px 8px; border-radius: 4px; background: rgba(255,255,255,0.1); color: #ddd; white-space: nowrap;`,
+        `font-size: 12px; padding: 2px 8px; border-radius: 4px; background: rgba(245, 238, 221, 0.1); color: #ddd; white-space: nowrap;`,
         `${level} / ${upgrade.maxLevel}`,
       )
 
@@ -657,7 +658,7 @@ export class ScreenManager {
 
       const desc = el(
         "div",
-        `font-size: 13px; color: rgba(255,255,255,0.7); line-height: 1.4; flex: 1;`,
+        `font-size: 13px; color: rgba(245, 238, 221, 0.7); line-height: 1.4; flex: 1;`,
         upgrade.description,
       )
 
@@ -840,8 +841,8 @@ export class ScreenManager {
         el(
           "div",
           `max-width: 640px; padding: 8px 14px; border-radius: 999px;
-           border: 1px solid rgba(125, 211, 252, 0.28);
-           background: rgba(125, 211, 252, 0.08);
+           border: 1px solid rgba(132, 179, 195, 0.28);
+           background: rgba(132, 179, 195, 0.08);
            color: #bae6fd; font-family: ${PARAGRAPH_FONT}; font-size: 13px;
            line-height: 1.4; text-align: center;`,
           `Resultado del evento: ${notice}`,
@@ -943,15 +944,15 @@ export class ScreenManager {
       "div",
       `position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%;
       box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden;
-      background: linear-gradient(180deg, rgba(4, 12, 20, 0.70), rgba(2, 8, 16, 0.70));`,
+      background: linear-gradient(180deg, rgba(9, 38, 54, 0.80), rgba(5, 22, 33, 0.86));`,
     )
 
     const grid = el(
       "div",
       `position: absolute; inset: 0; pointer-events: none;
       background-image:
-        linear-gradient(rgba(220, 245, 255, 0.04) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(220, 245, 255, 0.04) 1px, transparent 1px);
+        linear-gradient(rgba(245, 238, 221, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(245, 238, 221, 0.04) 1px, transparent 1px);
       background-size: 46px 46px;
       -webkit-mask-image: radial-gradient(ellipse at 50% 38%, #000 18%, transparent 74%);
       mask-image: radial-gradient(ellipse at 50% 38%, #000 18%, transparent 74%);`,
@@ -976,7 +977,7 @@ export class ScreenManager {
     return { root, content }
   }
 
-  private makeScreenTitle(text: string, color = "#efffff"): HTMLElement {
+  private makeScreenTitle(text: string, color = "#f5eedd"): HTMLElement {
     return el(
       "div",
       `width: 100%; overflow: visible; font-family: ${TITLE_FONT};
@@ -1055,8 +1056,8 @@ export class ScreenManager {
     const card = el(
       "div",
       `display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 12px 14px;
-      text-align: left; border-radius: 14px; background: rgba(255, 255, 255, 0.045);
-      border: 1px solid rgba(255, 255, 255, 0.09); backdrop-filter: blur(6px);
+      text-align: left; border-radius: 14px; background: rgba(245, 238, 221, 0.045);
+      border: 1px solid rgba(245, 238, 221, 0.09); backdrop-filter: blur(6px);
       transition: border-color 160ms ease, transform 160ms ease;`,
     )
 
@@ -1064,26 +1065,26 @@ export class ScreenManager {
       card.style.transform = "translateY(-2px)"
     })
     card.addEventListener("mouseleave", () => {
-      card.style.borderColor = "rgba(255, 255, 255, 0.09)"
+      card.style.borderColor = "rgba(245, 238, 221, 0.09)"
       card.style.transform = "translateY(0)"
     })
 
     card.append(
       el(
         "div",
-        `min-width: 0; font-size: 10px; margin-bottom: 2px; color: rgba(214, 236, 240, 0.8);`,
+        `min-width: 0; font-size: 10px; margin-bottom: 2px; color: rgba(245, 238, 221, 0.8);`,
         label,
       ),
       el(
         "div",
-        `font-family: ${TITLE_FONT}; font-size: clamp(17px, 1.7vw, 23px); font-weight: 900; line-height: 1.1; text-align: left; overflow-wrap: anywhere; color: ${highlight ? HUB_ACCENT : "#ffffff"};`,
+        `font-family: ${TITLE_FONT}; font-size: clamp(17px, 1.7vw, 23px); font-weight: 900; line-height: 1.1; text-align: left; overflow-wrap: anywhere; color: ${highlight ? HUB_ACCENT : "#f5eedd"};`,
         value,
       ),
     )
 
     if (sub) {
       card.append(
-        el("div", `font-size: 11px; color: rgba(214, 236, 240, 0.55);`, sub),
+        el("div", `font-size: 11px; color: rgba(245, 238, 221, 0.55);`, sub),
       )
     }
     return card
@@ -1097,19 +1098,19 @@ export class ScreenManager {
   ): HTMLButtonElement {
     const palette = {
       primary: {
-        color: "rgba(220, 245, 255, 0.92)",
-        border: "rgba(220, 245, 255, 0.28)",
-        hoverBg: "rgba(220, 245, 255, 0.10)",
-        hoverBorder: "rgba(220, 245, 255, 0.55)",
-        hoverColor: "#ffffff",
+        color: "rgba(245, 238, 221, 0.92)",
+        border: "rgba(132, 179, 195, 0.42)",
+        hoverBg: "rgba(245, 238, 221, 0.10)",
+        hoverBorder: "rgba(132, 179, 195, 0.83)",
+        hoverColor: "#f5eedd",
         focus: HUB_ACCENT,
       },
       upgrade: {
         color: UPGRADE_TEXT,
-        border: "rgba(168, 85, 247, 0.45)",
-        hoverBg: "rgba(168, 85, 247, 0.16)",
-        hoverBorder: "rgba(216, 180, 254, 0.8)",
-        hoverColor: "#f3e8ff",
+        border: "rgba(132, 179, 195, 0.45)",
+        hoverBg: "rgba(132, 179, 195, 0.16)",
+        hoverBorder: "rgba(245, 238, 221, 0.8)",
+        hoverColor: "#f5eedd",
         focus: UPGRADE_TEXT,
       },
       danger: {
@@ -1121,12 +1122,12 @@ export class ScreenManager {
         focus: "rgba(255, 150, 150, 0.9)",
       },
       neutral: {
-        color: "rgba(214, 236, 240, 0.85)",
-        border: "rgba(214, 236, 240, 0.20)",
-        hoverBg: "rgba(214, 236, 240, 0.08)",
-        hoverBorder: "rgba(214, 236, 240, 0.42)",
-        hoverColor: "#ffffff",
-        focus: "rgba(214, 236, 240, 0.6)",
+        color: "rgba(245, 238, 221, 0.85)",
+        border: "rgba(132, 179, 195, 0.3)",
+        hoverBg: "rgba(245, 238, 221, 0.08)",
+        hoverBorder: "rgba(132, 179, 195, 0.63)",
+        hoverColor: "#f5eedd",
+        focus: "rgba(245, 238, 221, 0.6)",
       },
     }[variant]
 
@@ -1135,7 +1136,7 @@ export class ScreenManager {
       `display: inline-flex; align-items: center; justify-content: center; gap: 10px;
       ${fullWidth ? "width: 100%;" : "width: auto;"} min-height: 54px; padding: 12px 22px;
       border-radius: 12px; cursor: pointer; color: ${palette.color};
-      font: 700 clamp(15px, 1.9vw, 20px) ${TITLE_FONT}; background: rgba(255, 255, 255, 0.02);
+      font: 700 clamp(15px, 1.9vw, 20px) ${TITLE_FONT}; background: rgba(245, 238, 221, 0.02);
       border: 1.5px solid ${palette.border}; backdrop-filter: blur(6px);
       transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, color 160ms ease;`,
       label,
@@ -1149,7 +1150,7 @@ export class ScreenManager {
     })
     btn.addEventListener("mouseleave", () => {
       btn.style.transform = "translateY(0)"
-      btn.style.background = "rgba(255, 255, 255, 0.02)"
+      btn.style.background = "rgba(245, 238, 221, 0.02)"
       btn.style.borderColor = palette.border
       btn.style.color = palette.color
     })
@@ -1190,7 +1191,7 @@ export class ScreenManager {
     @keyframes ultraGlow {
       0% { border-color: #94a3b8; box-shadow: 0 0 14px rgba(148, 163, 184, 0.7), inset 0 0 12px rgba(148, 163, 184, 0.3); }
       17% { border-color: #38bdf8; box-shadow: 0 0 18px rgba(56, 189, 248, 0.85), inset 0 0 14px rgba(56, 189, 248, 0.4); }
-      33% { border-color: #a855f7; box-shadow: 0 0 22px rgba(168, 85, 247, 0.9), inset 0 0 16px rgba(168, 85, 247, 0.45); }
+      33% { border-color: #a855f7; box-shadow: 0 0 22px rgba(132, 179, 195, 0.9), inset 0 0 16px rgba(132, 179, 195, 0.45); }
       50% { border-color: #fbbf24; box-shadow: 0 0 26px rgba(251, 191, 36, 1), inset 0 0 18px rgba(251, 191, 36, 0.5); }
       67% { border-color: #ef4444; box-shadow: 0 0 22px rgba(239, 68, 68, 0.9), inset 0 0 16px rgba(239, 68, 68, 0.45); }
       83% { border-color: #0a9396; box-shadow: 0 0 20px rgba(10, 147, 150, 0.9), inset 0 0 14px rgba(10, 147, 150, 0.4); }
@@ -1209,7 +1210,7 @@ export class ScreenManager {
     @keyframes chaosGlitch {
       0%, 100% { border-color: #fb923c; box-shadow: 0 0 12px rgba(251, 146, 60, 0.55), inset 0 0 10px rgba(251, 146, 60, 0.2); }
       20% { border-color: #22d3ee; box-shadow: 0 0 18px rgba(34, 211, 238, 0.7), inset 0 0 12px rgba(34, 211, 238, 0.28); }
-      40% { border-color: #c084fc; box-shadow: 0 0 24px rgba(192, 132, 252, 0.75), inset 0 0 15px rgba(192, 132, 252, 0.32); }
+      40% { border-color: #c084fc; box-shadow: 0 0 24px rgba(132, 179, 195, 0.75), inset 0 0 15px rgba(132, 179, 195, 0.32); }
       60% { border-color: #ef4444; box-shadow: 0 0 18px rgba(239, 68, 68, 0.7), inset 0 0 12px rgba(239, 68, 68, 0.28); }
       80% { border-color: #facc15; box-shadow: 0 0 20px rgba(250, 204, 21, 0.72), inset 0 0 13px rgba(250, 204, 21, 0.3); }
     }
@@ -1253,9 +1254,9 @@ export class ScreenManager {
       "button",
       `display: inline-flex; align-items: center; justify-content: ${fullWidth ? "center" : "flex-start"};
       gap: 12px; ${fullWidth ? "width: 100%;" : "width: auto;"} padding: 12px 22px;
-      border-radius: 12px; cursor: pointer; color: rgba(220, 245, 255, 0.92);
-      font: 700 clamp(15px, 1.9vw, 21px) ${TITLE_FONT}; background: #013f52;
-      border: 1.5px solid rgba(220, 245, 255, 0.28); backdrop-filter: blur(6px);
+      border-radius: 12px; cursor: pointer; color: rgba(245, 238, 221, 0.92);
+      font: 700 clamp(15px, 1.9vw, 21px) ${TITLE_FONT}; background: #16587b;
+      border: 1.5px solid rgba(132, 179, 195, 0.42); backdrop-filter: blur(6px);
       transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, color 160ms ease;`,
     )
 
@@ -1264,7 +1265,7 @@ export class ScreenManager {
     const keycap = el(
       "span",
       `font: 700 10px ${PARAGRAPH_FONT}; padding: 3px 8px;
-      border-radius: 6px; border: 1px solid rgba(220, 245, 255, 0.28); color: rgba(220, 245, 255, 0.55);`,
+      border-radius: 6px; border: 1px solid rgba(132, 179, 195, 0.42); color: rgba(245, 238, 221, 0.55);`,
       "Enter",
     )
     keycap.setAttribute("aria-hidden", "true")
@@ -1273,15 +1274,15 @@ export class ScreenManager {
 
     btn.addEventListener("mouseenter", () => {
       btn.style.transform = "translateY(-2px)"
-      btn.style.background = "#013f58"
-      btn.style.borderColor = "rgba(220, 245, 255, 0.55)"
-      btn.style.color = "#ffffff"
+      btn.style.background = "#1d6a92"
+      btn.style.borderColor = "rgba(132, 179, 195, 0.83)"
+      btn.style.color = "#f5eedd"
     })
     btn.addEventListener("mouseleave", () => {
       btn.style.transform = "translateY(0)"
-      btn.style.background = "#013f52"
-      btn.style.borderColor = "rgba(220, 245, 255, 0.28)"
-      btn.style.color = "rgba(220, 245, 255, 0.92)"
+      btn.style.background = "#16587b"
+      btn.style.borderColor = "rgba(132, 179, 195, 0.42)"
+      btn.style.color = "rgba(245, 238, 221, 0.92)"
     })
     btn.addEventListener("focus", () => {
       btn.style.outline = `2px solid ${HUB_ACCENT}`
@@ -1341,7 +1342,7 @@ export class ScreenManager {
     const header = el(
       "div",
       `display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
-      font-size: 11px; color: rgba(214, 236, 240, 0.62);`,
+      font-size: 11px; color: rgba(245, 238, 221, 0.62);`,
     )
 
     header.append(
@@ -1358,7 +1359,7 @@ export class ScreenManager {
       const lit = i < reached
       const seg = el(
         "div",
-        `flex: 1 1 0; height: 8px; border-radius: 999px; background: ${lit ? HUB_ACCENT : "rgba(255, 255, 255, 0.1)"};`,
+        `flex: 1 1 0; height: 8px; border-radius: 999px; background: ${lit ? HUB_ACCENT : "rgba(245, 238, 221, 0.1)"};`,
       )
       seg.title = `${i + 1}. ${BIOMES[key].name}`
       bar.append(seg)
@@ -1401,9 +1402,9 @@ export class ScreenManager {
         "div",
         `position: absolute; ${position} width: ${bubble.size}px; height: ${bubble.size}px;
         border-radius: 50%; box-sizing: border-box; opacity: 0.55;
-        background: radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.95) 0%, rgba(23, 75, 164, 0.28) 18%, rgba(71, 211, 238, 0.12) 48%, rgba(6, 107, 144, 0.05) 72%, transparent 73%);
+        background: radial-gradient(circle at 30% 25%, rgba(245, 238, 221, 0.95) 0%, rgba(23, 75, 164, 0.28) 18%, rgba(71, 211, 238, 0.12) 48%, rgba(6, 107, 144, 0.05) 72%, transparent 73%);
         border: 1px solid rgba(196, 250, 255, 0.72);
-        box-shadow: inset -3px -4px 7px rgba(0, 77, 110, 0.22), inset 2px 2px 5px rgba(255, 255, 255, 0.35), 0 0 12px rgba(91, 236, 255, 0.28);
+        box-shadow: inset -3px -4px 7px rgba(0, 77, 110, 0.22), inset 2px 2px 5px rgba(245, 238, 221, 0.35), 0 0 12px rgba(91, 236, 255, 0.28);
         animation: menuBubbleFloat ${bubble.duration} ease-in-out ${bubble.delay} infinite;`,
       )
       layer.append(node)
@@ -1466,12 +1467,12 @@ export class ScreenManager {
     btn.addEventListener("mouseenter", () => {
       btn.style.transform = "translateY(-6px) scale(1.02)"
       btn.style.filter = "brightness(1.15)"
-      btn.style.boxShadow = `0 14px 32px rgba(0, 0, 0, 0.65), inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 0 24px ${accent}66`
+      btn.style.boxShadow = `0 14px 32px rgba(0, 0, 0, 0.65), inset 0 0 0 1px rgba(245, 238, 221, 0.12), 0 0 24px ${accent}66`
     })
     btn.addEventListener("mouseleave", () => {
       btn.style.transform = "translateY(0) scale(1)"
       btn.style.filter = "brightness(1)"
-      btn.style.boxShadow = `0 6px 20px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.06)`
+      btn.style.boxShadow = `0 6px 20px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(245, 238, 221, 0.06)`
     })
     btn.addEventListener("click", onClick)
 
@@ -1479,8 +1480,8 @@ export class ScreenManager {
       "div",
       `position: absolute; top: 12px; right: 12px; width: 26px; height: 26px;
       display: flex; align-items: center; justify-content: center; font-family: ${TITLE_FONT};
-      font-size: 12px; font-weight: 900; color: ${isUltra ? "#ffffff" : accent};
-      background: ${isUltra ? "rgba(0, 0, 0, 0.5)" : "none"}; border: 1.5px solid ${isUltra ? "#ffffff" : accent};
+      font-size: 12px; font-weight: 900; color: ${isUltra ? "#f5eedd" : accent};
+      background: ${isUltra ? "rgba(0, 0, 0, 0.5)" : "none"}; border: 1.5px solid ${isUltra ? "#f5eedd" : accent};
       border-radius: 6px; z-index: 2;`,
       `${index + 1}`,
     )
@@ -1492,13 +1493,13 @@ export class ScreenManager {
     )
     const rarityLabel = el(
       "div",
-      `font-family: ${TITLE_FONT}; font-size: 16px; font-weight: 900; text-transform: uppercase; color: ${isUltra ? "#ffffff" : accent};`,
+      `font-family: ${TITLE_FONT}; font-size: 16px; font-weight: 900; text-transform: uppercase; color: ${isUltra ? "#f5eedd" : accent};`,
       label,
     )
     const rarityDivider = el(
       "div",
       `width: 60%; height: 1px;
-      background: ${isUltra ? "linear-gradient(90deg, transparent, #ffffff, transparent)" : `linear-gradient(90deg, transparent, ${accent}, transparent)`};`,
+      background: ${isUltra ? "linear-gradient(90deg, transparent, #f5eedd, transparent)" : `linear-gradient(90deg, transparent, ${accent}, transparent)`};`,
     )
     rarityArea.append(rarityLabel, rarityDivider)
 
@@ -1508,14 +1509,14 @@ export class ScreenManager {
     )
     const name = el(
       "div",
-      `font-family: ${TITLE_FONT}; font-size: 21px; font-weight: 900; line-height: 1.1; text-transform: uppercase; color: #ffffff;`,
+      `font-family: ${TITLE_FONT}; font-size: 21px; font-weight: 900; line-height: 1.1; text-transform: uppercase; color: #f5eedd;`,
       card.name,
     )
     // Cada tramo del valor se pinta según su signo: las penalizaciones van en
     // rojo aunque la carta sea buena en conjunto (maldiciones, caos).
-    const neutralColor = isUltra ? "#ffffff" : isChaos ? "#fb923c" : "#e2e8f0"
+    const neutralColor = isUltra ? "#f5eedd" : isChaos ? "#fb923c" : "#e2e8f0"
     const toneColors: Record<CardTone, string> = {
-      positive: isUltra ? "#ffffff" : "#4ade80",
+      positive: isUltra ? "#f5eedd" : "#4ade80",
       negative: "#f87171",
       neutral: neutralColor,
     }
@@ -1530,7 +1531,7 @@ export class ScreenManager {
     })
     const desc = el(
       "div",
-      `font-family: ${PARAGRAPH_FONT}; font-size: 12px; line-height: 1.45; color: rgba(220, 235, 250, 0.75); margin-top: 4px;`,
+      `font-family: ${PARAGRAPH_FONT}; font-size: 12px; line-height: 1.45; color: rgba(245, 238, 221, 0.75); margin-top: 4px;`,
       card.description,
     )
 

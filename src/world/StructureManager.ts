@@ -3,12 +3,15 @@
 import * as THREE from "three"
 import type { BiomeGenerator } from "./BiomeGenerator"
 import type { Debris } from "@entities/Debris"
+import type { Relic } from "@/relics/RelicPool"
 import { Structure } from "./Structure"
 import { STRUCTURES, type StructureKey } from "./StructureConfig"
 
 export interface StructureAbsorption {
   position: THREE.Vector3
   eco: number
+  /** Reliquia que escondía el desecho absorbido, si llevaba una. */
+  relic: Relic | null
 }
 
 export interface StructureCredit {
@@ -84,6 +87,7 @@ export class StructureManager {
           credit.absorptions.push({
             position: s.position.clone(),
             eco,
+            relic: debris.relic,
           })
         }
       }

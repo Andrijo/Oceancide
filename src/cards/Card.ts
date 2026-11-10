@@ -34,6 +34,9 @@ export interface RunState {
 
   /** Medusas extra por bioma (Pacto de la Medusa). */
   enemyCountBonus: number
+
+  /** Ids de las reliquias encontradas en esta run, en orden. */
+  relics: string[]
 }
 
 export function createRunState(): RunState {
@@ -44,6 +47,7 @@ export function createRunState(): RunState {
     filterEcoPerSecond: 0,
     toxicityMultiplier: 1,
     enemyCountBonus: 0,
+    relics: [],
   }
 }
 

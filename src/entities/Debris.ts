@@ -16,6 +16,7 @@ import {
 } from "./DebrisVisuals"
 import type { BiomeKey, WorldBounds } from "@core/types"
 import { Rng } from "@core/rng"
+import type { Relic } from "@/relics/RelicPool"
 
 const ECO_BASE = 5
 const ECO_PER_TOXICITY = 25
@@ -461,6 +462,9 @@ export class Debris {
    * cuentan para el objetivo de la zona ni aparecen en el registro de desechos.
    */
   public readonly isFragment: boolean
+
+  /** Reliquia escondida dentro: quien lo recoja se lleva su recompensa. */
+  public relic: Relic | null = null
 
   public removed = false
   public claimed = false
