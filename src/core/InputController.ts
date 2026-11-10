@@ -14,7 +14,7 @@ export interface InputControllerActions {
   togglePause(): void
   setPaused(paused: boolean): void
   backflip(): void
-  abandonRun(): void
+  requestAbandon(): void
   build(): void
   dash(direction: "left" | "right"): void
   setLookBack(active: boolean): void
@@ -124,7 +124,7 @@ export class InputController {
     if (this.actions.isPaused()) return
 
     if (e.code === "KeyR") {
-      if (!e.repeat && this.actions.isPlaying()) this.actions.abandonRun()
+      if (!e.repeat && this.actions.isPlaying()) this.actions.requestAbandon()
       return
     }
 

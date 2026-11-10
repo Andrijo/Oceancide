@@ -199,7 +199,7 @@ export class Game {
       togglePause: () => this.togglePause(),
       setPaused: (paused) => this.setPaused(paused),
       backflip: () => this.turtle.triggerBackflip(),
-      abandonRun: () => this.endRun("abandoned"),
+      requestAbandon: () => this.setPaused(true),
       build: () => this.tryBuild("filter"),
       dash: (direction) => this.tryDash(direction),
       setLookBack: (active) => {

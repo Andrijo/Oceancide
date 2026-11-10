@@ -893,12 +893,39 @@ export class ScreenManager {
 
     const abandonBtn = this.makeGhostAction(
       "Abandonar",
-      onAbandon,
+      () => showConfirm(),
       "danger",
       true,
     )
     abandonBtn.style.flex = "35 1 0"
     abandonBtn.style.width = "auto"
+
+    // Confirmación en dos pasos para no perder la run por un clic accidental.
+    const showConfirm = (): void => {
+      title.textContent = "¿Abandonar la inmersión?"
+      const confirmBtn = this.makeGhostAction(
+        "Sí, abandonar",
+        onAbandon,
+        "danger",
+        true,
+      )
+      confirmBtn.style.flex = "50 1 0"
+      confirmBtn.style.width = "auto"
+      const cancelBtn = this.makeGhostAction(
+        "Seguir buceando",
+        () => {
+          title.textContent = "Pausa"
+          buttons.replaceChildren(abandonBtn, resumeBtn)
+          resumeBtn.focus()
+        },
+        "primary",
+        true,
+      )
+      cancelBtn.style.flex = "50 1 0"
+      cancelBtn.style.width = "auto"
+      buttons.replaceChildren(confirmBtn, cancelBtn)
+      cancelBtn.focus()
+    }
 
     buttons.append(abandonBtn, resumeBtn)
     content.append(buttons)
