@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { Turtle } from "@entities/Turtle"
 import { createRunState, type Card } from "@cards/Card"
-import { CARD_POOL } from "@cards/CardPool"
+import { CARD_POOL, RARITY_WEIGHTS } from "@cards/CardPool"
 import { CardManager } from "@cards/CardManager"
 import { Rng } from "@core/rng"
 import type { GameState } from "@core/types"
@@ -40,6 +40,31 @@ describe("CardManager.rollChoices", () => {
 
   it("devuelve una lista vacía si se piden 0 cartas", () => {
     expect(new CardManager().rollChoices(0, new Rng(1))).toEqual([])
+  })
+})
+
+describe("CardManager distribución de rarezas", () => {
+  it("la probabilidad de cada rareza sigue RARITY_WEIGHTS (±1%)", () => {
+    const manager = new CardManager()
+    const rng = new Rng(12345)
+    const draws = 100_000
+    const counts = new Map<string, number>()
+
+    for (let i = 0; i < draws; i++) {
+      manager.resetPity()
+      const [card] = manager.rollChoices(1, rng)
+      counts.set(card.rarity, (counts.get(card.rarity) ?? 0) + 1)
+    }
+
+    const rarities = new Set(CARD_POOL.map((card) => card.rarity))
+    let total = 0
+    for (const rarity of rarities) total += RARITY_WEIGHTS[rarity]
+
+    for (const rarity of rarities) {
+      const expected = RARITY_WEIGHTS[rarity] / total
+      const actual = (counts.get(rarity) ?? 0) / draws
+      expect(Math.abs(actual - expected)).toBeLessThan(0.01)
+    }
   })
 })
 
@@ -146,5 +171,29 @@ describe("CardManager pity", () => {
       legendary: 0,
       ultra: 0,
     })
+  })
+
+  it("fuerza una carta épica o mejor al alcanzar el umbral de épica", () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      const manager = new CardManager()
+      ;(manager as unknown as { pityEpic: number }).pityEpic = 4
+
+      const cards = manager.rollChoices(3, new Rng(seed))
+
+      expect(
+        cards.some((c) =>
+          ["epic", "legendary", "ultra_legendary"].includes(c.rarity),
+        ),
+      ).toBe(true)
+    }
+  })
+
+  it("el pity de épica se reinicia al ver una épica o mejor", () => {
+    const manager = new CardManager()
+    ;(manager as unknown as { pityEpic: number }).pityEpic = 4
+
+    manager.rollChoices(3, new Rng(1))
+
+    expect(manager.getPityState().epic).toBe(0)
   })
 })

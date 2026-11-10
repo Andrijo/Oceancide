@@ -6,11 +6,14 @@ import type { Card, CardContext, CardRarity } from "./Card"
 import { CARD_POOL, RARITY_WEIGHTS } from "./CardPool"
 
 // Umbrales de pity (en cantidad de rollos consecutivos sin ver la rareza).
+// Una run normal tiene 5 elecciones y el pity se reinicia en cada run, así que
+// rare y epic están ajustados para poder activarse dentro de una run; legendary
+// y ultra solo llegan a activarse en el modo sin fin.
 const PITY_THRESHOLDS = {
-  rare: 4,
-  epic: 10,
-  legendary: 20,
-  ultra: 40,
+  rare: 3,
+  epic: 4,
+  legendary: 8,
+  ultra: 20,
 } as const
 
 // Rarezas que cuentan para cada nivel de pity.
@@ -98,17 +101,24 @@ export class CardManager {
     return chosen
   }
 
+  // Sorteo en dos pasos: primero la rareza según RARITY_WEIGHTS y después una
+  // carta uniforme dentro de esa rareza. Así la probabilidad de cada rareza no
+  // depende de cuántas cartas tenga. Se ignoran las rarezas sin cartas.
   private rollOne(rng: Rng): Card {
-    // Suma total de pesos
-    let total = 0
+    const byRarity = new Map<CardRarity, Card[]>()
     for (const card of this.pool) {
-      total += RARITY_WEIGHTS[card.rarity]
+      const list = byRarity.get(card.rarity)
+      if (list) list.push(card)
+      else byRarity.set(card.rarity, [card])
     }
 
+    let total = 0
+    for (const rarity of byRarity.keys()) total += RARITY_WEIGHTS[rarity]
+
     let roll = rng.next() * total
-    for (const card of this.pool) {
-      roll -= RARITY_WEIGHTS[card.rarity]
-      if (roll <= 0) return card
+    for (const [rarity, cards] of byRarity) {
+      roll -= RARITY_WEIGHTS[rarity]
+      if (roll <= 0) return cards[rng.int(cards.length)]
     }
 
     // Fallback por si algo va mal
