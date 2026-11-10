@@ -112,7 +112,10 @@ export class WaterEffects {
   private domeMaterial: THREE.ShaderMaterial
 
   private snow: THREE.Points
-  private snowPositions: Float32Array
+  private snowUniforms = {
+    uSnowTime: { value: 0 },
+    uSnowCam: { value: new THREE.Vector3() },
+  }
 
   private shafts: THREE.InstancedMesh
   private shaftTexture: THREE.CanvasTexture
@@ -185,29 +188,59 @@ export class WaterEffects {
     scene.add(this.dome)
 
     // --- Nieve marina cercana ---
-    this.snowPositions = new Float32Array(SNOW_COUNT * 3)
-    for (let i = 0; i < this.snowPositions.length; i++) {
-      this.snowPositions[i] = (Math.random() - 0.5) * SNOW_FIELD
+    const snowPositions = new Float32Array(SNOW_COUNT * 3)
+    for (let i = 0; i < snowPositions.length; i++) {
+      snowPositions[i] = (Math.random() - 0.5) * SNOW_FIELD
     }
+    const snowIndex = new Float32Array(SNOW_COUNT)
+    for (let i = 0; i < SNOW_COUNT; i++) snowIndex[i] = i
 
     const snowGeometry = new THREE.BufferGeometry()
     snowGeometry.setAttribute(
       "position",
-      new THREE.BufferAttribute(this.snowPositions, 3),
+      new THREE.BufferAttribute(snowPositions, 3),
     )
+    snowGeometry.setAttribute("aIndex", new THREE.BufferAttribute(snowIndex, 1))
 
-    this.snow = new THREE.Points(
-      snowGeometry,
-      new THREE.PointsMaterial({
-        color: 0xffffff,
-        map: getSoftDot(),
-        size: 0.2,
-        transparent: true,
-        opacity: 0.4,
-        depthWrite: false,
-        sizeAttenuation: true,
-      }),
-    )
+    const snowMaterial = new THREE.PointsMaterial({
+      color: 0xffffff,
+      map: getSoftDot(),
+      size: 0.2,
+      transparent: true,
+      opacity: 0.4,
+      depthWrite: false,
+      sizeAttenuation: true,
+    })
+
+    // Movimiento en GPU. Es la forma cerrada (integrada en el tiempo) del
+    // vaivén que antes se sumaba por frame en JS, con wrap alrededor de la
+    // cámara. El buffer no se vuelve a subir nunca.
+    const snowUniforms = this.snowUniforms
+    const field = SNOW_FIELD.toFixed(1)
+    const halfField = (SNOW_FIELD / 2).toFixed(1)
+    snowMaterial.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, snowUniforms)
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          "#include <common>",
+          `#include <common>
+          attribute float aIndex;
+          uniform float uSnowTime;
+          uniform vec3 uSnowCam;`,
+        )
+        .replace(
+          "#include <begin_vertex>",
+          `#include <begin_vertex>
+          vec3 snowPos = position;
+          snowPos.x -= 0.6 * cos(uSnowTime * 0.3 + aIndex);
+          snowPos.y -= (0.12 + mod(aIndex, 7.0) * 0.02) * uSnowTime;
+          snowPos.z += 0.72 * sin(uSnowTime * 0.25 + aIndex * 1.3);
+          transformed = uSnowCam + mod(snowPos - uSnowCam + ${halfField}, ${field}) - ${halfField};`,
+        )
+    }
+    snowMaterial.customProgramCacheKey = () => "marine-snow-gpu"
+
+    this.snow = new THREE.Points(snowGeometry, snowMaterial)
     this.snow.frustumCulled = false
     scene.add(this.snow)
 
@@ -304,7 +337,7 @@ export class WaterEffects {
     this.clean = cleanliness
 
     this.dome.position.copy(cameraPosition)
-    this.updateSnow(deltaTime, cameraPosition)
+    this.updateSnow(cameraPosition)
     this.updateShafts(cameraPosition)
   }
 
@@ -340,24 +373,11 @@ export class WaterEffects {
     this.vignette.style.background = `radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 48%, ${rgba} 100%)`
   }
 
-  private updateSnow(deltaTime: number, camera: THREE.Vector3): void {
-    const pos = this.snowPositions
-    const half = SNOW_FIELD / 2
-    const t = this.time
 
-    for (let i = 0; i < SNOW_COUNT; i++) {
-      const k = i * 3
-
-      pos[k] += Math.sin(t * 0.3 + i) * 0.18 * deltaTime
-      pos[k + 1] -= (0.12 + (i % 7) * 0.02) * deltaTime
-      pos[k + 2] += Math.cos(t * 0.25 + i * 1.3) * 0.18 * deltaTime
-
-      pos[k] = wrap(pos[k], camera.x, half)
-      pos[k + 1] = wrap(pos[k + 1], camera.y, half)
-      pos[k + 2] = wrap(pos[k + 2], camera.z, half)
-    }
-
-    this.snow.geometry.attributes.position.needsUpdate = true
+  // La nieve se mueve en el vertex shader: aquí solo se pasan tiempo y cámara.
+  private updateSnow(camera: THREE.Vector3): void {
+    this.snowUniforms.uSnowTime.value = this.time
+    this.snowUniforms.uSnowCam.value.copy(camera)
   }
 
   private updateShafts(camera: THREE.Vector3): void {

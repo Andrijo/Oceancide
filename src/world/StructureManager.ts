@@ -116,10 +116,13 @@ export class StructureManager {
   private findTarget(s: Structure, debrisList: Debris[]): Debris | null {
     let best: Debris | null = null
     let bestScore = -Infinity
+    const radiusSq = s.config.radius * s.config.radius
     for (const debris of debrisList) {
       if (debris.claimed || debris.removed) continue
-      const dist = debris.mesh.position.distanceTo(s.position)
-      if (dist > s.config.radius) continue
+      const distSq = debris.mesh.position.distanceToSquared(s.position)
+      if (distSq > radiusSq) continue
+      // La raíz solo se calcula para los candidatos dentro del radio.
+      const dist = Math.sqrt(distSq)
       // Prioriza lo más contaminante; a igual contaminación, lo más cercano.
       const score = debris.pollution * s.config.radius - dist
       if (score > bestScore) {

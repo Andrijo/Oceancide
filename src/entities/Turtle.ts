@@ -82,7 +82,20 @@ const GLOW_PHASES: GlowKeyframe[] = [
   },
 ]
 
-/** Muestrea la tabla de fases con interpolación smoothstep. */
+// Resultado reutilizado de sampleGlow (se llama cada frame: sin allocations).
+const glowSample: Omit<GlowKeyframe, "t"> = {
+  colorMult: 1,
+  whiten: 0,
+  emissive: 0,
+  light: 0,
+  distance: 0,
+}
+const GLOW_LIGHT_COLOR = new THREE.Color(0x7cf7d4)
+
+/**
+ * Muestrea la tabla de fases con interpolación smoothstep.
+ * Devuelve siempre el mismo objeto (`glowSample`): no guardar la referencia.
+ */
 function sampleGlow(t: number): Omit<GlowKeyframe, "t"> {
   t = Math.max(0, Math.min(1, t))
 
@@ -92,25 +105,23 @@ function sampleGlow(t: number): Omit<GlowKeyframe, "t"> {
     if (t >= a.t && t <= b.t) {
       const local = (t - a.t) / (b.t - a.t)
       const eased = local * local * (3 - 2 * local)
-      return {
-        colorMult: a.colorMult + (b.colorMult - a.colorMult) * eased,
-        whiten: a.whiten + (b.whiten - a.whiten) * eased,
-        emissive: a.emissive + (b.emissive - a.emissive) * eased,
-        light: a.light + (b.light - a.light) * eased,
-        distance: a.distance + (b.distance - a.distance) * eased,
-      }
+      glowSample.colorMult = a.colorMult + (b.colorMult - a.colorMult) * eased
+      glowSample.whiten = a.whiten + (b.whiten - a.whiten) * eased
+      glowSample.emissive = a.emissive + (b.emissive - a.emissive) * eased
+      glowSample.light = a.light + (b.light - a.light) * eased
+      glowSample.distance = a.distance + (b.distance - a.distance) * eased
+      return glowSample
     }
   }
 
   // t === 1: devolver el último
   const last = GLOW_PHASES[GLOW_PHASES.length - 1]
-  return {
-    colorMult: last.colorMult,
-    whiten: last.whiten,
-    emissive: last.emissive,
-    light: last.light,
-    distance: last.distance,
-  }
+  glowSample.colorMult = last.colorMult
+  glowSample.whiten = last.whiten
+  glowSample.emissive = last.emissive
+  glowSample.light = last.light
+  glowSample.distance = last.distance
+  return glowSample
 }
 
 export class Turtle {
@@ -806,41 +817,40 @@ export class Turtle {
     const pulseAmount = 0.15 * (1 - intensity * 0.7)
     const pulse = 1 - pulseAmount + pulseAmount * Math.sin(this.time * 2.5)
 
-    // Helper que aplica las 5 fases a un material
-    const applyGlow = (
-      material: THREE.MeshStandardMaterial,
-      base: THREE.Color,
-      emissiveWeight: number,
-    ) => {
-      // 1. Color base multiplicado (satura + ilumina)
-      const c = base.clone().multiplyScalar(phase.colorMult)
-      c.r = Math.min(1, c.r)
-      c.g = Math.min(1, c.g)
-      c.b = Math.min(1, c.b)
-
-      // 2. Mezcla hacia blanco (fases 4 y 5)
-      c.lerp(GLOW_WHITE, phase.whiten)
-      material.color.copy(c)
-
-      // 3. Emisivo: parte con el tono propio, vira a blanco en fases tardías
-      const emissiveColor = base.clone().lerp(GLOW_WHITE, phase.whiten)
-      material.emissive.copy(emissiveColor)
-
-      // 4. Intensidad del emisivo con el peso por material
-      material.emissiveIntensity = phase.emissive * emissiveWeight * pulse
-    }
-
-    applyGlow(this.shellMaterial, this.baseColors.shell, 0.8)
-    applyGlow(this.skinMaterial, this.baseColors.skin, 1.0)
-    applyGlow(this.plateMaterial, this.baseColors.plate, 1.1)
-    applyGlow(this.rimMaterial, this.baseColors.rim, 1.3)
+    this.applyGlow(this.shellMaterial, this.baseColors.shell, 0.8, phase, pulse)
+    this.applyGlow(this.skinMaterial, this.baseColors.skin, 1.0, phase, pulse)
+    this.applyGlow(this.plateMaterial, this.baseColors.plate, 1.1, phase, pulse)
+    this.applyGlow(this.rimMaterial, this.baseColors.rim, 1.3, phase, pulse)
 
     // --- Luz puntual ---
     // En fases bajas mantiene un tono cian bioluminiscente; a partir de
     // la fase 4, vira a blanco puro.
-    const lightColor = new THREE.Color(0x7cf7d4).lerp(GLOW_WHITE, phase.whiten)
-    this.glowLight.color.copy(lightColor)
+    this.glowLight.color.copy(GLOW_LIGHT_COLOR).lerp(GLOW_WHITE, phase.whiten)
     this.glowLight.intensity = phase.light * pulse
     this.glowLight.distance = phase.distance
+  }
+
+  /** Aplica las fases del glow a un material sin crear objetos temporales. */
+  private applyGlow(
+    material: THREE.MeshStandardMaterial,
+    base: THREE.Color,
+    emissiveWeight: number,
+    phase: Omit<GlowKeyframe, "t">,
+    pulse: number,
+  ): void {
+    // 1. Color base multiplicado (satura + ilumina)
+    const c = material.color.copy(base).multiplyScalar(phase.colorMult)
+    c.r = Math.min(1, c.r)
+    c.g = Math.min(1, c.g)
+    c.b = Math.min(1, c.b)
+
+    // 2. Mezcla hacia blanco (fases 4 y 5)
+    c.lerp(GLOW_WHITE, phase.whiten)
+
+    // 3. Emisivo: parte con el tono propio, vira a blanco en fases tardías
+    material.emissive.copy(base).lerp(GLOW_WHITE, phase.whiten)
+
+    // 4. Intensidad del emisivo con el peso por material
+    material.emissiveIntensity = phase.emissive * emissiveWeight * pulse
   }
 }
