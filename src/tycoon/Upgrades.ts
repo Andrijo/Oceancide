@@ -1,3 +1,4 @@
+import { addToxicityResistance } from "@core/systems/toxicity"
 import type { TurtleStats } from "@core/types"
 
 export interface Upgrade {
@@ -22,15 +23,18 @@ export const UPGRADES: Upgrade[] = [
   },
   {
     id: "resistance",
-    name: "Caparazón Reforzado",
+    name: "Caparazón Curtido",
     description: "+3% de resistencia a la toxicidad por nivel.",
     maxLevel: 5,
     costs: [600, 1200, 2400, 4800, 9600],
     apply: (stats, level) => {
-      stats.toxicityResistance = Math.min(
-        0.9,
-        stats.toxicityResistance + level * 0.03,
-      )
+      // Igual que las cartas: cada nivel suma con rendimientos decrecientes.
+      for (let i = 0; i < level; i++) {
+        stats.toxicityResistance = addToxicityResistance(
+          stats.toxicityResistance,
+          0.03,
+        )
+      }
     },
   },
   {

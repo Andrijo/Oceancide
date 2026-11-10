@@ -4,6 +4,7 @@
 import type { Turtle } from "@entities/Turtle"
 import type { GameState } from "@core/types"
 import type { Rng } from "@core/rng"
+import type { CardEffects, CardValuePart } from "./CardEffects"
 
 export type CardRarity =
   | "common"
@@ -54,12 +55,26 @@ export interface CardContext {
   rng: Rng
 }
 
+/** Parte con azar de una carta: no se puede declarar, así que trae su propio texto. */
+export interface CardRandomEffect {
+  /** Tramos del valor que se muestran, con su signo. */
+  value: CardValuePart[]
+  /** Separador entre tramos (por defecto " / "). */
+  separator?: string
+  /** Aplica el efecto y devuelve un texto que explica qué ha salido. */
+  apply(ctx: CardContext): string
+}
+
 export interface Card {
   id: string
   name: string
   description: string
   rarity: CardRarity
-  value: string
-  /** Puede devolver un texto para explicar resultados aleatorios. */
-  apply(ctx: CardContext): string | void
+  /**
+   * Efectos declarativos: de aquí salen el valor mostrado y la aplicación, así
+   * que una carta no puede hacer nada que no enseñe.
+   */
+  effects?: CardEffects
+  /** Solo para cartas cuyo resultado depende del azar. */
+  random?: CardRandomEffect
 }

@@ -108,7 +108,9 @@ El mazo tiene **55 cartas** repartidas en 7 rarezas: **común, rara, épica, leg
 
 Las cartas de **caos** no son mejoras seguras: pueden duplicar o partir tu eco, mutar dos stats al azar, añadir medusas a los siguientes biomas o subir la toxicidad pasiva. Algunas devuelven un texto con el resultado aleatorio para que sepas qué te ha tocado.
 
-La **resistencia a la toxicidad** de las cartas se acumula con **rendimientos decrecientes**: cada punto adicional vale menos que el anterior, así que apilar caparazones nunca te vuelve inmune.
+La **resistencia a la toxicidad** se acumula con **rendimientos decrecientes**, venga de cartas o de mejoras del Refugio: cada punto adicional vale menos que el anterior, así que apilar caparazones nunca te vuelve inmune (tope del 90%).
+
+Cada carta declara sus efectos (`effects` en `src/cards/CardPool.ts`) y de ahí salen tanto el valor que se muestra como lo que se aplica, así que ninguna carta hace algo que no enseñe. En la elección, cada tramo del valor se pinta según su signo: verde lo que mejora y rojo lo que penaliza.
 
 | Carta                     | Rareza           | Efecto                            | Descripción                                                |
 | ------------------------- | ---------------- | --------------------------------- | ---------------------------------------------------------- |
@@ -117,13 +119,13 @@ La **resistencia a la toxicidad** de las cartas se acumula con **rendimientos de
 | Imán Débil                | Común            | +0.5 RADIO                        | Atrae desechos desde un poco más lejos                     |
 | Pulmón Extra              | Común            | +1 FILTRO                         | Puedes mantener un filtro más activo a la vez              |
 | Aletas Cortas             | Común            | +6% VEL                           | Pequeñas mejoras en las aletas traseras                    |
-| Piel Gruesa               | Común            | +4% RES                           | La piel se endurece, resistiendo mejor el agua             |
+| Piel Gruesa               | Común            | +4% RES                           | La piel se endurece y resiste mejor la toxicidad           |
 | Instinto                  | Común            | +0.4 RADIO                        | Un sexto sentido para encontrar desechos                   |
 | Válvula Extra             | Común            | +1 FILTRO                         | Un filtro adicional en el caparazón                        |
 | Eco Menor                 | Común            | +8% ECO                           | Cada desecho resuena un poco más                           |
 | Reflejos                  | Común            | +5% VEL / +0.3 RADIO              | Reacciona más rápido y detecta mejor                       |
 | Caparazón Rizado          | Común            | +3% RES / +0.3 RADIO              | La forma curva repele un poco la toxicidad                 |
-| Turbo Débil               | Común            | +0.2 DASH                         | Un pequeño impulso adicional en el giro                    |
+| Turbo Débil               | Común            | +0.2 DASH                         | Un pequeño impulso adicional en el dash                    |
 | Colector                  | Común            | +1 FILTRO / +0.3 RADIO            | Un filtro más y algo de radio extra                        |
 | Adaptación                | Común            | +3% VEL / +3% RES                 | La tortuga se adapta al medio hostil                       |
 | Ojo de Pez                | Común            | +0.6 RADIO                        | Visión panorámica del entorno                              |
@@ -133,7 +135,7 @@ La **resistencia a la toxicidad** de las cartas se acumula con **rendimientos de
 | Simbiosis                 | Rara             | +1 ECO/S                          | Cada filtro activo genera eco por segundo                  |
 | Imán Grande               | Rara             | +1.5 RADIO                        | Atrae desechos desde muy lejos                             |
 | Caparazón Filtro          | Rara             | +15% RES                          | El caparazón absorbe mejor los tóxicos                     |
-| Turbo                     | Rara             | +0.6 DASH                         | Impulso de giro notablemente más fuerte                    |
+| Turbo                     | Rara             | +0.6 DASH                         | El dash impulsa notablemente más fuerte                    |
 | Colonia de Filtros        | Rara             | +1.5 ECO/S                        | Los filtros generan más eco por segundo                    |
 | Eco Mayor                 | Rara             | +35% ECO                          | El eco resuena con fuerza                                  |
 | Aleta Doble               | Rara             | +20% VEL                          | Aletas extendidas, mucha más velocidad                     |
@@ -142,7 +144,7 @@ La **resistencia a la toxicidad** de las cartas se acumula con **rendimientos de
 | Resistencia Marina        | Rara             | +15% RES / +5% VEL                | Resistente y rápida a la vez                               |
 | Filtro Mejorado           | Épica            | +2 FILTROS                        | Puedes mantener dos filtros más a la vez                   |
 | Corazón de Medusa         | Épica            | +1 REVIVIR                        | Revives una vez al morir, con 20s de gracia                |
-| Bioluminiscencia          | Épica            | +30% ECO                          | Brillas en la oscuridad y ganas más eco                    |
+| Bioluminiscencia          | Épica            | +30% ECO / +5% VEL / +50% BRILLO  | Brillas en la oscuridad, nadas algo más rápido y ganas más eco |
 | Caparazón Reforzado       | Épica            | +2 FILTROS / +8% RES              | Más filtros y mejor resistencia                            |
 | Mente Colmena             | Épica            | +2 ECO/S                          | Los filtros trabajan en perfecta sincronía                 |
 | Nado Elegante             | Épica            | +15% VEL / +0.5 RADIO             | Desplazamiento fluido y mayor alcance                      |
@@ -150,10 +152,10 @@ La **resistencia a la toxicidad** de las cartas se acumula con **rendimientos de
 | Simbiosis Mayor           | Épica            | +2 ECO/S / +1 FILTRO              | Los filtros generan más eco y tienes uno extra             |
 | Escudo de Coral           | Épica            | +1 REVIVIR / +5% RES              | Un revivir adicional y algo de resistencia                 |
 | Carga Ecológica           | Épica            | +50% ECO                          | El eco se acumula rápidamente                              |
-| Caparazón Espejo          | Legendaria       | +40% RES                          | El caparazón repele la mayor parte de la contaminación     |
-| Nado Supersónico          | Legendaria       | +50% VEL                          | La tortuga es la reencarnación de Flash                    |
+| Caparazón Espejo          | Legendaria       | +40% RES                          | El caparazón repele la mayor parte de la toxicidad         |
+| Nado Supersónico          | Legendaria       | +50% VEL                          | Nadas tan rápido que dejas atrás tu propia estela          |
 | Caparazón del Titán       | Legendaria       | +15% RES / +2 FILTROS             | Un caparazón colosal con filtros y resistencia             |
-| Torbellino                | Legendaria       | +1.0 DASH                         | El giro genera un vórtice devastador                       |
+| Torbellino                | Legendaria       | +1 DASH                           | El dash desata un vórtice devastador                       |
 | Amplificador              | Legendaria       | +75% ECO                          | Todo el eco que generas se multiplica                      |
 | Avaricia                  | Maldición        | +50% ECO / -20% VEL               | Más eco, pero la tortuga se vuelve lenta                   |
 | Fragilidad                | Maldición        | +30% VEL / -50% RES               | Más rápida, pero mucho más vulnerable a la toxicidad       |
@@ -162,7 +164,7 @@ La **resistencia a la toxicidad** de las cartas se acumula con **rendimientos de
 | Marea Primigenia          | Ultra Legendaria | +80% VEL / +5 FILTROS             | Sobrecarga de energía ancestral: velocidad y filtros       |
 | Corazón del Océano        | Ultra Legendaria | +100% ECO / +3 ECO/S              | Sientes el pulso del mar; el eco fluye hacia ti            |
 | Furia Abisal              | Ultra Legendaria | +1.2 DASH / +30% VEL / +1 REVIVIR | Una criatura ancestral se manifiesta a través del caparazón |
-| Mutación                  | Caos             | 1 STAT ↑ / 1 STAT ↓               | El agua reescribe tu cuerpo: una parte florece y otra se atrofia |
+| Mutación                  | Caos             | ↑ AL AZAR / ↓ AL AZAR             | El agua reescribe tu cuerpo: un atributo al azar florece y otro se atrofia |
 | Doble o Nada              | Caos             | ECO ×2 O ×0.5                     | La marea decide: el eco se duplica o se parte en dos       |
 | Pacto de la Medusa        | Caos             | +1 REVIVIR / +2 MEDUSAS           | La colonia te presta una vida, pero cada bioma trae más tentáculos |
 | Eco Inestable             | Caos             | +100% ECO / +50% TOX PASIVA       | El eco grita tan fuerte que el agua se vuelve más tóxica   |
@@ -172,7 +174,7 @@ La **resistencia a la toxicidad** de las cartas se acumula con **rendimientos de
 
 En las runs normales, al completar el **Subfótico** (bioma 2) y el **Batipelágico Profundo** (bioma 4) aparece un **evento narrativo** antes de la elección de carta. El pool actual tiene **5 eventos** y cada uno ofrece **2 opciones**; la interfaz muestra una **previsualización** de los efectos de cada opción (eco, toxicidad, filtros, radio, velocidad, brillo o tiempo del siguiente bioma) antes de decidir.
 
-Los efectos son declarativos (`src/events/EventEffects.ts`): una opción puede modificar la eco, subir o bajar la toxicidad, fijarla a un valor, alterar la capacidad de filtros, el radio de recogida, la velocidad, el glow, o recortar/ajustar el tiempo y el suelo de toxicidad del siguiente bioma. Si una opción lleva la toxicidad al 100%, la muerte o el revive se resuelven antes de abrir las cartas.
+Los efectos son declarativos (`src/events/EventEffects.ts`): una opción puede modificar la eco, subir o bajar la toxicidad, fijarla a un valor, alterar la capacidad de filtros, el radio de recogida, la velocidad, el brillo, o recortar/ajustar el tiempo y el suelo de toxicidad del siguiente bioma. Si una opción lleva la toxicidad al 100%, la muerte o el revive se resuelven antes de abrir las cartas.
 
 Los eventos no aparecen en la **Inmersión sin fin**. Su elección se deriva de la semilla de la run (índice de bioma incluido), así que al reproducir una run con `?seed=` también se repiten los eventos.
 
@@ -239,7 +241,7 @@ El agua no es un simple fondo: hay una capa de efectos (`src/world/WaterEffects.
 - **Viñeta** tintada con el color del agua.
 - **Cáusticas animadas** sobre el fondo en las zonas donde llega la luz.
 - **Bioluminiscencia**: en las zonas profundas (sin sol) las luces puntuales nacen de props luminosos (fuentes hidrotermales, esponjas de vidrio, plumas de mar) y pasan a ser la iluminación principal.
-- **Brillo de la tortuga**: la carta *Bioluminiscencia* enciende un glow propio en la tortuga que sube en 5 fases (color propio → saturación → blanqueo → blanco puro), con un pulso biológico y una luz puntual que pasa de cian a blanco puro; cada carta adicional intensifica el brillo.
+- **Brillo de la tortuga**: la carta *Bioluminiscencia* enciende un brillo propio en la tortuga que sube en 5 fases (color propio → saturación → blanqueo → blanco puro), con un pulso biológico y una luz puntual que pasa de cian a blanco puro; cada carta adicional intensifica el brillo.
 - **Props por bioma**: cada zona tiene su propia mezcla y paleta. Las aguas someras usan kelp, abanicos de mar, corales y arrecifes; el mesopelágico, plumas y esponjas de vidrio; el batipelágico, gusanos de tubo y huesos de ballena; y el abisal, nódulos, chimeneas hidrotermales y agujas de roca.
 - **Vida sésil animada**: corales, algas, kelp, abanicos, plumas y gusanos se balancean con una fase y velocidad propias, sin abandonar su posición en el fondo.
 - **Fauna libre**: las medusas rosas combinan un domo semitransparente con transmisión, seis tentáculos y una luz puntual propia. Se mecen y derivan de forma errática; durante su cooldown de 3 s se vuelven casi invisibles.
@@ -319,7 +321,7 @@ El CI (`.github/workflows/ci.yml`) se ejecuta en cada push a `main` y en cada pu
 ## Estructura del proyecto
 
 ```
-oceancidio/
+oceancide/
 ├── index.html            # Entry point, HUD, estilos base y calavera de toxicidad (SVG)
 ├── package.json
 ├── tsconfig.json

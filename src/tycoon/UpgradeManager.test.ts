@@ -85,7 +85,8 @@ describe("UpgradeManager.applyAll", () => {
     const bonuses = new UpgradeManager().applyAll(meta, stats)
 
     expect(stats.speed).toBeCloseTo(11)
-    expect(stats.toxicityResistance).toBeCloseTo(0.19)
+    // Tres niveles de +3% con rendimientos decrecientes, como las cartas.
+    expect(stats.toxicityResistance).toBeCloseTo(1 - 0.9 * 0.97 ** 3)
     expect(stats.collectionRadius).toBeCloseTo(2.3)
     expect(stats.filterCapacity).toBe(2)
     expect(bonuses.ecoMult).toBeCloseTo(1.5)
@@ -94,7 +95,7 @@ describe("UpgradeManager.applyAll", () => {
 
   it("la resistencia nunca supera el 90%", () => {
     const meta = makeMeta({ upgrades: { resistance: 5 } })
-    const stats = makeStats({ toxicityResistance: 0.8 })
+    const stats = makeStats({ toxicityResistance: 0.89 })
 
     new UpgradeManager().applyAll(meta, stats)
 

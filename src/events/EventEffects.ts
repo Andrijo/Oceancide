@@ -63,6 +63,11 @@ function signedDecimal(value: number, digits = 1): string {
   return `${rounded > 0 ? "+" : ""}${rounded}`
 }
 
+/** Brillo 0..1 como porcentaje, igual que lo muestran las cartas. */
+function formatGlow(value: number): string {
+  return `${Math.round(value * 100)}%`
+}
+
 function formatToxicity(value: number): string {
   return `${Math.round(value)}%`
 }
@@ -157,10 +162,10 @@ export function previewEventEffects(
     const noEffect = Math.abs(delta) < 0.05
 
     lines.push({
-      label: "Bioluminiscencia",
+      label: "Brillo",
       value: noEffect
         ? "Sin efecto"
-        : `${signedDecimal(delta)} (${before.toFixed(1)} → ${after.toFixed(1)})`,
+        : `${signedInt(delta * 100)}% (${formatGlow(before)} → ${formatGlow(after)})`,
       tone: noEffect ? "neutral" : "positive",
       noEffect,
     })
@@ -249,7 +254,7 @@ export function applyEventEffects(
     const delta = ctx.turtle.addGlow(effects.glow)
 
     if (Math.abs(delta) >= 0.05) {
-      parts.push(`${signedDecimal(delta)} bioluminiscencia`)
+      parts.push(`${signedInt(delta * 100)}% brillo`)
     }
   }
 

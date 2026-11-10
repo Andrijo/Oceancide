@@ -75,17 +75,23 @@ describe("CardManager.pick", () => {
       name: "Test",
       description: "",
       rarity: "common",
-      value: "",
-      apply: (ctx) => {
-        ctx.run.ecoMultiplier = 2
-      },
+      effects: { eco: 2 },
     }
     const ctx = makeContext()
 
-    new CardManager().pick(card, ctx)
+    const outcome = new CardManager().pick(card, ctx)
 
+    expect(outcome).toBeUndefined()
     expect(ctx.run.ecoMultiplier).toBe(2)
     expect(ctx.run.cards).toEqual([card])
+  })
+
+  it("las cartas de caos sin azar explican lo que cambian", () => {
+    const ctx = makeContext()
+
+    const outcome = new CardManager().pick(getCard("medusa_pact"), ctx)
+
+    expect(outcome).toBe("+1 REVIVIR / +2 MEDUSAS")
   })
 
   it("devuelve el resultado de las cartas aleatorias", () => {

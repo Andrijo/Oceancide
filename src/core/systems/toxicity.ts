@@ -66,3 +66,16 @@ export function computeDebrisCleanup(pollution: number): number {
 export function computeFilterCleanup(debrisCount: number): number {
   return debrisCount * FILTER_CLEANUP_PER_DEBRIS
 }
+
+/** Tope duro de resistencia a la toxicidad (nunca inmunidad total). */
+export const TOXICITY_RESISTANCE_CAP = 0.9
+
+/**
+ * Suma resistencia con rendimientos decrecientes: cada punto adicional vale
+ * menos. Es la única forma de sumar resistencia (cartas y mejoras del Refugio),
+ * para que un mismo "+3%" valga igual venga de donde venga.
+ */
+export function addToxicityResistance(current: number, amount: number): number {
+  if (amount <= 0) return current
+  return Math.min(TOXICITY_RESISTANCE_CAP, 1 - (1 - current) * (1 - amount))
+}

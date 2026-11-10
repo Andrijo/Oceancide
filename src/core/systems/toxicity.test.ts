@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest"
 import {
+  addToxicityResistance,
   applyToxicityDelta,
   computeBiomeToxicityFloor,
   computeDebrisCleanup,
   computeEntryToxicity,
   computeFilterCleanup,
   computePassiveToxicityRate,
+  TOXICITY_RESISTANCE_CAP,
 } from "@/core/systems/toxicity"
 
 describe("computeBiomeToxicityFloor", () => {
@@ -105,5 +107,21 @@ describe("computeFilterCleanup", () => {
     expect(computeFilterCleanup(0)).toBe(0)
     expect(computeFilterCleanup(1)).toBe(0.9)
     expect(computeFilterCleanup(3)).toBeCloseTo(2.7)
+  })
+})
+
+describe("addToxicityResistance", () => {
+  it("suma con rendimientos decrecientes", () => {
+    expect(addToxicityResistance(0, 0.5)).toBeCloseTo(0.5)
+    expect(addToxicityResistance(0.5, 0.5)).toBeCloseTo(0.75)
+  })
+
+  it("ignora cantidades nulas o negativas", () => {
+    expect(addToxicityResistance(0.3, 0)).toBe(0.3)
+    expect(addToxicityResistance(0.3, -0.2)).toBe(0.3)
+  })
+
+  it("nunca supera el tope", () => {
+    expect(addToxicityResistance(0.85, 0.9)).toBe(TOXICITY_RESISTANCE_CAP)
   })
 })

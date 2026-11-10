@@ -7,6 +7,12 @@ import {
 } from "@core/types"
 import type { MetaState } from "@core/MetaState"
 import type { Card, CardRarity } from "@cards/Card"
+import {
+  cardValueParts,
+  cardValueSeparator,
+  cardValueText,
+  type CardTone,
+} from "@cards/CardEffects"
 import { CARD_POOL } from "@cards/CardPool"
 import { revealCards } from "@ui/animations"
 import { PARAGRAPH_FONT, TITLE_FONT } from "@ui/fonts"
@@ -790,7 +796,7 @@ export class ScreenManager {
     content.append(
       el(
         "div",
-        `font-size: 11px; text-transform: capitalize; opacity: 0.55;
+        `font-size: 11px; opacity: 0.55;
         text-align: center; color: #bcebf6; font-family: ${PARAGRAPH_FONT};`,
         `Semilla · ${summary.seed}`,
       ),
@@ -1065,7 +1071,7 @@ export class ScreenManager {
     card.append(
       el(
         "div",
-        `min-width: 0; font-size: 10px; text-transform: capitalize; margin-bottom: 2px; color: rgba(214, 236, 240, 0.8);`,
+        `min-width: 0; font-size: 10px; margin-bottom: 2px; color: rgba(214, 236, 240, 0.8);`,
         label,
       ),
       el(
@@ -1257,7 +1263,7 @@ export class ScreenManager {
 
     const keycap = el(
       "span",
-      `font: 700 10px ${PARAGRAPH_FONT}; text-transform: capitalize; padding: 3px 8px;
+      `font: 700 10px ${PARAGRAPH_FONT}; padding: 3px 8px;
       border-radius: 6px; border: 1px solid rgba(220, 245, 255, 0.28); color: rgba(220, 245, 255, 0.55);`,
       "Enter",
     )
@@ -1335,7 +1341,7 @@ export class ScreenManager {
     const header = el(
       "div",
       `display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
-      font-size: 11px; text-transform: capitalize; color: rgba(214, 236, 240, 0.62);`,
+      font-size: 11px; color: rgba(214, 236, 240, 0.62);`,
     )
 
     header.append(
@@ -1454,7 +1460,7 @@ export class ScreenManager {
 
     btn.setAttribute(
       "aria-label",
-      `${label}: ${card.name}. ${card.value}. ${card.description}`,
+      `${label}: ${card.name}. ${cardValueText(card)}. ${card.description}`,
     )
 
     btn.addEventListener("mouseenter", () => {
@@ -1505,11 +1511,23 @@ export class ScreenManager {
       `font-family: ${TITLE_FONT}; font-size: 21px; font-weight: 900; line-height: 1.1; text-transform: uppercase; color: #ffffff;`,
       card.name,
     )
+    // Cada tramo del valor se pinta según su signo: las penalizaciones van en
+    // rojo aunque la carta sea buena en conjunto (maldiciones, caos).
+    const neutralColor = isUltra ? "#ffffff" : isChaos ? "#fb923c" : "#e2e8f0"
+    const toneColors: Record<CardTone, string> = {
+      positive: isUltra ? "#ffffff" : "#4ade80",
+      negative: "#f87171",
+      neutral: neutralColor,
+    }
     const value = el(
       "div",
-      `font-family: ${TITLE_FONT}; font-size: 23px; font-weight: 900; color: ${isUltra ? "#ffffff" : isChaos ? "#fb923c" : "#4ade80"};`,
-      card.value,
+      `font-family: ${TITLE_FONT}; font-size: 23px; font-weight: 900; color: ${neutralColor};`,
     )
+    const separator = cardValueSeparator(card)
+    cardValueParts(card).forEach((part, i) => {
+      if (i > 0) value.append(document.createTextNode(separator))
+      value.append(el("span", `color: ${toneColors[part.tone]};`, part.text))
+    })
     const desc = el(
       "div",
       `font-family: ${PARAGRAPH_FONT}; font-size: 12px; line-height: 1.45; color: rgba(220, 235, 250, 0.75); margin-top: 4px;`,

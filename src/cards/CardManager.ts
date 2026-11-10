@@ -3,6 +3,7 @@
 
 import type { Rng } from "@core/rng"
 import type { Card, CardContext, CardRarity } from "./Card"
+import { applyCard, cardValueText } from "./CardEffects"
 import { CARD_POOL, RARITY_WEIGHTS } from "./CardPool"
 
 // Umbrales de pity (en cantidad de rollos consecutivos sin ver la rareza).
@@ -71,12 +72,14 @@ export class CardManager {
     return chosen
   }
 
-  // Aplica la carta y la guarda en el RunState. Devuelve el resultado de
-  // efectos aleatorios para que la UI pueda explicarlo.
-  public pick(card: Card, ctx: CardContext): string | void {
-    const outcome = card.apply(ctx)
+  // Aplica la carta y la guarda en el RunState. Devuelve un texto cuando hay
+  // algo que explicar: el resultado del azar o, en las de caos, lo que ha
+  // cambiado (alteran reglas y conviene recordarlo al elegirlas).
+  public pick(card: Card, ctx: CardContext): string | undefined {
+    const outcome = applyCard(card, ctx)
     ctx.run.cards.push(card)
-    return outcome
+    if (outcome !== undefined) return outcome
+    return card.rarity === "chaos" ? cardValueText(card) : undefined
   }
 
   // --- Roll base ---
