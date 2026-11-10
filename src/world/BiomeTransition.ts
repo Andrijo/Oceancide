@@ -5,7 +5,7 @@
 type Phase = "idle" | "covering" | "holding" | "revealing"
 
 const COVER_TIME = 0.75 // s que tarda en cubrir la pantalla
-const HOLD_TIME = 0.6 // s totalmente negro (aquí se carga el bioma y se muestra su nombre)
+const HOLD_TIME = 0.6 // s mínimos totalmente negro (se alarga hasta que termine la carga)
 const REVEAL_TIME = 0.95 // s que tarda en retirarse
 const SEGMENTS = 72 // puntos del borde (más = contorno más suave)
 const AMPLITUDE = 0.3 // irregularidad del borde, como fracción del ancho de pantalla
@@ -55,7 +55,9 @@ export class BiomeTransition {
   private phase: Phase = "idle"
   private elapsed = 0
   private time = 0
-  private onCovered: (() => void) | null = null
+  private onCovered: (() => void | Promise<void>) | null = null
+  private loading = false
+  private label: string | null = null
   private coverShape: Float32Array = new Float32Array(0)
   private revealShape: Float32Array = new Float32Array(0)
 
@@ -77,14 +79,20 @@ export class BiomeTransition {
     window.addEventListener("resize", () => this.resize())
   }
 
-  /** Inicia la transición; `onCovered` se ejecuta con la pantalla negra. Devuelve false si ya hay una en curso. */
-  public play(onCovered: () => void): boolean {
+  /**
+   * Inicia la transición; `onCovered` se ejecuta con la pantalla negra. Si
+   * devuelve una promesa, el negro se mantiene hasta que se resuelva (con un
+   * mínimo de HOLD_TIME). Devuelve false si ya hay una en curso.
+   */
+  public play(onCovered: () => void | Promise<void>): boolean {
     if (this.phase !== "idle") return false
 
     this.phase = "covering"
     this.elapsed = 0
     this.time = 0
     this.onCovered = onCovered
+    this.loading = false
+    this.label = null
     this.coverShape = makeShape(1)
     this.revealShape = makeShape(-1)
 
@@ -93,10 +101,17 @@ export class BiomeTransition {
     return true
   }
 
+  /** Texto que se muestra sobre el negro mientras se carga el bioma. */
+  public setLabel(label: string | null): void {
+    this.label = label
+  }
+
   /** Aborta la transición al instante (p. ej. si termina la run). */
   public cancel(): void {
     this.phase = "idle"
     this.onCovered = null
+    this.loading = false
+    this.label = null
     this.canvas.style.display = "none"
   }
 
@@ -121,8 +136,19 @@ export class BiomeTransition {
       this.elapsed = 0
       const callback = this.onCovered
       this.onCovered = null
-      callback?.()
-    } else if (this.phase === "holding" && this.elapsed >= HOLD_TIME) {
+      const result = callback?.()
+      if (result instanceof Promise) {
+        this.loading = true
+        const finish = (): void => {
+          this.loading = false
+        }
+        result.then(finish, finish)
+      }
+    } else if (
+      this.phase === "holding" &&
+      this.elapsed >= HOLD_TIME &&
+      !this.loading
+    ) {
       this.phase = "revealing"
       this.elapsed = 0
     } else if (this.phase === "revealing" && this.elapsed >= REVEAL_TIME) {
@@ -134,20 +160,25 @@ export class BiomeTransition {
   }
 
   private resize(): void {
-    this.canvas.width = window.innerWidth
-    this.canvas.height = window.innerHeight
+    // Escala por devicePixelRatio para que los bordes no se vean borrosos en HiDPI.
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    this.canvas.width = Math.round(window.innerWidth * dpr)
+    this.canvas.height = Math.round(window.innerHeight * dpr)
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   }
 
   private draw(): void {
-    const { ctx, canvas } = this
-    const w = canvas.width
-    const h = canvas.height
+    const { ctx } = this
+    const w = window.innerWidth
+    const h = window.innerHeight
 
     ctx.clearRect(0, 0, w, h)
-    ctx.fillStyle = "rgba(0, 0, 0, 0.4)"
+    // Opaco: la masa debe tapar por completo el cambio de escena.
+    ctx.fillStyle = "#000"
 
     if (this.phase === "holding") {
       ctx.fillRect(0, 0, w, h)
+      if (this.label) this.drawLabel(w, h)
       return
     }
 
@@ -178,5 +209,14 @@ export class BiomeTransition {
     }
     ctx.closePath()
     ctx.fill()
+  }
+
+  private drawLabel(w: number, h: number): void {
+    const { ctx } = this
+    ctx.fillStyle = "#d9fbff"
+    ctx.textAlign = "center"
+    ctx.textBaseline = "middle"
+    ctx.font = `600 ${Math.max(18, Math.min(34, w * 0.035))}px system-ui, sans-serif`
+    ctx.fillText(this.label ?? "", w / 2, h / 2)
   }
 }

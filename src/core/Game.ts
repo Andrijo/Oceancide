@@ -621,9 +621,18 @@ export class Game {
       return
     }
 
-    const started = this.transition.play(() => {
+    const started = this.transition.play(async () => {
       this.loadBiome(next)
-      this.uiManager.showMessage(this.biomeBanner())
+      const banner = this.biomeBanner()
+      this.transition.setLabel(banner)
+      this.uiManager.showMessage(banner)
+      // Compila los shaders del bioma nuevo con la pantalla aún en negro,
+      // para que el tirón no se vea al retirarse la transición.
+      try {
+        await this.renderer.compileAsync(this.scene, this.camera)
+      } catch (error) {
+        console.warn("[Game] No se pudo precompilar el bioma", error)
+      }
     })
 
     if (!started) {
