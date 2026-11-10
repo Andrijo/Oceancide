@@ -3,6 +3,8 @@ import {
   COMPLETION_BONUS,
   META_VERSION,
   SaveManager,
+  migrateMeta,
+  sanitizeMeta,
   applyRunToMeta,
   computeEco,
   createDefaultMeta,
@@ -161,23 +163,36 @@ describe("SaveManager", () => {
     expect(manager.load()).toEqual(meta)
   })
 
-  it("descarta datos de una versión anterior", () => {
+  it("un guardado de versión futura o sin migración deja copia de seguridad", () => {
     const storage = new MemoryStorage()
-    storage.setItem(
-      "oceancide.meta",
-      JSON.stringify({ version: META_VERSION - 1, ecoPoints: 999 }),
-    )
+    const raw = JSON.stringify({ version: META_VERSION + 1, ecoPoints: 999 })
+    storage.setItem("oceancide.meta", raw)
     vi.stubGlobal("localStorage", storage)
 
     expect(new SaveManager().load()).toEqual(createDefaultMeta())
+    expect(storage.getItem("oceancide.meta.backup")).toBe(raw)
   })
 
-  it("descarta datos corruptos", () => {
+  it("un guardado corrupto deja copia de seguridad", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
     const storage = new MemoryStorage()
     storage.setItem("oceancide.meta", "{no es json")
     vi.stubGlobal("localStorage", storage)
 
     expect(new SaveManager().load()).toEqual(createDefaultMeta())
+    expect(storage.getItem("oceancide.meta.backup")).toBe("{no es json")
+    expect(warn).toHaveBeenCalled()
+  })
+
+  it("un guardado válido no crea copia de seguridad", () => {
+    const storage = new MemoryStorage()
+    vi.stubGlobal("localStorage", storage)
+    const manager = new SaveManager()
+
+    manager.save({ ...createDefaultMeta(), ecoPoints: 10 })
+    manager.load()
+
+    expect(storage.getItem("oceancide.meta.backup")).toBeNull()
   })
 
   it("reset() borra el progreso guardado", () => {
@@ -203,5 +218,81 @@ describe("SaveManager", () => {
       new SaveManager().save({ ...createDefaultMeta(), ecoPoints: 1 }),
     ).not.toThrow()
     expect(warn).toHaveBeenCalledOnce()
+  })
+})
+
+describe("migrateMeta", () => {
+  it("migra un guardado v1 a v2 sin perder datos", () => {
+    const v1 = {
+      version: 1,
+      ecoPoints: 120,
+      lifetimeEco: 300,
+      bestBiomeIndex: 2,
+      runsPlayed: 7,
+      runsCompleted: 1,
+      totalDebris: 55,
+      upgrades: { speed: 2 },
+    }
+
+    const migrated = migrateMeta(
+      v1,
+      { 1: (old) => ({ ...old, achievements: [] }) },
+      2,
+    )
+
+    expect(migrated).toMatchObject({ ...v1, version: META_VERSION })
+  })
+
+  it("encadena varias migraciones en orden", () => {
+    const order: number[] = []
+    const migrated = migrateMeta(
+      { version: 1, ecoPoints: 5 },
+      {
+        1: (old) => {
+          order.push(1)
+          return old
+        },
+        2: (old) => {
+          order.push(2)
+          return old
+        },
+      },
+      3,
+    )
+
+    expect(order).toEqual([1, 2])
+    expect(migrated?.ecoPoints).toBe(5)
+  })
+
+  it("devuelve null si falta una migración o la versión es inválida", () => {
+    expect(migrateMeta({ version: 1 }, {}, 2)).toBeNull()
+    expect(migrateMeta({ version: 99 })).toBeNull()
+    expect(migrateMeta({ version: "1" })).toBeNull()
+    expect(migrateMeta(null)).toBeNull()
+    expect(migrateMeta([])).toBeNull()
+  })
+})
+
+describe("sanitizeMeta", () => {
+  it("sustituye valores no válidos por los de por defecto", () => {
+    const meta = sanitizeMeta({
+      ecoPoints: Number.NaN,
+      lifetimeEco: "mucho",
+      runsPlayed: -5,
+      bestBiomeIndex: -10,
+      totalDebris: Infinity,
+    })
+
+    expect(meta).toEqual(createDefaultMeta())
+  })
+
+  it("limita los niveles de mejora a maxLevel y descarta ids desconocidos", () => {
+    const meta = sanitizeMeta({
+      upgrades: { speed: 999, fantasma: 3, other: "x" },
+    })
+
+    expect(meta.upgrades.speed).toBe(5)
+    expect(meta.upgrades).not.toHaveProperty("fantasma")
+    expect(meta.upgrades).not.toHaveProperty("other")
   })
 })
