@@ -22,6 +22,7 @@ export default mergeConfig(
           "src/events/EventEffects.ts",
           "src/events/EventPool.ts",
           "src/cards/CardManager.ts",
+          "src/cards/BuildStats.ts",
           "src/tycoon/UpgradeManager.ts",
           "src/tycoon/Upgrades.ts",
         ],

@@ -5,6 +5,7 @@
 import { BIOME_ORDER } from "@core/types"
 import { BIOME_DEBRIS, type OceanDebrisType } from "@entities/debrisCatalog"
 import { STRUCTURES } from "@world/StructureConfig"
+import { STAT_INFO, STAT_KEYS } from "@cards/BuildStats"
 
 interface ControlRow {
   keys: string[]
@@ -196,6 +197,32 @@ function controlList(
   return panel
 }
 
+/** Glosario de las abreviaturas que usan las cartas ("VEL", "RES"...). */
+function statGlossary(): HTMLElement {
+  const panel = node("div", "help-panel")
+  const list = node("dl", "help-controls")
+
+  for (const key of STAT_KEYS) {
+    const info = STAT_INFO[key]
+    const term = node("dt", "help-keys")
+    term.append(node("kbd", "help-key", info.short))
+    list.append(
+      term,
+      node("dd", "help-action", `${info.label}. ${info.description}`),
+    )
+  }
+
+  panel.append(
+    node(
+      "p",
+      "help-card-text",
+      "Al elegir carta, cada una muestra cómo quedarían tus valores. En la pausa, el panel «Tu tortuga» enseña los que llevas.",
+    ),
+    list,
+  )
+  return panel
+}
+
 function cardGrid(cards: HelpCard[]): HTMLElement {
   const grid = node("div", "help-grid")
 
@@ -236,6 +263,7 @@ export function createHowToPlayBody(touch: boolean): HTMLElement {
     section("Controles", controls),
     section("Desechos", cardGrid(debrisCards())),
     section("Peligros y herramientas", cardGrid(dangerCards())),
+    section("Atributos de las cartas", statGlossary()),
   )
 
   return body

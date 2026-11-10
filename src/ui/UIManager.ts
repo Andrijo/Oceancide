@@ -25,6 +25,25 @@ const FLOATING_ECO_KEYFRAMES: Keyframe[] = [
   },
 ]
 
+/** Colores del bioma con los que se tiñen las burbujas (reliquia y consejos). */
+export interface BiomeTint {
+  /** Color del agua del bioma, en RGB 0..1. */
+  water: readonly [number, number, number]
+  /** Acento bioluminiscente del bioma, en hexadecimal. */
+  accent: number
+}
+
+function applyBiomeTint(element: HTMLElement, tint: BiomeTint): void {
+  const [r, g, b] = tint.water.map((channel) =>
+    Math.round(Math.min(1, Math.max(0, channel)) * 255),
+  )
+  element.style.setProperty("--bubble-water", `${r} ${g} ${b}`)
+  element.style.setProperty(
+    "--bubble-accent",
+    `${(tint.accent >> 16) & 255} ${(tint.accent >> 8) & 255} ${tint.accent & 255}`,
+  )
+}
+
 export class UIManager {
   private floatingEcoPool: HTMLElement[] = []
   private floatingEcoAnims: (Animation | undefined)[] = []
@@ -38,6 +57,9 @@ export class UIManager {
   private toxicityTrendEl: HTMLElement
   private toxicityStatusEl: HTMLElement
   private dangerClusterEl: HTMLElement
+  private reviveEl: HTMLElement
+  private reviveCountEl: HTMLElement
+  private lastRevives = 0
 
   private biomeTimerEl: HTMLElement
   private boostBarEl: HTMLElement
@@ -104,6 +126,21 @@ export class UIManager {
     this.toxicityTrendEl.id = "toxicity-trend"
     this.toxicityTrendEl.className = "toxicity-trend"
     this.toxicitySkullEl.appendChild(this.toxicityTrendEl)
+
+    // Revivir disponibles: solo se ve cuando hay alguno (estilos en styles.css).
+    this.reviveEl = document.createElement("div")
+    this.reviveEl.id = "revive-hud"
+    this.reviveEl.className = "revive-hud"
+    this.reviveEl.setAttribute("role", "status")
+    this.reviveEl.innerHTML = `
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+      </svg>
+    `
+    this.reviveCountEl = document.createElement("span")
+    this.reviveCountEl.setAttribute("aria-hidden", "true")
+    this.reviveEl.appendChild(this.reviveCountEl)
+    this.dangerClusterEl.appendChild(this.reviveEl)
 
     document.getElementById("game-container")!.appendChild(this.dangerClusterEl)
 
@@ -199,7 +236,7 @@ export class UIManager {
     // Aviso contextual del onboarding (estilos en styles.css).
     this.tipEl = document.createElement("div")
     this.tipEl.id = "tip-toast"
-    this.tipEl.className = "tip-toast"
+    this.tipEl.className = "tip-toast biome-bubble"
     this.tipEl.setAttribute("aria-hidden", "true") // lo lee la región viva
 
     const tipLabel = document.createElement("div")
@@ -283,6 +320,16 @@ export class UIManager {
       this.boostBarEl.style.opacity = visible ? "1" : "0"
       this.lastBoostVisible = visible
     }
+  }
+
+  /** Revivir que le quedan a la tortuga; con 0 el indicador se oculta. */
+  public updateRevives(count: number): void {
+    if (count === this.lastRevives) return
+    this.lastRevives = count
+
+    this.reviveCountEl.textContent = `×${count}`
+    this.reviveEl.setAttribute("aria-label", `Revivir disponibles: ${count}`)
+    this.reviveEl.classList.toggle("visible", count > 0)
   }
 
   public updateBiomeTimer(remaining: number, limit: number): void {
@@ -406,6 +453,7 @@ export class UIManager {
   }
 
   public resetRunHud(): void {
+    this.updateRevives(0)
     this.lastToxicity = 0
     this.lastToxicityLevel = null
     this.lastToxicityVisible = false
@@ -441,8 +489,12 @@ export class UIManager {
     this.liveRegion.textContent = message
   }
 
-  /** Enseña un aviso contextual; se queda hasta que se llame a `hideTip`. */
-  public showTip(text: string): void {
+  /**
+   * Enseña un aviso contextual en una burbuja teñida con el bioma; se queda
+   * hasta que se llame a `hideTip`.
+   */
+  public showTip(text: string, tint?: BiomeTint): void {
+    if (tint) applyBiomeTint(this.tipEl, tint)
     this.tipTextEl.textContent = text
     this.tipEl.classList.add("visible")
     this.announce(`Consejo: ${text}`)
@@ -491,59 +543,40 @@ export class UIManager {
   }
 
   /**
-   * Aviso de reliquia encontrada: nombre, texto de ambientación y recompensa.
-   * Ocupa el hueco del mensaje central (lo sustituye) y se va solo.
+   * Aviso de reliquia encontrada: nombre, texto de ambientación y recompensa,
+   * dentro de una burbuja translúcida teñida con el agua y el acento del bioma
+   * (estilos en styles.css). Ocupa el hueco del mensaje central y se va solo.
    */
   public showRelicToast(
     name: string,
     description: string,
     reward: string,
+    tint?: BiomeTint,
     duration: number = 4200,
   ): void {
     this.currentMessage?.remove()
     window.clearTimeout(this.messageTimeout)
 
     const toast = document.createElement("div")
+    toast.className = "relic-toast biome-bubble"
     toast.setAttribute("aria-hidden", "true") // lo lee la región viva (announce)
-    toast.style.cssText = `
-      position: absolute;
-      top: 20%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: min(420px, calc(100vw - 32px));
-      box-sizing: border-box;
-      padding: 14px 20px 16px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 6px;
-      text-align: center;
-      background: rgba(22, 88, 123, 0.92);
-      border: 2px solid #84b3c3;
-      border-radius: 16px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
-      pointer-events: none;
-      z-index: 1000;
-      animation: fadeInOut ${duration}ms ease-in-out forwards;
-    `
+    toast.style.animationDuration = `${duration}ms`
 
-    const label = document.createElement("div")
-    label.textContent = "Reliquia encontrada"
-    label.style.cssText = `font: 700 11px ${PARAGRAPH_FONT}; letter-spacing: 0.14em; text-transform: uppercase; color: #84b3c3;`
+    if (tint) applyBiomeTint(toast, tint)
 
-    const title = document.createElement("div")
-    title.textContent = name
-    title.style.cssText = `font: 900 24px ${TITLE_FONT}; line-height: 1.1; color: #f5eedd;`
+    const part = (className: string, text: string): HTMLElement => {
+      const element = document.createElement("div")
+      element.className = className
+      element.textContent = text
+      return element
+    }
 
-    const flavor = document.createElement("div")
-    flavor.textContent = description
-    flavor.style.cssText = `font: italic 13px/1.4 ${PARAGRAPH_FONT}; color: rgba(245, 238, 221, 0.82);`
-
-    const rewardEl = document.createElement("div")
-    rewardEl.textContent = reward
-    rewardEl.style.cssText = `margin-top: 4px; padding: 4px 12px; border-radius: 999px; font: 700 14px ${PARAGRAPH_FONT}; color: #16587b; background: #f5eedd;`
-
-    toast.append(label, title, flavor, rewardEl)
+    toast.append(
+      part("relic-toast-label", "Reliquia encontrada"),
+      part("relic-toast-name", name),
+      part("relic-toast-flavor", description),
+      part("relic-toast-reward", reward),
+    )
     document.getElementById("game-container")!.appendChild(toast)
     this.currentMessage = toast
 
