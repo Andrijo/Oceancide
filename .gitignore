@@ -12,7 +12,7 @@ dist
 dist-ssr
 coverage
 *.local
-PROJECT_STATUS.md
+CLAUDE.md
 
 
 # Editor directories and files
