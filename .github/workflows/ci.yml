@@ -13,7 +13,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.2.18
 
       - name: Instalar dependencias
         run: bun install --frozen-lockfile
@@ -32,3 +32,23 @@ jobs:
 
       - name: Build
         run: bun run build
+
+      # Informa del tamaño del bundle y falla si crece por encima del umbral.
+      - name: Tamaño del bundle
+        run: |
+          LIMIT_KB=1100
+          SIZE_KB=$(du -sk dist | cut -f1)
+          JS_KB=$(find dist -name '*.js' -print0 | du -ck --files0-from=- | tail -1 | cut -f1)
+          {
+            echo "### Tamaño del bundle"
+            echo ""
+            echo "| | kB |"
+            echo "| --- | --- |"
+            echo "| dist/ total | ${SIZE_KB} |"
+            echo "| JS | ${JS_KB} |"
+            echo "| Límite (JS) | ${LIMIT_KB} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$JS_KB" -gt "$LIMIT_KB" ]; then
+            echo "::error::El JS del bundle (${JS_KB} kB) supera el límite de ${LIMIT_KB} kB"
+            exit 1
+          fi

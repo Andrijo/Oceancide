@@ -5,6 +5,7 @@ import { EnemyManager } from "@world/EnemyManager"
 import { SUN_DIRECTION } from "@world/WaterEffects"
 import { UIManager } from "@ui/UIManager"
 import { DevMenu } from "@ui/DevMenu"
+import { PerfOverlay } from "@ui/PerfOverlay"
 import { TouchControls } from "@ui/TouchControls"
 import { CardManager } from "@cards/CardManager"
 import { createRunState, type RunState } from "@cards/Card"
@@ -115,6 +116,7 @@ export class Game {
   private meta: MetaState
   private screens: ScreenManager
   private devMenu?: DevMenu
+  private perfOverlay?: PerfOverlay
   private screen: Screen = "hub"
   private runSeed = randomSeed()
   private runTime = 0
@@ -241,6 +243,14 @@ export class Game {
         },
         restartRun: () => this.restartRun(),
       })
+
+      if (new URLSearchParams(location.search).has("perf")) {
+        this.perfOverlay = new PerfOverlay(this.renderer, this.scene)
+        const overlay = this.perfOverlay
+        // Lectura programática de las métricas (scripts de medición).
+        ;(window as unknown as { __perf?: () => unknown }).__perf = () =>
+          overlay.getSnapshot()
+      }
     }
 
     this.animate()
@@ -965,6 +975,8 @@ export class Game {
 
     this.biomeGenerator.updateWater(simDelta, this.camera.position)
     this.renderPipeline.update(simDelta)
+    this.perfOverlay?.beginFrame()
     this.renderPipeline.render()
+    this.perfOverlay?.endFrame(performance.now())
   }
 }

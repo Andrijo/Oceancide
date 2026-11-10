@@ -25,8 +25,7 @@ export class DevMenu {
     this.toggleBtn.style.cssText = `
       position: absolute;
       top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
+      left: 10px;
       z-index: 500;
       padding: 6px 14px;
       font: bold 12px monospace;
@@ -42,8 +41,7 @@ export class DevMenu {
     this.panel.style.cssText = `
       position: absolute;
       top: 46px;
-      left: 50%;
-      transform: translateX(-50%);
+      left: 10px;
       z-index: 500;
       width: min(320px, 92vw);
       max-height: 70dvh;
