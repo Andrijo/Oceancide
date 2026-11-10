@@ -213,7 +213,7 @@ export class BiomeTransition {
 
   private drawLabel(w: number, h: number): void {
     const { ctx } = this
-    ctx.fillStyle = "#d9fbff"
+    ctx.fillStyle = "#f5eedd"
     ctx.textAlign = "center"
     ctx.textBaseline = "middle"
     ctx.font = `600 ${Math.max(18, Math.min(34, w * 0.035))}px system-ui, sans-serif`

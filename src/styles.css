@@ -14,7 +14,7 @@
 
 /* Números flotantes de eco: pool fijo de nodos (ver UIManager.showFloatingEco). */
 .floating-eco {
-  --eco-color: #a5f3fc;
+  --eco-color: #f5eedd;
   position: fixed;
   left: 0;
   top: 0;

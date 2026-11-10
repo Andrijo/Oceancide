@@ -10,6 +10,7 @@ import { BiomeProps, type BiomeLightAnchor } from "./BiomeProps"
 import { DebrisBatcher } from "./DebrisBatcher"
 import { WaterEffects, getSoftDot } from "./WaterEffects"
 import { Debris, updateLeakPulse } from "@entities/Debris"
+import { pickRelicCarrier, type Relic } from "@/relics/RelicPool"
 import type { Rng } from "@core/rng"
 
 const WHITE = new THREE.Color(1, 1, 1)
@@ -209,6 +210,12 @@ function valueNoise(x: number, z: number): number {
   return (a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v) * 2 - 1
 }
 
+// Destello que delata al desecho con reliquia: pequeño para que haya que
+// buscarlo, pero dorado y aditivo para que el bloom lo saque de la niebla.
+const RELIC_MARKER_COLOR = 0xffd75e
+const RELIC_MARKER_SIZE = 0.2
+const RELIC_MARKER_HEIGHT = 0.7
+
 export class BiomeGenerator {
   private scene: THREE.Scene
   private currentBiome: BiomeConfig
@@ -231,6 +238,10 @@ export class BiomeGenerator {
 
   private initialDebrisCount = 0
   private rng?: Rng
+
+  /** Desecho que esconde la reliquia del bioma y su destello (si hay). */
+  private relicCarrier: Debris | null = null
+  private relicMarker: THREE.Mesh | null = null
 
   private pollutionTotal = 0
   private pollutionRemaining = 0
@@ -448,6 +459,8 @@ export class BiomeGenerator {
       this.pollutionRemaining = 0
     }
 
+    this.updateRelicMarker(time)
+
     return collected
   }
 
@@ -571,6 +584,62 @@ export class BiomeGenerator {
     )
   }
 
+  // Reliquias
+
+  /**
+   * Esconde una reliquia dentro de un desecho al azar del bioma y le pone un
+   * destello dorado para que se pueda encontrar. Devuelve `false` si no queda
+   * ningún desecho donde esconderla.
+   */
+  public hideRelic(relic: Relic, rng: Rng): boolean {
+    this.clearRelicMarker()
+
+    const carrier = pickRelicCarrier(this.debrisList, rng)
+    if (!carrier) return false
+
+    carrier.relic = relic
+    this.relicCarrier = carrier
+
+    const marker = new THREE.Mesh(
+      new THREE.OctahedronGeometry(RELIC_MARKER_SIZE),
+      new THREE.MeshBasicMaterial({
+        color: RELIC_MARKER_COLOR,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    )
+    marker.name = "relic-marker"
+    this.relicMarker = marker
+    this.scene.add(marker)
+    this.updateRelicMarker(0)
+
+    return true
+  }
+
+  /** El destello flota sobre el desecho que lleva la reliquia, girando y latiendo. */
+  private updateRelicMarker(time: number): void {
+    const marker = this.relicMarker
+    const carrier = this.relicCarrier
+    if (!marker || !carrier) return
+
+    marker.position.copy(carrier.mesh.position)
+    marker.position.y += RELIC_MARKER_HEIGHT + Math.sin(time * 2.2) * 0.08
+    marker.rotation.y = time * 1.8
+    marker.scale.setScalar(1 + Math.sin(time * 4.4) * 0.22)
+  }
+
+  private clearRelicMarker(): void {
+    if (this.relicMarker) {
+      this.scene.remove(this.relicMarker)
+      this.relicMarker.geometry.dispose()
+      ;(this.relicMarker.material as THREE.Material).dispose()
+      this.relicMarker = null
+    }
+    this.relicCarrier = null
+  }
+
   /**
    * Vuelca las posiciones de los desechos a sus instancias. Llamar una vez por
    * frame, después de toda la lógica y justo antes de renderizar.
@@ -631,6 +700,7 @@ export class BiomeGenerator {
     for (const debris of this.debrisList) {
       debris.dispose()
     }
+    this.clearRelicMarker()
     this.debrisGroup.clear()
     this.debrisBatcher.clear()
     this.debrisList = []
@@ -864,6 +934,8 @@ export class BiomeGenerator {
 
   private removeDebrisInternal(debris: Debris, index: number): void {
     debris.removed = true
+
+    if (debris === this.relicCarrier) this.clearRelicMarker()
 
     if (debris.hazard === "lixivia") {
       this.leakingRemaining = Math.max(0, this.leakingRemaining - 1)

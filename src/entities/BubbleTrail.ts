@@ -5,13 +5,37 @@ import { addFresnelRim } from "./fresnelRim"
 const POOL_SIZE = 120
 const EMIT_RATE = 34
 
-const BUBBLE_COLORS = [
-  new THREE.Color(0x35f0ff),
-  new THREE.Color(0x59a6ff),
-  new THREE.Color(0xa45cff),
-  new THREE.Color(0xff5fd2),
-  new THREE.Color(0xffffff),
-]
+const WHITE = new THREE.Color(0xffffff)
+
+/**
+ * Tonos de las burbujas para un bioma: salen del color de su agua y de su
+ * acento bioluminiscente, siempre aclarados para que se separen del fondo.
+ * Las burbujas se reparten entre ellos, así que la estela no es monocroma.
+ */
+export function bubblePalette(
+  water: THREE.Color,
+  accent: THREE.Color,
+): THREE.Color[] {
+  return [
+    accent.clone(),
+    accent.clone().lerp(WHITE, 0.45),
+    water.clone().lerp(WHITE, 0.55),
+    water.clone().lerp(accent, 0.5).lerp(WHITE, 0.3),
+    WHITE.clone().lerp(accent, 0.12),
+  ]
+}
+
+/** Emisivo de la estela: el acento del bioma, algo teñido por el agua. */
+export function bubbleEmissive(
+  water: THREE.Color,
+  accent: THREE.Color,
+): THREE.Color {
+  return accent.clone().lerp(water, 0.3)
+}
+
+// Hasta que se carga un bioma: un cian neutro.
+const DEFAULT_WATER = new THREE.Color(0x1ab8d9)
+const DEFAULT_ACCENT = new THREE.Color(0xaaffee)
 
 export class BubbleTrail {
   private mesh: THREE.InstancedMesh
@@ -26,6 +50,9 @@ export class BubbleTrail {
   private size = new Float32Array(POOL_SIZE)
   private phase = new Float32Array(POOL_SIZE)
   private wobble = new Float32Array(POOL_SIZE)
+
+  private readonly water = new THREE.Color()
+  private readonly accent = new THREE.Color()
 
   private cursor = 0
   private emitAccumulator = 0
@@ -43,7 +70,7 @@ export class BubbleTrail {
       opacity: 0.3,
       roughness: 0.08,
       metalness: 0,
-      emissive: 0x22d3ee,
+      emissive: 0x000000,
       emissiveIntensity: 0.55,
       depthWrite: false,
       side: THREE.DoubleSide,
@@ -54,7 +81,7 @@ export class BubbleTrail {
     this.mesh.frustumCulled = false
     this.mesh.renderOrder = 2
 
-    this.applyInstanceColors()
+    this.setBiomeColors(DEFAULT_WATER, DEFAULT_ACCENT)
 
     scene.add(this.mesh)
 
@@ -157,12 +184,21 @@ export class BubbleTrail {
     this.mesh.removeFromParent()
   }
 
-  private applyInstanceColors(): void {
-    const color = new THREE.Color()
+  /**
+   * Tiñe la estela con los colores del bioma (agua y acento). Llamar al
+   * cargar cada bioma; las burbujas ya emitidas cambian también de color.
+   */
+  public setBiomeColors(water: THREE.Color, accent: THREE.Color): void {
+    this.water.copy(water)
+    this.accent.copy(accent)
+
+    const material = this.mesh.material as THREE.MeshStandardMaterial
+    material.emissive.copy(bubbleEmissive(water, accent))
+
+    const palette = bubblePalette(water, accent)
 
     for (let i = 0; i < POOL_SIZE; i++) {
-      color.copy(BUBBLE_COLORS[i % BUBBLE_COLORS.length])
-      this.mesh.setColorAt(i, color)
+      this.mesh.setColorAt(i, palette[i % palette.length])
     }
 
     if (this.mesh.instanceColor) {
