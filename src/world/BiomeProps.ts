@@ -2,6 +2,7 @@
 import * as THREE from "three"
 import type { BiomeKey } from "@core/types"
 import type { Rng } from "@core/rng"
+import { batchProps, propSwayUniforms } from "./PropBatcher"
 
 export interface BiomeLightAnchor {
   position: THREE.Vector3
@@ -1032,6 +1033,11 @@ export class BiomeProps {
   private group = new THREE.Group()
   private scene: THREE.Scene
   private lightAnchors: BiomeLightAnchor[] = []
+  private kinds = new Set<string>()
+  /** Mallas fusionadas (una por tipo de material): geometría y material propios. */
+  private batches: THREE.Mesh[] = []
+  /** Props que no se pudieron fusionar y siguen animándose en CPU. */
+  private leftovers: THREE.Object3D[] = []
   private elapsed = 0
 
   constructor(scene: THREE.Scene) {
@@ -1048,6 +1054,7 @@ export class BiomeProps {
 
     const config = BIOME_PROPS[biomeKey]
     const palette = BIOME_PROP_PALETTES[biomeKey]
+    const props: THREE.Object3D[] = []
 
     for (let i = 0; i < config.count; i++) {
       const factory = rng.pick(config.factories)
@@ -1071,7 +1078,11 @@ export class BiomeProps {
         } satisfies SwayBase
       }
 
-      this.group.add(prop)
+      props.push(prop)
+
+      if (typeof prop.userData.kind === "string") {
+        this.kinds.add(prop.userData.kind)
+      }
 
       const light = prop.userData.light as
         { color: number; intensity: number; offset?: THREE.Vector3 } | undefined
@@ -1087,13 +1098,30 @@ export class BiomeProps {
         })
       }
     }
+
+    // En vez de una draw call por malla (cientos por bioma), los props se
+    // fusionan en una malla por tipo de material. Ver PropBatcher.
+    const batched = batchProps(props)
+    this.batches = batched.meshes
+    this.leftovers = batched.leftovers
+    for (const mesh of this.batches) this.group.add(mesh)
+    for (const prop of this.leftovers) this.group.add(prop)
+
+    // Los materiales de fábrica de los props fusionados ya no se usan.
+    const kept = new Set(this.leftovers)
+    for (const prop of props) {
+      if (!kept.has(prop)) disposeMaterials(prop)
+    }
   }
 
   /** Anima el balanceo de la flora y de los animales sésiles. */
   public update(deltaTime: number): void {
     this.elapsed += deltaTime
 
-    for (const prop of this.group.children) {
+    // Props fusionados: el balanceo se calcula en el vertex shader.
+    propSwayUniforms.uSwayTime.value = this.elapsed
+
+    for (const prop of this.leftovers) {
       const sway = prop.userData.sway as SwayConfig | undefined
       if (!sway) continue
 
@@ -1116,22 +1144,51 @@ export class BiomeProps {
     return this.lightAnchors
   }
 
-  /** Limpia los props: conserva geometrías compartidas y libera solo los materiales únicos. */
+  /** Tipos de prop ("rock", "coral"...) presentes en el bioma actual. */
+  public getKinds(): ReadonlySet<string> {
+    return this.kinds
+  }
+
+  /** Número de mallas que se dibujan (fusionadas + props sueltos). */
+  public getDrawableCount(): number {
+    let count = this.batches.length
+    for (const prop of this.leftovers) {
+      prop.traverse((object) => {
+        if (object instanceof THREE.Mesh) count++
+      })
+    }
+    return count
+  }
+
+  /** Limpia los props: conserva geometrías compartidas y libera lo propio. */
   public clear(): void {
-    this.group.traverse((object) => {
-      if (!(object instanceof THREE.Mesh)) return
-
-      const material = object.material
-
-      if (Array.isArray(material)) {
-        material.forEach((m) => m.dispose())
-      } else {
-        material.dispose()
-      }
-    })
+    // Las mallas fusionadas tienen geometría y material propios.
+    for (const mesh of this.batches) {
+      mesh.geometry.dispose()
+      ;(mesh.material as THREE.Material).dispose()
+    }
+    // Los props sueltos comparten geometría (caché): solo se libera el material.
+    for (const prop of this.leftovers) disposeMaterials(prop)
 
     this.group.clear()
+    this.batches = []
+    this.leftovers = []
     this.lightAnchors = []
+    this.kinds.clear()
     this.elapsed = 0
   }
+}
+
+function disposeMaterials(root: THREE.Object3D): void {
+  root.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return
+
+    const material = object.material as THREE.Material | THREE.Material[]
+
+    if (Array.isArray(material)) {
+      material.forEach((m) => m.dispose())
+    } else {
+      material.dispose()
+    }
+  })
 }

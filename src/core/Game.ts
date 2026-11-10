@@ -976,6 +976,7 @@ export class Game {
 
     this.biomeGenerator.updateWater(simDelta, this.camera.position)
     this.renderPipeline.update(simDelta)
+    this.biomeGenerator.syncDebrisRender()
     this.perfOverlay?.beginFrame()
     this.renderPipeline.render()
     this.perfOverlay?.endFrame(performance.now())

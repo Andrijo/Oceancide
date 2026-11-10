@@ -7,6 +7,7 @@ import {
   type WorldBounds,
 } from "@core/types"
 import { BiomeProps, type BiomeLightAnchor } from "./BiomeProps"
+import { DebrisBatcher } from "./DebrisBatcher"
 import { WaterEffects, getSoftDot } from "./WaterEffects"
 import { Debris, updateLeakPulse } from "@entities/Debris"
 import type { Rng } from "@core/rng"
@@ -218,6 +219,7 @@ export class BiomeGenerator {
 
   private debrisList: Debris[] = []
   private debrisGroup: THREE.Group
+  private debrisBatcher: DebrisBatcher
 
   private floor?: THREE.Mesh
   private particles?: THREE.Points
@@ -264,6 +266,7 @@ export class BiomeGenerator {
 
     this.debrisGroup = new THREE.Group()
     scene.add(this.debrisGroup)
+    this.debrisBatcher = new DebrisBatcher(scene)
 
     this.ambientLight = new THREE.AmbientLight(0xffffff, 1)
     this.hemisphereLight = new THREE.HemisphereLight(0xbfe9ff, 0x0b1a22, 0.7)
@@ -539,6 +542,14 @@ export class BiomeGenerator {
   }
 
   /** Efectos del volumen de agua; llamar cada frame. Con deltaTime = 0 la animación se congela. */
+  /**
+   * Vuelca las posiciones de los desechos a sus instancias. Llamar una vez por
+   * frame, después de toda la lógica y justo antes de renderizar.
+   */
+  public syncDebrisRender(): void {
+    this.debrisBatcher.sync(this.debrisList)
+  }
+
   public updateWater(deltaTime: number, cameraPosition: THREE.Vector3): void {
     this.water.update(deltaTime, cameraPosition, 1 - this.visualRatio)
   }
@@ -592,6 +603,7 @@ export class BiomeGenerator {
       debris.dispose()
     }
     this.debrisGroup.clear()
+    this.debrisBatcher.clear()
     this.debrisList = []
     this.leakingRemaining = 0
     this.leakingInitial = 0
