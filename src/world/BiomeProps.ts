@@ -1049,6 +1049,7 @@ export class BiomeProps {
     biomeKey: BiomeKey,
     rng: Rng,
     getFloorHeight: (x: number, z: number) => number,
+    propScale = 1,
   ): void {
     this.clear()
 
@@ -1078,7 +1079,14 @@ export class BiomeProps {
         } satisfies SwayBase
       }
 
-      props.push(prop)
+      // Con calidad reducida se descarta una fracción repartida de los props.
+      // Se fabrican igualmente para consumir el rng como siempre: el resto de
+      // la composición (y lo que se genere después) no cambia con la calidad.
+      const keep =
+        propScale >= 1 ||
+        Math.floor((i + 1) * propScale) > Math.floor(i * propScale)
+      if (keep) props.push(prop)
+      else disposeMaterials(prop)
 
       if (typeof prop.userData.kind === "string") {
         this.kinds.add(prop.userData.kind)

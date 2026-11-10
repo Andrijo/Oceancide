@@ -373,6 +373,11 @@ export class WaterEffects {
     this.vignette.style.background = `radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 48%, ${rgba} 100%)`
   }
 
+  /** Fracción de la nieve marina que se dibuja (preset de calidad gráfica). */
+  public setSnowScale(scale: number): void {
+    const count = Math.round(SNOW_COUNT * THREE.MathUtils.clamp(scale, 0, 1))
+    this.snow.geometry.setDrawRange(0, count)
+  }
 
   // La nieve se mueve en el vertex shader: aquí solo se pasan tiempo y cámara.
   private updateSnow(camera: THREE.Vector3): void {

@@ -220,6 +220,9 @@ export class BiomeGenerator {
   private debrisList: Debris[] = []
   private debrisGroup: THREE.Group
   private debrisBatcher: DebrisBatcher
+  // Preset de calidad gráfica (ver core/quality.ts).
+  private particleScale = 1
+  private propScale = 1
 
   private floor?: THREE.Mesh
   private particles?: THREE.Points
@@ -362,8 +365,11 @@ export class BiomeGenerator {
 
     this.generateTerrain()
 
-    this.props.generate(biomeKey, rng, (x: number, z: number) =>
-      this.getFloorHeight(x, z),
+    this.props.generate(
+      biomeKey,
+      rng,
+      (x: number, z: number) => this.getFloorHeight(x, z),
+      this.propScale,
     )
 
     this.generateParticles(rng)
@@ -542,6 +548,29 @@ export class BiomeGenerator {
   }
 
   /** Efectos del volumen de agua; llamar cada frame. Con deltaTime = 0 la animación se congela. */
+  /**
+   * Aplica el preset de calidad gráfica. Partículas y nieve cambian al
+   * momento; la densidad de props se aplica al generar el siguiente bioma.
+   */
+  public setQuality(settings: {
+    particleScale: number
+    propScale: number
+  }): void {
+    this.particleScale = settings.particleScale
+    this.propScale = settings.propScale
+    this.water.setSnowScale(settings.particleScale)
+    this.applyParticleScale()
+  }
+
+  private applyParticleScale(): void {
+    if (!this.particles) return
+    const total = this.particles.geometry.attributes.position.count
+    this.particles.geometry.setDrawRange(
+      0,
+      Math.round(total * this.particleScale),
+    )
+  }
+
   /**
    * Vuelca las posiciones de los desechos a sus instancias. Llamar una vez por
    * frame, después de toda la lógica y justo antes de renderizar.
@@ -826,6 +855,9 @@ export class BiomeGenerator {
 
     this.particles = new THREE.Points(geometry, material)
     this.particles.frustumCulled = false
+    // Se generan siempre todas (mismo consumo de rng) y se dibuja la fracción
+    // que marque el preset de calidad.
+    this.applyParticleScale()
 
     this.scene.add(this.particles)
   }
