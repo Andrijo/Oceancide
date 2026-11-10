@@ -265,36 +265,47 @@ function idSeed(id: string): number {
   return h >>> 0
 }
 
+const cloudDummy = new THREE.Object3D()
+
+/**
+ * Nube de partículas como UNA sola malla: las 26 partículas se fusionan en una
+ * geometría (antes eran 26 mallas = 26 draw calls por desecho). El orden de
+ * consumo del rng es el mismo, así que la forma con una semilla dada no cambia.
+ */
 function createCloudObject(rng: Rng): {
-  object: THREE.Group
+  object: THREE.Mesh
   geometry: THREE.BufferGeometry
 } {
-  const group = new THREE.Group()
   const count = 26
 
-  const geometry = new THREE.IcosahedronGeometry(0.045, 1)
+  const particleGeometry = new THREE.IcosahedronGeometry(0.045, 1)
+  const parts: THREE.BufferGeometry[] = []
 
   for (let i = 0; i < count; i++) {
-    const particle = new THREE.Mesh(geometry)
-    particle.position.set(
+    cloudDummy.position.set(
       rng.range(-0.275, 0.275),
       rng.range(-0.225, 0.225),
       rng.range(-0.275, 0.275),
     )
 
     const particleScale = 0.45 + rng.next() * 1.1
-    particle.scale.setScalar(particleScale)
+    cloudDummy.scale.setScalar(particleScale)
 
-    particle.rotation.set(
+    cloudDummy.rotation.set(
       rng.range(0, Math.PI),
       rng.range(0, Math.PI),
       rng.range(0, Math.PI),
     )
 
-    group.add(particle)
+    cloudDummy.updateMatrix()
+    parts.push(particleGeometry.clone().applyMatrix4(cloudDummy.matrix))
   }
 
-  return { object: group, geometry }
+  const geometry = mergeGeometries(parts)
+  particleGeometry.dispose()
+  for (const part of parts) part.dispose()
+
+  return { object: new THREE.Mesh(geometry), geometry }
 }
 
 type ShapeFactory = (rng: Rng, deformation: number) => THREE.BufferGeometry
@@ -372,19 +383,26 @@ function getMaterial(
     1,
   )
 
+  // La transmisión real de three.js fuerza un render pass extra de toda la
+  // escena en cada frame, así que el vidrio/plástico se falsea: más
+  // transparencia y más clearcoat cuanto más "transmisivo" sea el catálogo.
+  const fakeTransmission = visual.transmission ?? 0
+  const finalOpacity = opacity * (1 - fakeTransmission * 0.45)
+
   const material = new THREE.MeshPhysicalMaterial({
     color: visual.color,
     roughness,
     metalness,
-    transparent: opacity < 1 || (visual.transmission ?? 0) > 0,
-    opacity,
+    transparent: finalOpacity < 1,
+    opacity: finalOpacity,
     wireframe: visual.wireframe ?? false,
     side: THREE.DoubleSide,
 
-    transmission: visual.transmission ?? 0,
-    ior: visual.ior ?? 1.45,
-    thickness: visual.thickness ?? 0.2,
-    clearcoat: Math.max(visual.clearcoat ?? 0, wetness * 0.6),
+    clearcoat: Math.max(
+      visual.clearcoat ?? 0,
+      wetness * 0.6,
+      fakeTransmission * 0.8,
+    ),
     clearcoatRoughness: visual.clearcoatRoughness ?? 0.25,
 
     emissive: visual.emissive ?? 0x000000,
@@ -405,6 +423,13 @@ function getMaterial(
 }
 
 // Principal
+
+export interface DebrisBatchSource {
+  /** Id del catálogo: todos los desechos con la misma clave comparten lote. */
+  key: string
+  geometry: THREE.BufferGeometry
+  material: THREE.Material
+}
 
 export class Debris {
   public static pickDefinition(biome: BiomeKey, rng: Rng): OceanDebrisType {
@@ -454,6 +479,13 @@ export class Debris {
   private cloudMaterial: THREE.Material | null = null
   private cloudGeometry: THREE.BufferGeometry | null = null
 
+  /**
+   * Geometría y material compartidos por todos los desechos de este tipo: los
+   * dibuja DebrisBatcher con un InstancedMesh. `null` en las nubes, que tienen
+   * forma propia y se dibujan como una malla suelta.
+   */
+  public readonly batch: DebrisBatchSource | null
+
   constructor(
     position: THREE.Vector3,
     definition: OceanDebrisType,
@@ -479,10 +511,11 @@ export class Debris {
       this.object = cloud.object
       this.cloudGeometry = cloud.geometry
       this.cloudMaterial = this.applyCloudMaterial(
-        this.object,
+        cloud.object,
         visual,
         definition.hazard === "lixivia",
       )
+      this.batch = null
     } else {
       const geometry = getGeometry(definition.id, visual)
       const material = getMaterial(
@@ -491,8 +524,11 @@ export class Debris {
         definition.hazard === "lixivia",
       )
 
-      const mesh = new THREE.Mesh(geometry, material)
-      this.object = mesh
+      // No es una malla: solo lleva la transformación. DebrisBatcher copia su
+      // matriz a la instancia de este tipo en cada frame.
+      this.object = new THREE.Object3D()
+      this.object.matrixAutoUpdate = false
+      this.batch = { key: definition.id, geometry, material }
     }
 
     this.object.position.copy(position)
@@ -533,15 +569,8 @@ export class Debris {
 
   /** Separa el desecho del color del agua del bioma actual (contra el camuflaje). */
   public adaptToWater(waterColor: THREE.Color): void {
-    if (this.object instanceof THREE.Mesh) {
-      const material = this.object.material
-      if (Array.isArray(material)) {
-        material.forEach((m) =>
-          adaptMaterialToWater(m as ColorMaterial, waterColor),
-        )
-      } else {
-        adaptMaterialToWater(material as ColorMaterial, waterColor)
-      }
+    if (this.batch) {
+      adaptMaterialToWater(this.batch.material as ColorMaterial, waterColor)
       return
     }
 
@@ -649,9 +678,9 @@ export class Debris {
     this.pullArrived = false
   }
 
-  /** Asigna un material compartido a todos los hijos de la nube. */
+  /** Crea el material propio de la nube y se lo asigna a su malla. */
   private applyCloudMaterial(
-    group: THREE.Object3D,
+    mesh: THREE.Mesh,
     visual: DebrisVisual,
     leaking: boolean,
   ): THREE.Material {
@@ -674,11 +703,7 @@ export class Debris {
 
     material.userData.baseColor = material.color.clone()
 
-    group.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.material = material
-      }
-    })
+    mesh.material = material
 
     return material
   }

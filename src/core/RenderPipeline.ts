@@ -11,6 +11,7 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js"
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js"
+import type { BloomMode } from "@core/quality"
 
 // --- Bloom sutil ---
 // Solo brilla lo más brillante (threshold alto) y con poca intensidad.
@@ -31,13 +32,11 @@ const TONE_EXPOSURE = 1.05
 const STRENGTH_SMOOTHING = 2.5
 
 export interface RenderPipelineOptions {
-  /** Fuerza bloom on/off. Si no se especifica, se autodetecta (off en móvil). */
-  enableBloom?: boolean
-}
-
-function detectMobile(): boolean {
-  if (typeof navigator === "undefined") return false
-  return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+  /**
+   * Calidad del bloom: desactivado, a media resolución o completo. Lo decide el
+   * preset de calidad gráfica (ver core/quality.ts). Por defecto, completo.
+   */
+  bloom?: BloomMode
 }
 
 export class RenderPipeline {
@@ -48,7 +47,7 @@ export class RenderPipeline {
   private composer: EffectComposer | null = null
   private bloomPass: UnrealBloomPass | null = null
 
-  private bloomAllowed: boolean
+  private bloomMode: BloomMode = "off"
 
   // Strength objetivo (viene de fuera) y actual (interpolado).
   private targetStrength = 0
@@ -67,13 +66,30 @@ export class RenderPipeline {
     renderer.toneMapping = TONE_MAPPING
     renderer.toneMappingExposure = TONE_EXPOSURE
 
-    // En móvil, el bloom se desactiva por defecto (caro). Se puede forzar con
-    // `enableBloom: true`, aunque puede costar fps.
-    this.bloomAllowed = options.enableBloom ?? !detectMobile()
+    this.setBloomMode(options.bloom ?? "full")
+  }
 
-    if (this.bloomAllowed) {
-      this.setupComposer()
+  /** Cambia la calidad del bloom en caliente (al cambiar de preset gráfico). */
+  public setBloomMode(mode: BloomMode): void {
+    if (mode === this.bloomMode) return
+    this.bloomMode = mode
+
+    if (mode === "off") {
+      this.dispose()
+      this.targetStrength = 0
+      this.currentStrength = 0
+      return
     }
+
+    if (!this.composer) this.setupComposer()
+
+    const size = new THREE.Vector2()
+    this.renderer.getSize(size)
+    this.setSize(size.x, size.y)
+  }
+
+  private get bloomAllowed(): boolean {
+    return this.bloomMode !== "off"
   }
 
   /** Fija el strength objetivo del bloom (0..1); el valor real se interpola suavemente. */
@@ -114,7 +130,12 @@ export class RenderPipeline {
       this.composer.setSize(width, height)
     }
     if (this.bloomPass) {
-      this.bloomPass.setSize(width, height)
+      // A media resolución el desenfoque cuesta la cuarta parte de píxeles.
+      const scale = this.bloomMode === "half" ? 0.5 : 1
+      this.bloomPass.setSize(
+        Math.max(1, Math.round(width * scale)),
+        Math.max(1, Math.round(height * scale)),
+      )
     }
   }
 

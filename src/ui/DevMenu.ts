@@ -1,4 +1,11 @@
 import { BIOME_ORDER, BIOMES } from "@core/types"
+import {
+  QUALITY_LABELS,
+  type QualityChoice,
+  type QualityPreset,
+} from "@core/quality"
+
+const QUALITY_CHOICES: QualityChoice[] = ["auto", "low", "medium", "high"]
 
 export interface DevApi {
   getBiomeIndex(): number
@@ -8,6 +15,9 @@ export interface DevApi {
   clearToxicity(): void
   completeZone(): void
   restartRun(): void
+  getQualityChoice(): QualityChoice
+  getQualityPreset(): QualityPreset
+  setQualityChoice(choice: QualityChoice): void
 }
 
 export class DevMenu {
@@ -25,8 +35,7 @@ export class DevMenu {
     this.toggleBtn.style.cssText = `
       position: absolute;
       top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
+      left: 10px;
       z-index: 500;
       padding: 6px 14px;
       font: bold 12px monospace;
@@ -42,8 +51,7 @@ export class DevMenu {
     this.panel.style.cssText = `
       position: absolute;
       top: 46px;
-      left: 50%;
-      transform: translateX(-50%);
+      left: 10px;
       z-index: 500;
       width: min(320px, 92vw);
       max-height: 70dvh;
@@ -148,5 +156,26 @@ export class DevMenu {
       this.makeButton("Reiniciar run", () => this.api.restartRun()),
     )
     this.panel.append(tools)
+
+    // --- Calidad gráfica ---
+    const choice = this.api.getQualityChoice()
+    this.panel.append(
+      this.makeTitle(
+        `Calidad (activa: ${QUALITY_LABELS[this.api.getQualityPreset()]})`,
+      ),
+    )
+    const quality = document.createElement("div")
+    quality.style.cssText =
+      "display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;"
+    for (const option of QUALITY_CHOICES) {
+      quality.append(
+        this.makeButton(
+          QUALITY_LABELS[option],
+          () => this.api.setQualityChoice(option),
+          option === choice,
+        ),
+      )
+    }
+    this.panel.append(quality)
   }
 }

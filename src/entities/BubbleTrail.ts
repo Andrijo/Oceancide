@@ -1,5 +1,6 @@
 // src/BubbleTrail.ts
 import * as THREE from "three"
+import { addFresnelRim } from "./fresnelRim"
 
 const POOL_SIZE = 120
 const EMIT_RATE = 34
@@ -33,22 +34,21 @@ export class BubbleTrail {
   constructor(scene: THREE.Scene) {
     const geometry = new THREE.SphereGeometry(1, 12, 9)
 
-    const material = new THREE.MeshPhysicalMaterial({
+    // Sin `transmission`: un solo material transmisivo en escena obliga a
+    // three.js a re-renderizar todos los opacos en cada frame. A este tamaño
+    // la refracción no se nota; el borde fresnel da el aspecto de burbuja.
+    const material = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       transparent: true,
-      opacity: 0.55,
+      opacity: 0.3,
       roughness: 0.08,
       metalness: 0,
-      transmission: 0.55,
-      ior: 1.33,
-      thickness: 0.15,
-      clearcoat: 1,
-      clearcoatRoughness: 0.08,
       emissive: 0x22d3ee,
       emissiveIntensity: 0.55,
       depthWrite: false,
       side: THREE.DoubleSide,
     })
+    addFresnelRim(material, 0.9, 2.4)
 
     this.mesh = new THREE.InstancedMesh(geometry, material, POOL_SIZE)
     this.mesh.frustumCulled = false
@@ -147,7 +147,7 @@ export class BubbleTrail {
     this.mesh.instanceMatrix.needsUpdate = true
 
     // El emisivo también sube con la intensidad
-    const material = this.mesh.material as THREE.MeshPhysicalMaterial
+    const material = this.mesh.material as THREE.MeshStandardMaterial
     material.emissiveIntensity = 0.55 + intensity * 0.85
   }
 

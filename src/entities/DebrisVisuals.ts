@@ -15,6 +15,7 @@ export interface DebrisVisual {
   wireframe?: boolean
 
   // MeshPhysicalMaterial
+  /** 0..1: cuánto deja pasar la luz. Se falsea con opacidad + clearcoat. */
   transmission?: number
   ior?: number
   thickness?: number

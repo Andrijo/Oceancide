@@ -1,5 +1,6 @@
 import * as THREE from "three"
 import type { Rng } from "@core/rng"
+import { addFresnelRim } from "./fresnelRim"
 
 const DOME_RADIUS = 0.9
 const TENTACLE_COUNT = 6
@@ -9,7 +10,8 @@ const DOME_OPACITY = 0.6
 const TENTACLE_OPACITY = 0.42
 const HIT_DOME_OPACITY = 0.08
 const HIT_TENTACLE_OPACITY = 0.05
-const BASE_LIGHT_INTENSITY = 1.15
+const BASE_EMISSIVE = 1.1
+const HIT_EMISSIVE = 0.15
 
 const HIT_COOLDOWN = 3
 
@@ -22,10 +24,9 @@ export class Jellyfish {
   public readonly mesh = new THREE.Group()
 
   private readonly dome: THREE.Mesh
-  private readonly domeMaterial: THREE.MeshPhysicalMaterial
+  private readonly domeMaterial: THREE.MeshStandardMaterial
   private readonly tentacleMaterial: THREE.MeshBasicMaterial
   private readonly tentacles = new THREE.Group()
-  private readonly light: THREE.PointLight
 
   private readonly basePosition = new THREE.Vector3()
   private readonly phase: number
@@ -61,22 +62,21 @@ export class Jellyfish {
       0,
       Math.PI / 2,
     )
-    this.domeMaterial = new THREE.MeshPhysicalMaterial({
+    // Sin `transmission` (render pass extra) ni luz propia (el número de
+    // luces cambiaría con cada medusa y recompilaría todos los shaders): la
+    // gelatina luminosa sale del emisivo + borde fresnel + bloom.
+    this.domeMaterial = new THREE.MeshStandardMaterial({
       color: 0xff5fd2,
       transparent: true,
       opacity: DOME_OPACITY,
-      transmission: 0.55,
-      thickness: 0.4,
-      ior: 1.33,
       roughness: 0.2,
       metalness: 0,
       emissive: 0xff2bb5,
-      emissiveIntensity: 0.7,
-      clearcoat: 0.6,
-      clearcoatRoughness: 0.1,
+      emissiveIntensity: BASE_EMISSIVE,
       side: THREE.DoubleSide,
       depthWrite: false,
     })
+    addFresnelRim(this.domeMaterial, 0.8, 2)
     this.dome = new THREE.Mesh(domeGeometry, this.domeMaterial)
     this.dome.scale.y = 0.8
     this.mesh.add(this.dome)
@@ -111,10 +111,6 @@ export class Jellyfish {
       this.tentacles.add(tentacle)
     }
     this.mesh.add(this.tentacles)
-
-    this.light = new THREE.PointLight(0xff5fd2, BASE_LIGHT_INTENSITY, 10, 2)
-    this.light.position.y = 0.4
-    this.mesh.add(this.light)
   }
 
   public get coolingDown(): boolean {
@@ -147,7 +143,7 @@ export class Jellyfish {
     this.cooldown = HIT_COOLDOWN
     this.domeMaterial.opacity = HIT_DOME_OPACITY
     this.tentacleMaterial.opacity = HIT_TENTACLE_OPACITY
-    this.light.intensity = 0.15
+    this.domeMaterial.emissiveIntensity = HIT_EMISSIVE
   }
 
   public dispose(): void {
@@ -168,6 +164,6 @@ export class Jellyfish {
   private restoreVisuals(): void {
     this.domeMaterial.opacity = DOME_OPACITY
     this.tentacleMaterial.opacity = TENTACLE_OPACITY
-    this.light.intensity = BASE_LIGHT_INTENSITY
+    this.domeMaterial.emissiveIntensity = BASE_EMISSIVE
   }
 }

@@ -7,6 +7,7 @@ import {
   type WorldBounds,
 } from "@core/types"
 import { BiomeProps, type BiomeLightAnchor } from "./BiomeProps"
+import { DebrisBatcher } from "./DebrisBatcher"
 import { WaterEffects, getSoftDot } from "./WaterEffects"
 import { Debris, updateLeakPulse } from "@entities/Debris"
 import type { Rng } from "@core/rng"
@@ -218,6 +219,10 @@ export class BiomeGenerator {
 
   private debrisList: Debris[] = []
   private debrisGroup: THREE.Group
+  private debrisBatcher: DebrisBatcher
+  // Preset de calidad gráfica (ver core/quality.ts).
+  private particleScale = 1
+  private propScale = 1
 
   private floor?: THREE.Mesh
   private particles?: THREE.Points
@@ -238,8 +243,12 @@ export class BiomeGenerator {
   private visualRatio = 1
   private lastAppliedRatio = -1 // para evitar recalcular niebla/fog cada frame
 
-  private particlePositions: Float32Array = new Float32Array(0)
-  private particleVelocities: Float32Array = new Float32Array(0)
+  private particleUniforms = {
+    uPTime: { value: 0 },
+    uPFall: { value: 0 },
+    uPMinY: { value: 0 },
+    uPSpanY: { value: 1 },
+  }
 
   // Caché de bounds: se invalida al cambiar de bioma
   private cachedBounds: WorldBounds | null = null
@@ -260,6 +269,7 @@ export class BiomeGenerator {
 
     this.debrisGroup = new THREE.Group()
     scene.add(this.debrisGroup)
+    this.debrisBatcher = new DebrisBatcher(scene)
 
     this.ambientLight = new THREE.AmbientLight(0xffffff, 1)
     this.hemisphereLight = new THREE.HemisphereLight(0xbfe9ff, 0x0b1a22, 0.7)
@@ -355,8 +365,11 @@ export class BiomeGenerator {
 
     this.generateTerrain()
 
-    this.props.generate(biomeKey, rng, (x: number, z: number) =>
-      this.getFloorHeight(x, z),
+    this.props.generate(
+      biomeKey,
+      rng,
+      (x: number, z: number) => this.getFloorHeight(x, z),
+      this.propScale,
     )
 
     this.generateParticles(rng)
@@ -401,6 +414,8 @@ export class BiomeGenerator {
     // Las fugas latan para que el jugador las identifique.
     updateLeakPulse(time)
 
+    const collectionRadiusSq = collectionRadius * collectionRadius
+
     for (let i = this.debrisList.length - 1; i >= 0; i--) {
       const debris = this.debrisList[i]
       debris.animate(time, deltaTime)
@@ -410,7 +425,10 @@ export class BiomeGenerator {
         continue
       }
 
-      if (debris.mesh.position.distanceTo(turtlePosition) < collectionRadius) {
+      if (
+        debris.mesh.position.distanceToSquared(turtlePosition) <
+        collectionRadiusSq
+      ) {
         // Frágil en boost: se rompe sin dar eco (premia acercarse con calma).
         const shatters = debris.hazard === "fragil" && boosting
         if (shatters) debris.shatter()
@@ -530,6 +548,37 @@ export class BiomeGenerator {
   }
 
   /** Efectos del volumen de agua; llamar cada frame. Con deltaTime = 0 la animación se congela. */
+  /**
+   * Aplica el preset de calidad gráfica. Partículas y nieve cambian al
+   * momento; la densidad de props se aplica al generar el siguiente bioma.
+   */
+  public setQuality(settings: {
+    particleScale: number
+    propScale: number
+  }): void {
+    this.particleScale = settings.particleScale
+    this.propScale = settings.propScale
+    this.water.setSnowScale(settings.particleScale)
+    this.applyParticleScale()
+  }
+
+  private applyParticleScale(): void {
+    if (!this.particles) return
+    const total = this.particles.geometry.attributes.position.count
+    this.particles.geometry.setDrawRange(
+      0,
+      Math.round(total * this.particleScale),
+    )
+  }
+
+  /**
+   * Vuelca las posiciones de los desechos a sus instancias. Llamar una vez por
+   * frame, después de toda la lógica y justo antes de renderizar.
+   */
+  public syncDebrisRender(): void {
+    this.debrisBatcher.sync(this.debrisList)
+  }
+
   public updateWater(deltaTime: number, cameraPosition: THREE.Vector3): void {
     this.water.update(deltaTime, cameraPosition, 1 - this.visualRatio)
   }
@@ -583,6 +632,7 @@ export class BiomeGenerator {
       debris.dispose()
     }
     this.debrisGroup.clear()
+    this.debrisBatcher.clear()
     this.debrisList = []
     this.leakingRemaining = 0
     this.leakingInitial = 0
@@ -742,26 +792,30 @@ export class BiomeGenerator {
     const count = this.currentAmbience.particleCount
     const bounds = this.getBounds()
 
-    this.particlePositions = new Float32Array(count * 3)
-    this.particleVelocities = new Float32Array(count * 2)
+    const positions = new Float32Array(count * 3)
+    const velocities = new Float32Array(count * 2)
 
     for (let i = 0; i < count; i++) {
       const i3 = i * 3
       const i2 = i * 2
 
-      this.particlePositions[i3] = rng.range(-HALF_SIZE, HALF_SIZE)
-      this.particlePositions[i3 + 1] = rng.range(bounds.minY, bounds.maxY)
-      this.particlePositions[i3 + 2] = rng.range(-HALF_SIZE, HALF_SIZE)
+      positions[i3] = rng.range(-HALF_SIZE, HALF_SIZE)
+      positions[i3 + 1] = rng.range(bounds.minY, bounds.maxY)
+      positions[i3 + 2] = rng.range(-HALF_SIZE, HALF_SIZE)
 
-      this.particleVelocities[i2] = rng.range(-0.08, 0.08)
-      this.particleVelocities[i2 + 1] = rng.range(-0.16, -0.04)
+      velocities[i2] = rng.range(-0.08, 0.08)
+      velocities[i2 + 1] = rng.range(-0.16, -0.04)
     }
 
     const geometry = new THREE.BufferGeometry()
-    geometry.setAttribute(
-      "position",
-      new THREE.BufferAttribute(this.particlePositions, 3),
-    )
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3))
+    geometry.setAttribute("aVel", new THREE.BufferAttribute(velocities, 2))
+
+    const uniforms = this.particleUniforms
+    uniforms.uPTime.value = 0
+    uniforms.uPFall.value = 0
+    uniforms.uPMinY.value = bounds.minY
+    uniforms.uPSpanY.value = Math.max(0.001, bounds.maxY - bounds.minY)
 
     const material = new THREE.PointsMaterial({
       color: this.currentAmbience.particleColor,
@@ -773,8 +827,37 @@ export class BiomeGenerator {
       sizeAttenuation: true,
     })
 
+    // Movimiento en GPU: posición = inicial + velocidad · tiempo, con wrap por
+    // `mod()`. El buffer se sube una sola vez, al crear el bioma.
+    const half = HALF_SIZE.toFixed(1)
+    const size = (HALF_SIZE * 2).toFixed(1)
+    material.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, uniforms)
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          "#include <common>",
+          `#include <common>
+          attribute vec2 aVel;
+          uniform float uPTime;
+          uniform float uPFall;
+          uniform float uPMinY;
+          uniform float uPSpanY;`,
+        )
+        .replace(
+          "#include <begin_vertex>",
+          `#include <begin_vertex>
+          transformed.x = mod(position.x + aVel.x * uPTime + ${half}, ${size}) - ${half};
+          transformed.z = mod(position.z + aVel.x * 0.6 * uPTime + ${half}, ${size}) - ${half};
+          transformed.y = uPMinY + mod(position.y - uPMinY + aVel.y * uPFall, uPSpanY);`,
+        )
+    }
+    material.customProgramCacheKey = () => "biome-particles-gpu"
+
     this.particles = new THREE.Points(geometry, material)
     this.particles.frustumCulled = false
+    // Se generan siempre todas (mismo consumo de rng) y se dibuja la fracción
+    // que marque el preset de calidad.
+    this.applyParticleScale()
 
     this.scene.add(this.particles)
   }
@@ -803,36 +886,16 @@ export class BiomeGenerator {
     }
   }
 
+  // El movimiento vive en el vertex shader (ver generateParticles): aquí solo
+  // se avanzan dos escalares, sin tocar ni volver a subir el buffer.
   private updateParticles(deltaTime: number): void {
     if (!this.particles) return
 
-    const bounds = this.getBounds()
-    const positions = this.particles.geometry.attributes.position
-      .array as Float32Array
-
     const cleanliness = 1 - this.visualRatio
 
-    for (let i = 0; i < positions.length / 3; i++) {
-      const i3 = i * 3
-      const i2 = i * 2
-
-      positions[i3] += this.particleVelocities[i2] * deltaTime
-      positions[i3 + 1] +=
-        this.particleVelocities[i2 + 1] * deltaTime * (0.5 + cleanliness * 0.5)
-      positions[i3 + 2] += this.particleVelocities[i2] * deltaTime * 0.6
-
-      if (positions[i3 + 1] < bounds.minY) {
-        positions[i3 + 1] = bounds.maxY
-      }
-
-      if (positions[i3] < -HALF_SIZE) positions[i3] = HALF_SIZE
-      if (positions[i3] > HALF_SIZE) positions[i3] = -HALF_SIZE
-
-      if (positions[i3 + 2] < -HALF_SIZE) positions[i3 + 2] = HALF_SIZE
-      if (positions[i3 + 2] > HALF_SIZE) positions[i3 + 2] = -HALF_SIZE
-    }
-
-    this.particles.geometry.attributes.position.needsUpdate = true
+    this.particleUniforms.uPTime.value += deltaTime
+    // La caída depende de la limpieza, que cambia con el tiempo: se integra.
+    this.particleUniforms.uPFall.value += deltaTime * (0.5 + cleanliness * 0.5)
 
     const material = this.particles.material as THREE.PointsMaterial
 

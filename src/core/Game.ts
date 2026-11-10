@@ -5,6 +5,21 @@ import { EnemyManager } from "@world/EnemyManager"
 import { SUN_DIRECTION } from "@world/WaterEffects"
 import { UIManager } from "@ui/UIManager"
 import { DevMenu } from "@ui/DevMenu"
+import { PerfOverlay } from "@ui/PerfOverlay"
+import {
+  AdaptiveQuality,
+  QUALITY_LABELS,
+  QUALITY_PRESETS,
+  effectivePixelRatio,
+  loadQualityChoice,
+  lowerPreset,
+  rememberAutoPreset,
+  resolveQuality,
+  saveQualityChoice,
+  wantsAntialias,
+  type QualityChoice,
+  type QualitySettings,
+} from "@core/quality"
 import { TouchControls } from "@ui/TouchControls"
 import { CardManager } from "@cards/CardManager"
 import { createRunState, type RunState } from "@cards/Card"
@@ -84,7 +99,6 @@ export class Game {
   private cameraRig: CameraRig
   private renderPipeline!: RenderPipeline
   private timer: THREE.Timer
-  private ambientLight!: THREE.AmbientLight
   private directionalLight!: THREE.DirectionalLight
   private pointLights: THREE.PointLight[] = []
   private pointLightBoost = 1
@@ -115,6 +129,11 @@ export class Game {
   private meta: MetaState
   private screens: ScreenManager
   private devMenu?: DevMenu
+  private perfOverlay?: PerfOverlay
+
+  private qualityChoice: QualityChoice = loadQualityChoice()
+  private quality: QualitySettings = resolveQuality(this.qualityChoice)
+  private adaptiveQuality = new AdaptiveQuality()
   private screen: Screen = "hub"
   private runSeed = randomSeed()
   private runTime = 0
@@ -132,9 +151,17 @@ export class Game {
     )
     this.cameraRig = new CameraRig(this.camera)
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true })
+    // El antialias no se puede cambiar después de crear el contexto: se decide
+    // con el preset inicial. Con pixel ratio ≥ 2 el MSAA no se nota y es caro.
+    const pixelRatio = effectivePixelRatio(
+      this.quality,
+      window.devicePixelRatio,
+    )
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: wantsAntialias(pixelRatio),
+    })
     this.renderer.setSize(window.innerWidth, window.innerHeight)
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    this.renderer.setPixelRatio(pixelRatio)
     document
       .getElementById("game-container")!
       .appendChild(this.renderer.domElement)
@@ -143,6 +170,7 @@ export class Game {
       this.renderer,
       this.scene,
       this.camera,
+      { bloom: this.quality.bloom },
     )
 
     this.turtle = new Turtle()
@@ -151,6 +179,7 @@ export class Game {
     this.structures = new StructureManager(this.scene)
 
     this.biomeGenerator = new BiomeGenerator(this.scene)
+    this.biomeGenerator.setQuality(this.quality)
     this.enemyManager = new EnemyManager(this.scene)
     this.uiManager = new UIManager()
     this.uiManager.createPauseButton(() => this.togglePause())
@@ -240,16 +269,29 @@ export class Game {
           this.collectedInZone = Number.MAX_SAFE_INTEGER
         },
         restartRun: () => this.restartRun(),
+        getQualityChoice: () => this.qualityChoice,
+        getQualityPreset: () => this.quality.preset,
+        setQualityChoice: (choice) => this.setQualityChoice(choice),
       })
+
+      if (new URLSearchParams(location.search).has("perf")) {
+        this.perfOverlay = new PerfOverlay(this.renderer, this.scene)
+        const overlay = this.perfOverlay
+        // Lectura programática de las métricas (scripts de medición).
+        ;(window as unknown as { __perf?: () => unknown }).__perf = () =>
+          overlay.getSnapshot()
+      }
     }
 
     this.animate()
   }
 
   private setupLighting(): void {
-    this.ambientLight = new THREE.AmbientLight(0x404040, 0.1)
-    this.scene.add(this.ambientLight)
-
+    // Presupuesto de luces FIJO: 1 direccional + 5 puntuales aquí, 1 puntual
+    // en la tortuga y ambiente + hemisferio en BiomeGenerator. El número de
+    // luces forma parte de la clave de los programas de three.js: si cambia,
+    // se recompilan los shaders de toda la escena. Nunca añadir ni quitar
+    // luces en caliente; apagarlas con intensity = 0.
     this.directionalLight = new THREE.DirectionalLight(0xffffff, 0.8)
     this.directionalLight.position.copy(SUN_DIRECTION).multiplyScalar(100)
     this.scene.add(this.directionalLight)
@@ -318,9 +360,58 @@ export class Game {
     })
   }
 
+  /** Elige la calidad gráfica ("auto" o un preset fijo) y la guarda entre sesiones. */
+  public setQualityChoice(choice: QualityChoice): void {
+    this.qualityChoice = choice
+    saveQualityChoice(choice)
+    this.applyQuality(resolveQuality(choice))
+  }
+
+  /**
+   * Aplica un preset en caliente: resolución y bloom al momento; partículas y
+   * nieve al momento; la densidad de props, al cargar el siguiente bioma.
+   */
+  private applyQuality(settings: QualitySettings): void {
+    this.quality = settings
+    this.renderPipeline.setBloomMode(settings.bloom)
+    this.biomeGenerator.setQuality(settings)
+    this.adaptiveQuality.reset()
+    this.handleResize()
+    this.devMenu?.refresh()
+  }
+
+  /** Modo automático: si el frame medio se mantiene alto, baja un preset. */
+  private updateAdaptiveQuality(frameSeconds: number): void {
+    if (this.qualityChoice !== "auto") return
+
+    const measurable =
+      this.screen === "run" &&
+      !this.paused &&
+      !this.transition.isActive() &&
+      !document.hidden
+    if (!measurable) {
+      this.adaptiveQuality.reset()
+      return
+    }
+
+    if (!this.adaptiveQuality.sample(frameSeconds)) return
+
+    const lower = lowerPreset(this.quality.preset)
+    if (!lower) return
+
+    rememberAutoPreset(lower)
+    this.applyQuality(QUALITY_PRESETS[lower])
+    this.uiManager.showMessage(
+      `Calidad gráfica ajustada: ${QUALITY_LABELS[lower]}`,
+      1800,
+    )
+  }
+
   private handleResize(): void {
     this.cameraRig.resize(window.innerWidth / window.innerHeight)
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    this.renderer.setPixelRatio(
+      effectivePixelRatio(this.quality, window.devicePixelRatio),
+    )
     this.renderer.setSize(window.innerWidth, window.innerHeight)
     this.renderPipeline.setSize(window.innerWidth, window.innerHeight)
   }
@@ -343,6 +434,8 @@ export class Game {
 
     const rng = new Rng(deriveSeed(this.runSeed, index))
     this.biomeGenerator.generateBiome(biomeKey, rng, this.loop)
+    // La carga del bioma no debe contar como bajo rendimiento.
+    this.adaptiveQuality.reset()
 
     const bounds = this.biomeGenerator.getBounds()
     // En modo sin fin `index` sigue creciendo; el módulo mantiene la fauna
@@ -917,8 +1010,11 @@ export class Game {
     requestAnimationFrame((t) => this.animate(t))
 
     this.timer.update(timestamp)
-    const deltaTime = Math.min(this.timer.getDelta(), MAX_DELTA)
+    const rawDelta = this.timer.getDelta()
+    const deltaTime = Math.min(rawDelta, MAX_DELTA)
     const time = this.timer.getElapsed()
+
+    this.updateAdaptiveQuality(rawDelta)
 
     this.update(deltaTime, time)
 
@@ -974,6 +1070,9 @@ export class Game {
 
     this.biomeGenerator.updateWater(simDelta, this.camera.position)
     this.renderPipeline.update(simDelta)
+    this.biomeGenerator.syncDebrisRender()
+    this.perfOverlay?.beginFrame()
     this.renderPipeline.render()
+    this.perfOverlay?.endFrame(performance.now())
   }
 }

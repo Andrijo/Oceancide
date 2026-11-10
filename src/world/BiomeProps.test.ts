@@ -49,10 +49,8 @@ describe("BiomeProps", () => {
   })
 
   it("no reutiliza arrecifes, coral ni conchas en el mar profundo", () => {
-    const { group } = generate("deepSea")
-    const kinds = new Set(
-      group.children.map((prop) => prop.userData.kind as string),
-    )
+    const { props } = generate("deepSea")
+    const kinds = props.getKinds()
 
     expect(kinds.has("vent")).toBe(true)
     expect(kinds.has("tubeWorm")).toBe(true)
@@ -67,5 +65,29 @@ describe("BiomeProps", () => {
     const { props } = generate("deepSea")
 
     expect(props.getLightAnchors().length).toBeGreaterThan(0)
+  })
+
+  it("fusiona los props en pocas mallas (draw calls)", () => {
+    for (const biome of ALL_BIOMES) {
+      const { props } = generate(biome)
+
+      // Antes: una malla por rama/tubo/roca (varios cientos por bioma).
+      expect(props.getDrawableCount()).toBeLessThan(40)
+    }
+  })
+
+  it("la composición no depende del fusionado: misma semilla, mismos vértices", () => {
+    const a = generate("deepSea").group
+    const b = generate("deepSea").group
+
+    const signature = (group: THREE.Group): number[] =>
+      group.children.map((child) =>
+        child instanceof THREE.Mesh
+          ? (child.geometry as THREE.BufferGeometry).attributes.position.count
+          : -1,
+      )
+
+    expect(signature(a)).toEqual(signature(b))
+    expect(signature(a).length).toBeGreaterThan(0)
   })
 })

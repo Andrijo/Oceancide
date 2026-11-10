@@ -12,7 +12,24 @@ const TOXICITY_LEVEL_LABELS: Record<string, string> = {
   "level-crit": "crítica",
 }
 
+const FLOATING_ECO_POOL_SIZE = 16
+const FLOATING_ECO_KEYFRAMES: Keyframe[] = [
+  { offset: 0, opacity: 0, transform: "translate(-50%, -50%) scale(0.6)" },
+  { offset: 0.2, opacity: 1, transform: "translate(-50%, -50%) scale(1.15)" },
+  { offset: 0.4, transform: "translate(-50%, -50%) scale(1)" },
+  { offset: 0.75, opacity: 1 },
+  {
+    offset: 1,
+    opacity: 0,
+    transform: "translate(-50%, calc(-50% - 70px)) scale(1)",
+  },
+]
+
 export class UIManager {
+  private floatingEcoPool: HTMLElement[] = []
+  private floatingEcoAnims: (Animation | undefined)[] = []
+  private floatingEcoNext = 0
+
   private debrisCountEl: HTMLElement
   private ecoAwarenessEl: HTMLElement
   private zoneProgressEl: HTMLElement
@@ -453,31 +470,40 @@ export class UIManager {
     const color = value >= 20 ? "#ffd166" : value >= 12 ? "#7cf7d4" : "#a5f3fc"
     const duration = 1.1 + Math.min(0.5, value * 0.015)
 
-    const el = document.createElement("div")
-    el.textContent = `+${value}`
-    el.style.cssText = `
-      position: fixed;
-      left: ${screenX}px;
-      top: ${screenY}px;
-      transform: translate(-50%, -50%);
-      font-family: ${PARAGRAPH_FONT};
-      font-size: ${size}px;
-      font-weight: bold;
-      color: ${color};
-      text-shadow:
-        0 0 6px rgba(0, 0, 0, 0.9),
-        0 0 14px ${color}99;
-      pointer-events: none;
-      z-index: 1000;
-      animation: floatUpFade ${duration}s ease-out forwards;
-      will-change: transform, opacity;
-    `
+    // Pool fijo reciclado en round-robin: sin crear nodos ni timers por desecho.
+    if (this.floatingEcoPool.length === 0) this.createFloatingEcoPool()
+    const index = this.floatingEcoNext
+    const el = this.floatingEcoPool[index]
+    this.floatingEcoNext = (index + 1) % this.floatingEcoPool.length
 
-    document.body.appendChild(el)
-    window.setTimeout(() => el.remove(), duration * 1000)
+    el.textContent = `+${value}`
+    el.style.left = `${screenX}px`
+    el.style.top = `${screenY}px`
+    el.style.fontSize = `${size}px`
+    el.style.setProperty("--eco-color", color)
+
+    // La animación se relanza con WAAPI: no fuerza reflow ni necesita
+    // setTimeout; al terminar el nodo vuelve a su opacidad base (0).
+    this.floatingEcoAnims[index]?.cancel()
+    this.floatingEcoAnims[index] = el.animate(FLOATING_ECO_KEYFRAMES, {
+      duration: duration * 1000,
+      easing: "ease-out",
+    })
+  }
+
+  private createFloatingEcoPool(): void {
+    for (let i = 0; i < FLOATING_ECO_POOL_SIZE; i++) {
+      const el = document.createElement("div")
+      el.className = "floating-eco"
+      el.setAttribute("aria-hidden", "true")
+      document.body.appendChild(el)
+      this.floatingEcoPool.push(el)
+    }
   }
 
   public dispose(): void {
+    for (const el of this.floatingEcoPool) el.remove()
+    this.floatingEcoPool.length = 0
     window.clearTimeout(this.messageTimeout)
     window.clearTimeout(this.cleansingTimeout)
 
