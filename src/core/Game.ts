@@ -970,10 +970,6 @@ export class Game {
           rng,
         })
 
-        if (card.id === "bioluminescence") {
-          this.turtle.addGlow(0.5)
-        }
-
         this.uiManager.showMessage(
           outcome ? `${card.name}: ${outcome}` : `+ ${card.name}`,
           outcome ? 2400 : 1500,

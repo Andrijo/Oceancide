@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "oceancidio",
+      "name": "oceancide",
       "dependencies": {
         "@types/three": "^0.186.0",
         "gsap": "^3.15.0",

@@ -47,7 +47,7 @@ export const ACT_EVENTS: GameEvent[] = [
         id: "take_core",
         label: "Sumergirte a por el núcleo",
         description:
-          "Ganas +1 capacidad de filtro, pero sufres un gran daño (+45 toxicidad).",
+          "Ganas +1 filtro, pero te intoxicas mucho (+45 toxicidad).",
         effects: { toxicity: 45, filterCapacity: 1 },
       },
       {
@@ -76,7 +76,7 @@ export const ACT_EVENTS: GameEvent[] = [
         id: "steal_glow",
         label: "Robar su bioluminiscencia",
         description:
-          "Brillas con fuerza (+0.5 Glow), pero el remordimiento te resta eco (-150 Eco).",
+          "Brillas con fuerza (+50% de brillo), pero el remordimiento te resta 150 Eco.",
         effects: { glow: 0.5, eco: -150 },
       },
     ],
@@ -98,7 +98,7 @@ export const ACT_EVENTS: GameEvent[] = [
         id: "listen_song",
         label: "Escuchar el canto",
         description:
-          "Recuperas toda tu salud (0 toxicidad), pero el siguiente bioma empieza con 10s menos.",
+          "Te limpias por completo (toxicidad a 0), pero el siguiente bioma empieza con 10s menos.",
         effects: {
           toxicitySet: 0,
           nextBiomeTimeDelta: -10,
@@ -128,7 +128,7 @@ export const ACT_EVENTS: GameEvent[] = [
         id: "go_around",
         label: "Rodearla",
         description:
-          "El siguiente bioma empieza con 30s menos, pero ganas un pequeño impulso (+5% vel).",
+          "El siguiente bioma empieza con 30s menos, pero ganas un pequeño impulso (+5% velocidad).",
         effects: { speedMultiplier: 1.05, nextBiomeTimeDelta: -30 },
       },
     ],

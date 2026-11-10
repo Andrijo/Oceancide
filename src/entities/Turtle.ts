@@ -1,5 +1,6 @@
 import * as THREE from "three"
 import type { InputState, TurtleStats, WorldBounds } from "@core/types"
+import { addToxicityResistance } from "@core/systems/toxicity"
 
 const BASE_SHELL_COLOR = 0x0a4d20
 const BASE_SKIN_COLOR = 0x61b112
@@ -12,9 +13,6 @@ const GLOW_WHITE = new THREE.Color(0xffffff)
 const HURT_COLOR = new THREE.Color(0xff3b7a)
 const HURT_DURATION = 0.42
 const HURT_FLASH_INTENSITY = 2.2
-
-/** Tope duro de resistencia a la toxicidad (nunca inmunidad total). */
-const TOXICITY_RESISTANCE_CAP = 0.9
 
 /** Curva de respuesta del stick: más resolución cerca del centro, lineal en el teclado. */
 function inputCurve(v: number): number {
@@ -322,11 +320,9 @@ export class Turtle {
 
   /** Suma resistencia con rendimientos decrecientes: cada punto adicional vale menos. */
   public addToxicityResistance(amount: number): void {
-    if (amount <= 0) return
-    const current = this.stats.toxicityResistance
-    this.stats.toxicityResistance = Math.min(
-      TOXICITY_RESISTANCE_CAP,
-      1 - (1 - current) * (1 - amount),
+    this.stats.toxicityResistance = addToxicityResistance(
+      this.stats.toxicityResistance,
+      amount,
     )
   }
 

@@ -84,9 +84,7 @@ describe("applyEventEffects", () => {
     const ctx = makeContext()
     ctx.turtle.addGlow(0.9)
 
-    expect(applyEventEffects({ glow: 0.5 }, ctx).summary).toBe(
-      "+0.1 bioluminiscencia",
-    )
+    expect(applyEventEffects({ glow: 0.5 }, ctx).summary).toBe("+10% brillo")
     expect(ctx.turtle.getGlowTarget()).toBe(1)
   })
 
@@ -231,8 +229,8 @@ describe("previewEventEffects", () => {
     ctx.turtle.addGlow(0.9)
 
     expect(previewEventEffects({ glow: 0.5 }, ctx).lines[0]).toEqual({
-      label: "Bioluminiscencia",
-      value: "+0.1 (0.9 → 1.0)",
+      label: "Brillo",
+      value: "+10% (90% → 100%)",
       tone: "positive",
       noEffect: false,
     })
@@ -243,7 +241,7 @@ describe("previewEventEffects", () => {
     ctx.turtle.addGlow(1)
 
     expect(previewEventEffects({ glow: 0.5 }, ctx).lines[0]).toEqual({
-      label: "Bioluminiscencia",
+      label: "Brillo",
       value: "Sin efecto",
       tone: "neutral",
       noEffect: true,
