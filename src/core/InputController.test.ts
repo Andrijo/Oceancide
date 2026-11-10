@@ -32,7 +32,7 @@ function makeActions(
     togglePause: vi.fn(),
     setPaused: vi.fn(),
     backflip: vi.fn(),
-    abandonRun: vi.fn(),
+    requestAbandon: vi.fn(),
     build: vi.fn(),
     dash: vi.fn(),
     setLookBack: vi.fn(),
@@ -218,23 +218,23 @@ describe("InputController.handleKeyDown", () => {
     expect(actions.backflip).not.toHaveBeenCalled()
   })
 
-  it("R abandona solo si se está jugando y no es auto-repeat", () => {
+  it("R pide abandonar (pausa con confirmación) solo si se está jugando y no es auto-repeat", () => {
     const actions = makeActions()
     const controller = new InputController(makeInput(), actions)
 
     controller.handleKeyDown(keyEvent("KeyR"))
     controller.handleKeyDown(keyEvent("KeyR", { repeat: true }))
 
-    expect(actions.abandonRun).toHaveBeenCalledOnce()
+    expect(actions.requestAbandon).toHaveBeenCalledOnce()
   })
 
-  it("R no abandona desde el hub", () => {
+  it("R no pide abandonar desde el hub", () => {
     const actions = makeActions({ isPlaying: () => false })
     const controller = new InputController(makeInput(), actions)
 
     controller.handleKeyDown(keyEvent("KeyR"))
 
-    expect(actions.abandonRun).not.toHaveBeenCalled()
+    expect(actions.requestAbandon).not.toHaveBeenCalled()
   })
 
   it("B construye un filtro", () => {
