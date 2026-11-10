@@ -87,7 +87,7 @@ La Conciencia Ecológica sobrante se guarda como progreso persistente en el **Re
 
 ### Avisos y ayuda
 
-La primera vez que pasa cada cosa importante aparece un **aviso contextual** bajo el mensaje central, y no vuelve a salir (se guarda en `MetaState.seenTips`):
+La primera vez que pasa cada cosa importante aparece un **aviso contextual** bajo el mensaje central (en la misma burbuja translúcida teñida con el bioma que usan las reliquias), y no vuelve a salir (se guarda en `MetaState.seenTips`):
 
 | Aviso | Cuándo salta |
 | --- | --- |
@@ -100,7 +100,7 @@ La primera vez que pasa cada cosa importante aparece un **aviso contextual** baj
 
 Los avisos salen de uno en uno, con un respiro entre ellos, y se congelan con la pausa. Los textos y la cola están en `src/core/tips.ts`.
 
-La pantalla **Cómo jugar** (desde el Refugio y desde la pausa) reúne el objetivo, los controles de teclado y táctiles y una ficha por cada tipo de desecho, peligro y herramienta. Ahí mismo se pueden **desactivar los avisos** o **volver a mostrarlos**.
+La pantalla **Cómo jugar** (desde el Refugio y desde la pausa) reúne el objetivo, los controles de teclado y táctiles, una ficha por cada tipo de desecho, peligro y herramienta, y un glosario de los atributos de las cartas. Ahí mismo se pueden **desactivar los avisos** o **volver a mostrarlos**.
 
 ### Dash de giro
 
@@ -128,6 +128,27 @@ Las cartas de **caos** no son mejoras seguras: pueden duplicar o partir tu eco, 
 La **resistencia a la toxicidad** se acumula con **rendimientos decrecientes**, venga de cartas o de mejoras del Refugio: cada punto adicional vale menos que el anterior, así que apilar caparazones nunca te vuelve inmune (tope del 90%).
 
 Cada carta declara sus efectos (`effects` en `src/cards/CardPool.ts`) y de ahí salen tanto el valor que se muestra como lo que se aplica, así que ninguna carta hace algo que no enseñe. En la elección, cada tramo del valor se pinta según su signo: verde lo que mejora y rojo lo que penaliza.
+
+Debajo de la descripción, cada carta muestra una **vista previa "antes → después"** con los valores actuales de la tortuga (por ejemplo, `Velocidad 9.0 → 9.9`), así que se ve el efecto real de la resistencia con rendimientos decrecientes o de un atributo que ya está en su tope. Las cartas de azar avisan de que su resultado se decide al elegirlas. La vista previa se calcula en `src/cards/BuildStats.ts`, y un test comprueba con todo el mazo que coincide con lo que la carta aplica de verdad.
+
+Las abreviaturas de las cartas corresponden a estos atributos:
+
+| Abreviatura | Atributo | Qué hace |
+| --- | --- | --- |
+| VEL | Velocidad | Lo rápido que nadas. |
+| RES | Resistencia | Frena la toxicidad pasiva (rendimientos decrecientes, tope 90%). |
+| RADIO | Radio de recogida | Distancia a la que recoges un desecho. |
+| FILTRO | Filtros | Esferas filtradoras activas a la vez. |
+| ECO | Eco por desecho | Multiplica el eco de cada desecho. |
+| DASH | Fuerza del dash | Empujón de velocidad del giro de 360°. |
+| ECO/S | Eco por filtro | Eco por segundo de cada esfera activa. |
+| REVIVIR | Revivir | Veces que vuelves si la toxicidad se llena. |
+| BRILLO | Brillo | Luz propia de la tortuga. |
+| MEDUSAS | Medusas extra | Medusas añadidas a cada zona. |
+| TOX PASIVA | Toxicidad pasiva | Multiplica la subida pasiva de toxicidad. |
+| TOX | Toxicidad | Cambio inmediato en la calavera. |
+
+En la **pausa**, el panel **Tu tortuga** enseña el valor actual de cada atributo con su explicación, las cartas elegidas (con el color de su rareza) y las reliquias encontradas.
 
 | Carta                     | Rareza           | Efecto                            | Descripción                                                |
 | ------------------------- | ---------------- | --------------------------------- | ---------------------------------------------------------- |
@@ -191,7 +212,7 @@ Cada carta declara sus efectos (`effects` en `src/cards/CardPool.ts`) y de ahí 
 
 A partir de la **primera carta elegida**, cada bioma esconde una **reliquia** dentro de uno de sus desechos. Un pequeño **destello dorado** que gira sobre él lo delata: hay que buscarlo entre la niebla.
 
-- Al recoger ese desecho —a mano o con una esfera filtradora— la reliquia entrega su **recompensa** y aparece un aviso con su nombre, un texto de ambientación y lo que has ganado.
+- Al recoger ese desecho —a mano o con una esfera filtradora— la reliquia entrega su **recompensa** y aparece un aviso con su nombre, un texto de ambientación y lo que has ganado. El aviso es una **burbuja translúcida** teñida con el color del agua y el acento del bioma en el que estás.
 - Las recompensas son siempre positivas y usan los mismos efectos declarativos que los eventos: Eco, menos toxicidad, radio, velocidad, un filtro extra, brillo o tiempo para el siguiente bioma.
 - Si avanzas de zona sin encontrarla, se pierde. No se repiten dentro de una run hasta haberlas encontrado todas.
 - Qué reliquia toca y en qué desecho se esconde sale de la semilla de la run.
@@ -268,6 +289,7 @@ Los controles táctiles aparecen al detectar el primer toque y se colocan donde 
 - **Cluster de peligro** (arriba al centro): agrupa la **calavera de toxicidad** y el **temporizador de bioma** para que las señales de supervivencia no compitan con los recursos. El temporizador pasa de blanco a naranja y a rojo, y muestra **PRESIÓN** al agotarse.
 - **Barra de energía del impulso** (abajo, centrada): energía disponible para el impulso; se oculta cuando está llena y se tiñe de naranja o rojo al agotarse.
 - **Botón de pausa** en la esquina superior derecha.
+- **Revivir disponibles**: un corazón con el número de revivir que quedan, bajo la calavera; solo aparece cuando tienes alguno.
 - **Avisos contextuales**: consejos de una sola vez bajo el mensaje central (ver *Avisos y ayuda*).
 
 ## Visuales y ambientación
@@ -352,7 +374,7 @@ La lógica pura y los controladores se prueban con **Vitest** en entorno `node` 
 - `src/core/InputController.ts` y `src/core/CameraRig.ts`.
 - `src/core/MetaState.ts`, `src/core/rng.ts` y `src/core/tips.ts`.
 - `src/events/EventEffects.ts` y `src/events/EventPool.ts`.
-- `src/cards/CardManager.ts`.
+- `src/cards/CardManager.ts` y `src/cards/BuildStats.ts`.
 - `src/tycoon/UpgradeManager.ts` y `src/tycoon/Upgrades.ts`.
 
 También hay tests de comportamiento para `BiomeProps`, el catálogo de desechos, `EnemyManager` y la ralentización de `Turtle`. Esos archivos no forman parte del porcentaje de cobertura, que se reserva para lógica pura y controladores.
@@ -412,6 +434,8 @@ oceancide/
     ├── cards/            # Sistema de cartas roguelike
     │   ├── Card.ts             # Tipos de carta y estado de la run
     │   ├── CardManager.ts      # Reparto y aplicación de cartas
+    │   ├── CardEffects.ts      # Efectos declarativos: texto, color y aplicación
+    │   ├── BuildStats.ts       # Atributos de la build, vista previa y panel de pausa
     │   └── CardPool.ts         # Mazo de cartas y pesos por rareza
     ├── events/           # Eventos narrativos con opciones
     │   ├── EventPool.ts        # Catálogo de eventos

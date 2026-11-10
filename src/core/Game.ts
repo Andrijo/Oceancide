@@ -23,6 +23,7 @@ import {
 import { TouchControls } from "@ui/TouchControls"
 import { CardManager } from "@cards/CardManager"
 import { createRunState, type RunState } from "@cards/Card"
+import { buildStatLines, previewCard, readBuild } from "@cards/BuildStats"
 import { Debris } from "@entities/Debris"
 import { BubbleTrail } from "@entities/BubbleTrail"
 import { BiomeTransition } from "@world/BiomeTransition"
@@ -65,7 +66,7 @@ import {
 } from "@core/systems/progression"
 import { UpgradeManager } from "@/tycoon/UpgradeManager"
 import { ACT_EVENTS } from "@/events/EventPool"
-import { pickRelic, type Relic } from "@/relics/RelicPool"
+import { RELICS, pickRelic, type Relic } from "@/relics/RelicPool"
 import {
   applyEventEffects,
   previewEventEffects,
@@ -624,11 +625,13 @@ export class Game {
   private showTip(id: TipId): void {
     this.meta.seenTips.push(id)
     this.saveManager.save(this.meta)
+    const biome = this.biomeGenerator.getBiome()
     this.uiManager.showTip(
       tipText(id, {
         touch: this.touchControls.isActive(),
         filterCost: STRUCTURES.filter.cost,
       }),
+      { water: biome.waterColor, accent: biome.accentColor },
     )
   }
 
@@ -718,7 +721,17 @@ export class Game {
           biomeName: this.biomeGenerator.getBiomeName(),
           depth: this.biomeGenerator.getBiome().depth,
           ecoAwareness: this.state.ecoAwareness,
-          cardsCount: this.runState.cards.length,
+          stats: buildStatLines(
+            readBuild({
+              turtle: this.turtle,
+              run: this.runState,
+              state: this.state,
+            }),
+          ),
+          cards: this.runState.cards,
+          relics: this.runState.relics.map(
+            (id) => RELICS.find((relic) => relic.id === id)?.name ?? id,
+          ),
         },
       )
     } else {
@@ -1036,6 +1049,7 @@ export class Game {
     )
 
     this.uiManager.updateUI(this.state, deltaTime)
+    this.uiManager.updateRevives(this.runState.reviveCharges)
     this.updateBuildHud()
     this.updateTips(deltaTime)
 
@@ -1106,7 +1120,13 @@ export class Game {
     this.uiManager.announce(
       `Reliquia encontrada: ${relic.name}. ${relic.description} ${result.summary}`,
     )
-    this.uiManager.showRelicToast(relic.name, relic.description, result.summary)
+    const biome = this.biomeGenerator.getBiome()
+    this.uiManager.showRelicToast(
+      relic.name,
+      relic.description,
+      result.summary,
+      { water: biome.waterColor, accent: biome.accentColor },
+    )
   }
 
   private openCardChoice(notice?: string): void {
@@ -1118,6 +1138,11 @@ export class Game {
 
     const rng = new Rng(deriveSeed(this.runSeed, this.biomeIndex + 1000))
     const choices = this.cardManager.rollChoices(3, rng)
+    const build = readBuild({
+      turtle: this.turtle,
+      run: this.runState,
+      state: this.state,
+    })
 
     this.screens.showCardChoice(
       choices,
@@ -1140,6 +1165,7 @@ export class Game {
         this.advanceBiome()
       },
       notice,
+      (card) => previewCard(card, build),
     )
   }
 

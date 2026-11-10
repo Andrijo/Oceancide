@@ -14,6 +14,11 @@ import {
   type CardTone,
 } from "@cards/CardEffects"
 import { CARD_POOL } from "@cards/CardPool"
+import {
+  previewLineText,
+  type BuildStatLine,
+  type CardPreviewLine,
+} from "@cards/BuildStats"
 import { revealCards } from "@ui/animations"
 import { PARAGRAPH_FONT, TITLE_FONT } from "@ui/fonts"
 import { MIST } from "@ui/palette"
@@ -49,7 +54,12 @@ export interface RunInfo {
   biomeName: string
   depth: number
   ecoAwareness: number
-  cardsCount: number
+  /** Atributos actuales de la tortuga, listos para pintar. */
+  stats: BuildStatLine[]
+  /** Cartas elegidas en esta run, en orden. */
+  cards: Card[]
+  /** Nombres de las reliquias encontradas, en orden. */
+  relics: string[]
 }
 
 const RARITY_COLORS: Record<CardRarity, string> = {
@@ -92,6 +102,7 @@ const HUD_IDS = [
   "build-hud",
   "pause-btn",
   "tip-toast",
+  "revive-hud",
 ]
 
 const OUTCOME_TITLES: Record<RunOutcome, string> = {
@@ -911,6 +922,7 @@ export class ScreenManager {
     cards: Card[],
     onPick: (card: Card) => void,
     notice?: string,
+    getPreview?: (card: Card) => CardPreviewLine[],
   ): void {
     const pick = (index: number) => {
       if (!this.cardChoiceActive) return
@@ -932,7 +944,12 @@ export class ScreenManager {
     const cardButtons: HTMLElement[] = []
 
     cards.forEach((card, i) => {
-      const btn = this.makeCardButton(card, i, () => pick(i))
+      const btn = this.makeCardButton(
+        card,
+        i,
+        () => pick(i),
+        getPreview?.(card),
+      )
       cardButtons.push(btn)
       row.append(btn)
     })
@@ -969,6 +986,10 @@ export class ScreenManager {
     content.append(title)
 
     if (runInfo) {
+      // Con la build el contenido puede no caber: centrado solo si cabe.
+      content.style.justifyContent = "safe center"
+      title.style.marginBottom = "8px"
+
       const zoneLabel = `${runInfo.biomeIndex + 1}. ${runInfo.biomeName}`
       content.append(
         this.makeBentoGrid([
@@ -976,10 +997,9 @@ export class ScreenManager {
           { label: "Profundidad", value: `${runInfo.depth} m` },
           {
             label: "Eco acumulado",
-            value: runInfo.ecoAwareness.toLocaleString("es"),
+            value: Math.floor(runInfo.ecoAwareness).toLocaleString("es"),
             highlight: true,
           },
-          { label: "Cartas elegidas", value: String(runInfo.cardsCount) },
         ]),
       )
     }
@@ -1048,8 +1068,83 @@ export class ScreenManager {
     )
     helpBtn.style.maxWidth = "640px"
 
-    content.append(buttons, helpBtn)
+    content.append(buttons)
+    if (runInfo) content.append(this.makeBuildPanel(runInfo))
+    content.append(helpBtn)
     this.open(root, onResume)
+  }
+
+  /** Panel "Tu tortuga": atributos actuales, cartas y reliquias de la run. */
+  private makeBuildPanel(runInfo: RunInfo): HTMLElement {
+    const node = <K extends keyof HTMLElementTagNameMap>(
+      tag: K,
+      className: string,
+      text?: string,
+    ): HTMLElementTagNameMap[K] => {
+      const element = document.createElement(tag)
+      element.className = className
+      if (text !== undefined) element.textContent = text
+      return element
+    }
+
+    const panel = node("section", "build-panel")
+    panel.setAttribute("aria-label", "Tu tortuga")
+
+    const stats = node("div", "build-stats")
+    for (const stat of runInfo.stats) {
+      const cell = node("div", "build-stat")
+      if (stat.warning) cell.classList.add("build-stat-warning")
+      cell.append(
+        node("div", "build-stat-label", stat.label),
+        node("div", "build-stat-value", stat.value),
+        node("div", "build-stat-description", stat.description),
+      )
+      stats.append(cell)
+    }
+
+    panel.append(
+      node("h2", "build-heading", "Tu tortuga"),
+      stats,
+      node("h3", "build-subheading", `Cartas (${runInfo.cards.length})`),
+    )
+
+    if (runInfo.cards.length === 0) {
+      panel.append(
+        node(
+          "p",
+          "build-empty",
+          "Aún no has elegido ninguna: limpia la zona para ganar la primera.",
+        ),
+      )
+    } else {
+      const chips = node("div", "build-chips")
+      for (const card of runInfo.cards) {
+        const chip = node("div", "build-chip")
+        chip.style.setProperty("--chip-color", RARITY_COLORS[card.rarity])
+        chip.title = `${RARITY_LABELS[card.rarity]} · ${card.description}`
+        chip.append(
+          node("span", "build-chip-name", card.name),
+          node("span", "build-chip-value", cardValueText(card)),
+        )
+        chips.append(chip)
+      }
+      panel.append(chips)
+    }
+
+    if (runInfo.relics.length > 0) {
+      const chips = node("div", "build-chips")
+      for (const relic of runInfo.relics) {
+        const chip = node("div", "build-chip")
+        chip.append(node("span", "build-chip-name", relic))
+        chips.append(chip)
+      }
+      panel.append(
+        node("h3", "build-subheading", `Reliquias (${runInfo.relics.length})`),
+        chips,
+      )
+    }
+
+    return panel
   }
 
   private makeWindowFrame(): { root: HTMLElement; content: HTMLElement } {
@@ -1549,6 +1644,7 @@ export class ScreenManager {
     card: Card,
     index: number,
     onClick: () => void,
+    preview?: CardPreviewLine[],
   ): HTMLElement {
     const accent = RARITY_COLORS[card.rarity]
     const bg = RARITY_BACKGROUNDS[card.rarity]
@@ -1558,7 +1654,7 @@ export class ScreenManager {
 
     const btn = el(
       "button",
-      `position: relative; flex: 0 1 clamp(170px, 26vw, 240px); height: clamp(260px, 38vw, 320px);
+      `position: relative; flex: 0 1 clamp(170px, 26vw, 240px); min-height: clamp(260px, 38vw, 320px);
       padding: 0; display: flex; flex-direction: column; cursor: pointer;
       background: ${isUltra ? "#0f0f14" : bg}; border: 6px solid ${isUltra ? "#94a3b8" : accent};
       border-radius: 16px; overflow: hidden; transition: transform 160ms ease, filter 160ms ease;`,
@@ -1572,9 +1668,13 @@ export class ScreenManager {
       btn.style.animation = "chaosGlitch 2.6s infinite steps(2, end)"
     }
 
+    const previewText =
+      preview && preview.length > 0
+        ? ` ${preview.map(previewLineText).join(". ")}.`
+        : ""
     btn.setAttribute(
       "aria-label",
-      `${label}: ${card.name}. ${cardValueText(card)}. ${card.description}`,
+      `${label}: ${card.name}. ${cardValueText(card)}. ${card.description}${previewText}`,
     )
 
     btn.addEventListener("mouseenter", () => {
@@ -1649,6 +1749,45 @@ export class ScreenManager {
     )
 
     body.append(name, value, desc)
+
+    // Vista previa "antes → después" con los valores actuales de la tortuga.
+    if (preview) {
+      const previewBox = document.createElement("div")
+      previewBox.className = "card-preview"
+      previewBox.setAttribute("aria-hidden", "true") // va en el aria-label
+
+      for (const line of preview) {
+        const row = document.createElement("div")
+        row.className = `card-preview-row card-preview-${line.tone}`
+
+        const rowLabel = document.createElement("span")
+        rowLabel.className = "card-preview-label"
+        rowLabel.textContent = line.label
+
+        const rowValue = document.createElement("span")
+        rowValue.className = "card-preview-value"
+        if (line.noEffect) {
+          rowValue.textContent = `${line.before} (sin cambio)`
+        } else {
+          const after = document.createElement("span")
+          after.className = "card-preview-after"
+          after.textContent = line.after
+          rowValue.append(`${line.before} → `, after)
+        }
+
+        row.append(rowLabel, rowValue)
+        previewBox.append(row)
+      }
+
+      if (card.random) {
+        const note = document.createElement("div")
+        note.className = "card-preview-note"
+        note.textContent = "El resultado se decide al elegirla"
+        previewBox.append(note)
+      }
+
+      body.append(previewBox)
+    }
     btn.append(keyBadge, rarityArea, body)
 
     return btn
