@@ -39,6 +39,7 @@ import {
 } from "@core/MetaState"
 import { Rng, deriveSeed, randomSeed } from "@core/rng"
 import { InputController } from "@core/InputController"
+import { TIP_TIME_LOW_RATIO, TipQueue, tipText, type TipId } from "@core/tips"
 import { CameraRig } from "@core/CameraRig"
 import {
   BIOME_ORDER,
@@ -81,6 +82,11 @@ const RELIC_SEED_SALT = 3000
 const BUILD_DISTANCE = 4
 const DEEP_POINT_LIGHT_BOOST = 25
 const BLOOM_MAX_STRENGTH = 0.5
+
+// Avisos de proximidad: se comprueban cada cierto tiempo, no en cada frame.
+const TIP_CHECK_INTERVAL = 0.3
+const TIP_DEBRIS_NEAR_DISTANCE = 14
+const TIP_LEAK_SEEN_DISTANCE = 22
 
 type Screen = "hub" | "run" | "summary"
 
@@ -134,6 +140,9 @@ export class Game {
   private saveManager = new SaveManager()
   private meta: MetaState
   private screens: ScreenManager
+  private touchControls: TouchControls
+  private tips: TipQueue
+  private tipCheckTimer = 0
   private devMenu?: DevMenu
   private perfOverlay?: PerfOverlay
 
@@ -202,6 +211,27 @@ export class Game {
         this.showHub()
       },
       onSaveMeta: () => this.saveManager.save(this.meta),
+      getHelpState: () => ({
+        touch: this.touchControls.isActive(),
+        tipsEnabled: this.meta.tipsEnabled,
+        seenTips: this.meta.seenTips.length,
+      }),
+      onSetTipsEnabled: (enabled) => {
+        this.meta.tipsEnabled = enabled
+        if (!enabled) this.tips.clear()
+        this.saveManager.save(this.meta)
+      },
+      onResetTips: () => {
+        this.meta.seenTips = []
+        this.saveManager.save(this.meta)
+      },
+    })
+
+    this.tips = new TipQueue({
+      isSeen: (id) => this.meta.seenTips.includes(id),
+      isEnabled: () => this.meta.tipsEnabled,
+      onShow: (id) => this.showTip(id),
+      onHide: () => this.uiManager.hideTip(),
     })
 
     this.state = {
@@ -242,7 +272,7 @@ export class Game {
       },
     })
 
-    new TouchControls(this.input, {
+    this.touchControls = new TouchControls(this.input, {
       onBuild: () => this.tryBuild("filter"),
       onLookBack: (active) => {
         this.cameraRig.setLookBack(active)
@@ -590,6 +620,75 @@ export class Game {
     )
   }
 
+  /** Pinta un aviso contextual y lo da por visto para que no se repita. */
+  private showTip(id: TipId): void {
+    this.meta.seenTips.push(id)
+    this.saveManager.save(this.meta)
+    this.uiManager.showTip(
+      tipText(id, {
+        touch: this.touchControls.isActive(),
+        filterCost: STRUCTURES.filter.cost,
+      }),
+    )
+  }
+
+  /** Dispara los avisos que dependen del estado de la partida y avanza la cola. */
+  private updateTips(deltaTime: number): void {
+    if (
+      this.biomeTimeLimit > 0 &&
+      this.biomeTimeRemaining / this.biomeTimeLimit <= TIP_TIME_LOW_RATIO
+    ) {
+      this.tips.trigger("time_low")
+    }
+
+    if (
+      this.state.ecoAwareness >= STRUCTURES.filter.cost &&
+      this.structures.getActiveCount() < this.turtle.stats.filterCapacity
+    ) {
+      this.tips.trigger("filter_affordable")
+    }
+
+    this.tipCheckTimer -= deltaTime
+    if (this.tipCheckTimer <= 0) {
+      this.tipCheckTimer = TIP_CHECK_INTERVAL
+      this.checkProximityTips()
+    }
+
+    this.tips.update(deltaTime)
+  }
+
+  /** Primer desecho cerca y primera fuga a la vista (en pantalla y a tiro). */
+  private checkProximityTips(): void {
+    let wantsDebris = this.tips.wants("debris_near")
+    let wantsLeak = this.tips.wants("leak_seen")
+    if (!wantsDebris && !wantsLeak) return
+
+    const origin = this.turtle.mesh.position
+    const nearSq = TIP_DEBRIS_NEAR_DISTANCE * TIP_DEBRIS_NEAR_DISTANCE
+    const leakSq = TIP_LEAK_SEEN_DISTANCE * TIP_LEAK_SEEN_DISTANCE
+
+    for (const debris of this.biomeGenerator.getDebrisList()) {
+      if (debris.removed || debris.claimed) continue
+
+      const leak = debris.hazard === "lixivia"
+      const distanceSq = debris.mesh.position.distanceToSquared(origin)
+      const debrisHit = wantsDebris && distanceSq <= nearSq
+      const leakHit = wantsLeak && leak && distanceSq <= leakSq
+      if (!debrisHit && !leakHit) continue
+      if (!this.projectToScreen(debris.mesh.position)) continue
+
+      if (debrisHit) {
+        this.tips.trigger("debris_near")
+        wantsDebris = false
+      }
+      if (leakHit) {
+        this.tips.trigger("leak_seen")
+        wantsLeak = false
+      }
+      if (!wantsDebris && !wantsLeak) return
+    }
+  }
+
   private togglePause(): void {
     this.setPaused(!this.paused)
   }
@@ -641,6 +740,7 @@ export class Game {
     this.runSeed = randomSeed()
     this.pendingTimeDelta = 0
     this.pendingToxicityFloor = null
+    this.tips.clear()
     this.loadBiome(0)
     // El hub reutiliza el bioma 0 como fondo, pero no debe quedarse con fauna
     // hostil congelada detrás del menú.
@@ -674,6 +774,8 @@ export class Game {
     this.toxicityScaleMult = bonuses.toxScaleMult
 
     this.uiManager.resetRunHud()
+    this.tips.clear()
+    this.tipCheckTimer = 0
 
     this.screens.hide()
     this.loadBiome(0)
@@ -689,6 +791,7 @@ export class Game {
     this.state.isRunning = false
     this.inputController.clear()
     this.enemyManager.clear()
+    this.tips.clear()
 
     const { base, bonus } = computeEco(this.state.ecoAwareness, outcome)
     const summary: RunSummary = {
@@ -724,9 +827,9 @@ export class Game {
 
     const started = this.transition.play(async () => {
       this.loadBiome(next)
-      const banner = this.biomeBanner()
-      this.transition.setLabel(banner)
-      this.uiManager.showMessage(banner)
+      // La transición ya rotula el bioma y su profundidad: no hace falta
+      // repetirlo con un mensaje al retirarse.
+      this.transition.setLabel(this.biomeBanner())
       // Compila los shaders del bioma nuevo con la pantalla aún en negro,
       // para que el tirón no se vea al retirarse la transición.
       try {
@@ -837,6 +940,7 @@ export class Game {
       this.turtle.applySlow(2, 0.5)
       this.turtle.playHurt()
       this.uiManager.showMessage("¡MEDUSA!", 1000)
+      this.tips.trigger("jellyfish_hit")
       if (this.state.toxicity >= 100 && !this.tryKill()) return
     }
 
@@ -892,6 +996,7 @@ export class Game {
       }
 
       if (eco > 0) this.showFloatingEco(debris, eco)
+      if (debris.shattered) this.tips.trigger("fragile_broken")
       if (debris.relic) this.claimRelic(debris.relic)
     }
 
@@ -932,6 +1037,7 @@ export class Game {
 
     this.uiManager.updateUI(this.state, deltaTime)
     this.updateBuildHud()
+    this.updateTips(deltaTime)
 
     if (this.state.zoneProgress >= 100) {
       if (

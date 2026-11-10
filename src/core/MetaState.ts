@@ -3,6 +3,7 @@
 
 import type { RunOutcome, RunSummary } from "@core/types"
 import { UPGRADES } from "@tycoon/Upgrades"
+import { isTipId, type TipId } from "@core/tips"
 
 export const META_VERSION = 1
 const STORAGE_KEY = "oceancide.meta"
@@ -30,6 +31,10 @@ export interface MetaState {
   runsCompleted: number
   totalDebris: number
   upgrades: Record<string, number>
+  /** Avisos contextuales que el jugador ya vio (no se repiten). */
+  seenTips: TipId[]
+  /** Avisos contextuales activados. */
+  tipsEnabled: boolean
 }
 
 export function createDefaultMeta(): MetaState {
@@ -42,6 +47,8 @@ export function createDefaultMeta(): MetaState {
     runsCompleted: 0,
     totalDebris: 0,
     upgrades: {},
+    seenTips: [],
+    tipsEnabled: true,
   }
 }
 
@@ -86,6 +93,12 @@ export function sanitizeMeta(raw: Record<string, unknown>): MetaState {
     }
   }
 
+  // Los campos añadidos después de la v1 con un valor por defecto seguro no
+  // necesitan migración: un guardado antiguo simplemente no los trae.
+  const seenTips = Array.isArray(raw.seenTips)
+    ? [...new Set(raw.seenTips.filter(isTipId))]
+    : defaults.seenTips
+
   return {
     version: META_VERSION,
     ecoPoints: finiteNumber(raw.ecoPoints, defaults.ecoPoints),
@@ -99,6 +112,11 @@ export function sanitizeMeta(raw: Record<string, unknown>): MetaState {
     runsCompleted: finiteNumber(raw.runsCompleted, defaults.runsCompleted),
     totalDebris: finiteNumber(raw.totalDebris, defaults.totalDebris),
     upgrades,
+    seenTips,
+    tipsEnabled:
+      typeof raw.tipsEnabled === "boolean"
+        ? raw.tipsEnabled
+        : defaults.tipsEnabled,
   }
 }
 

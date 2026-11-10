@@ -15,6 +15,7 @@ export default mergeConfig(
         include: [
           "src/core/MetaState.ts",
           "src/core/rng.ts",
+          "src/core/tips.ts",
           "src/core/InputController.ts",
           "src/core/CameraRig.ts",
           "src/core/systems/**/*.ts",

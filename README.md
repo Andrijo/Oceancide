@@ -85,6 +85,23 @@ Cada desecho tiene un **valor ecológico** (derivado de su toxicidad) que se sum
 
 La Conciencia Ecológica sobrante se guarda como progreso persistente en el **Refugio**.
 
+### Avisos y ayuda
+
+La primera vez que pasa cada cosa importante aparece un **aviso contextual** bajo el mensaje central, y no vuelve a salir (se guarda en `MetaState.seenTips`):
+
+| Aviso | Cuándo salta |
+| --- | --- |
+| Recoger desechos | Primer desecho cerca y en pantalla. |
+| Fugas | Primera fuga (`lixivia`) a la vista. |
+| Frágiles | Primer desecho frágil roto por llegar con impulso. |
+| Medusas | Primer golpe de medusa. |
+| Tiempo | Cuando queda el 30% del tiempo del bioma. |
+| Esfera filtradora | Primera vez que puedes pagar una (nombra la tecla `B` o el botón táctil). |
+
+Los avisos salen de uno en uno, con un respiro entre ellos, y se congelan con la pausa. Los textos y la cola están en `src/core/tips.ts`.
+
+La pantalla **Cómo jugar** (desde el Refugio y desde la pausa) reúne el objetivo, los controles de teclado y táctiles y una ficha por cada tipo de desecho, peligro y herramienta. Ahí mismo se pueden **desactivar los avisos** o **volver a mostrarlos**.
+
 ### Dash de giro
 
 Con `Q` / `E` la tortuga realiza un giro completo de 360° en menos de un segundo. Al iniciarlo recibe un **impulso temporal de velocidad** (hasta ×1.6) que decae de forma exponencial, y el giro fuerza un avance mínimo aunque sueltes las teclas: úsalo para encadenar giros y desplazarte rápido. El HUD muestra el multiplicador activo como `DASH ×N`.
@@ -251,6 +268,7 @@ Los controles táctiles aparecen al detectar el primer toque y se colocan donde 
 - **Cluster de peligro** (arriba al centro): agrupa la **calavera de toxicidad** y el **temporizador de bioma** para que las señales de supervivencia no compitan con los recursos. El temporizador pasa de blanco a naranja y a rojo, y muestra **PRESIÓN** al agotarse.
 - **Barra de energía del impulso** (abajo, centrada): energía disponible para el impulso; se oculta cuando está llena y se tiñe de naranja o rojo al agotarse.
 - **Botón de pausa** en la esquina superior derecha.
+- **Avisos contextuales**: consejos de una sola vez bajo el mensaje central (ver *Avisos y ayuda*).
 
 ## Visuales y ambientación
 
@@ -284,7 +302,7 @@ Al terminar cada run se muestra un resumen (zona alcanzada, desechos, duración,
 - **Runs jugadas / completadas**.
 - **Total de desechos** recolectados.
 
-Completar todos los biomas de la run otorga un **bono del 25%** sobre la conciencia obtenida en la run. Desde el Refugio puedes empezar una nueva inmersión o eliminar el progreso guardado.
+Completar todos los biomas de la run otorga un **bono del 25%** sobre la conciencia obtenida en la run. Desde el Refugio puedes empezar una nueva inmersión, abrir **Cómo jugar** o eliminar el progreso guardado. El guardado también recuerda qué avisos has visto y si están activados.
 
 ### Reproducir una run
 
@@ -332,7 +350,7 @@ La lógica pura y los controladores se prueban con **Vitest** en entorno `node` 
 
 - `src/core/systems/*`: toxicidad, tiempo de bioma, progreso y revives.
 - `src/core/InputController.ts` y `src/core/CameraRig.ts`.
-- `src/core/MetaState.ts` y `src/core/rng.ts`.
+- `src/core/MetaState.ts`, `src/core/rng.ts` y `src/core/tips.ts`.
 - `src/events/EventEffects.ts` y `src/events/EventPool.ts`.
 - `src/cards/CardManager.ts`.
 - `src/tycoon/UpgradeManager.ts` y `src/tycoon/Upgrades.ts`.
@@ -370,6 +388,7 @@ oceancide/
     │   ├── RenderPipeline.ts   # Tonemapping + bloom dinámico
     │   ├── MetaState.ts        # Progreso persistente (Refugio) y guardado
     │   ├── rng.ts              # Generador pseudoaleatorio con semilla
+    │   ├── tips.ts             # Avisos contextuales: textos y cola
     │   ├── systems/            # Fórmulas puras y testeables
     │   │   ├── toxicity.ts     # Toxicidad pasiva, entrada y limpieza
     │   │   └── progression.ts  # Tiempo de bioma, progreso y revives
@@ -402,7 +421,8 @@ oceancide/
     │   └── UpgradeManager.ts   # Compra y aplicación de mejoras
     └── ui/               # Interfaz y controles
         ├── UIManager.ts        # HUD, números flotantes, calavera y mensajes
-        ├── ScreenManager.ts    # Menús (hub, resumen, pausa, eventos y elección de cartas)
+        ├── ScreenManager.ts    # Menús (hub, resumen, pausa, ayuda, eventos y elección de cartas)
+        ├── HowToPlay.ts        # Contenido de la pantalla "Cómo jugar"
         ├── TouchControls.ts    # Controles táctiles (joysticks)
         └── DevMenu.ts          # Menú de desarrollo (solo en DEV o con ?dev)
 ```

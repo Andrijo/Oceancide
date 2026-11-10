@@ -17,6 +17,7 @@ import { CARD_POOL } from "@cards/CardPool"
 import { revealCards } from "@ui/animations"
 import { PARAGRAPH_FONT, TITLE_FONT } from "@ui/fonts"
 import { MIST } from "@ui/palette"
+import { createHowToPlayBody } from "@ui/HowToPlay"
 import { UPGRADES } from "@/tycoon/Upgrades"
 import { UpgradeManager } from "@/tycoon/UpgradeManager"
 import { type GameEvent, type EventOption } from "@/events/EventPool"
@@ -28,6 +29,19 @@ export interface ScreenCallbacks {
   onReturnToHub(): void
   onResetProgress(): void
   onSaveMeta(): void
+  /** Estado que necesita la pantalla "Cómo jugar". */
+  getHelpState(): HelpState
+  onSetTipsEnabled(enabled: boolean): void
+  /** Olvida los avisos vistos para que vuelvan a salir. */
+  onResetTips(): void
+}
+
+export interface HelpState {
+  /** El jugador usa los controles táctiles. */
+  touch: boolean
+  tipsEnabled: boolean
+  /** Cuántos avisos ha visto ya. */
+  seenTips: number
 }
 
 export interface RunInfo {
@@ -77,6 +91,7 @@ const HUD_IDS = [
   "touch-controls",
   "build-hud",
   "pause-btn",
+  "tip-toast",
 ]
 
 const OUTCOME_TITLES: Record<RunOutcome, string> = {
@@ -426,22 +441,43 @@ export class ScreenManager {
 
     actionsRow.append(secondary, primary)
 
-    // Botón de Mejoras (debajo de la fila)
+    // Fila secundaria (debajo de la principal): mejoras y ayuda
+    const secondaryRow = el(
+      "div",
+      `display: flex;
+      align-items: stretch;
+      gap: 12px;
+      width: 100%;
+      max-width: 640px;
+      margin-top: 8px;`,
+    )
+
     const upgradesBtn = this.makeGhostAction(
       "Mejoras",
       () => this.showUpgrades(meta, () => this.showHub(meta)),
       "upgrade",
       true,
     )
-    upgradesBtn.style.marginTop = "8px"
-    upgradesBtn.style.maxWidth = "400px"
+    upgradesBtn.style.flex = "1 1 0"
+    upgradesBtn.style.width = "auto"
+
+    const helpBtn = this.makeGhostAction(
+      "Cómo jugar",
+      () => this.showHowToPlay("Volver al Refugio", () => this.showHub(meta)),
+      "neutral",
+      true,
+    )
+    helpBtn.style.flex = "1 1 0"
+    helpBtn.style.width = "auto"
+
+    secondaryRow.append(upgradesBtn, helpBtn)
 
     content.append(
       enter(title, 0),
       enter(stats, 180),
       enter(this.makeZoneProgress(bestIndex), 280),
       enter(actionsRow, 380),
-      enter(upgradesBtn, 440),
+      enter(secondaryRow, 440),
     )
 
     root.append(topBar)
@@ -695,6 +731,71 @@ export class ScreenManager {
     this.open(root, onClose)
   }
 
+  /**
+   * Pantalla "Cómo jugar": controles, fichas de desechos y peligros, y el
+   * interruptor de los avisos. `onBack` vuelve a la pantalla que la abrió.
+   */
+  public showHowToPlay(backLabel: string, onBack: () => void): void {
+    const help = this.callbacks.getHelpState()
+    const { root, content } = this.makeWindowFrame()
+    // Contenido largo: empieza arriba para que el scroll llegue al título.
+    content.style.justifyContent = "flex-start"
+
+    const title = this.makeScreenTitle("Cómo jugar")
+    title.style.marginBottom = "4px"
+
+    const reopen = (): void => this.showHowToPlay(backLabel, onBack)
+
+    const tipsRow = el(
+      "div",
+      `display: flex; flex-wrap: wrap; align-items: stretch; gap: 12px;
+      width: 100%; max-width: 960px;`,
+    )
+
+    const tipsToggle = this.makeGhostAction(
+      help.tipsEnabled
+        ? "Avisos en partida: activados"
+        : "Avisos en partida: desactivados",
+      () => {
+        this.callbacks.onSetTipsEnabled(!help.tipsEnabled)
+        reopen()
+      },
+      help.tipsEnabled ? "upgrade" : "neutral",
+      true,
+    )
+    tipsToggle.setAttribute("role", "switch")
+    tipsToggle.setAttribute("aria-checked", String(help.tipsEnabled))
+    tipsToggle.style.flex = "1 1 260px"
+    tipsToggle.style.width = "auto"
+
+    const tipsReset = this.makeGhostAction(
+      "Volver a mostrar los avisos",
+      () => {
+        this.callbacks.onResetTips()
+        reopen()
+      },
+      "neutral",
+      true,
+    )
+    tipsReset.style.flex = "1 1 260px"
+    tipsReset.style.width = "auto"
+    if (help.seenTips === 0) {
+      tipsReset.disabled = true
+      tipsReset.style.opacity = "0.5"
+      tipsReset.style.cursor = "default"
+      tipsReset.style.pointerEvents = "none"
+    }
+
+    tipsRow.append(tipsToggle, tipsReset)
+
+    const backBtn = this.makeGhostAction(backLabel, onBack, "primary", true)
+    backBtn.style.maxWidth = "400px"
+    backBtn.style.flex = "none"
+
+    content.append(title, createHowToPlayBody(help.touch), tipsRow, backBtn)
+    this.open(root, onBack)
+  }
+
   public showSummary(summary: RunSummary, meta: MetaState): void {
     const again = () => this.callbacks.onStartRun()
     const { root, content } = this.makeWindowFrame()
@@ -935,7 +1036,19 @@ export class ScreenManager {
     }
 
     buttons.append(abandonBtn, resumeBtn)
-    content.append(buttons)
+
+    const helpBtn = this.makeGhostAction(
+      "Cómo jugar",
+      () =>
+        this.showHowToPlay("Volver a la pausa", () =>
+          this.showPause(onResume, onAbandon, runInfo),
+        ),
+      "neutral",
+      true,
+    )
+    helpBtn.style.maxWidth = "640px"
+
+    content.append(buttons, helpBtn)
     this.open(root, onResume)
   }
 
