@@ -131,6 +131,11 @@ export class TouchControls {
     })
   }
 
+  /** `true` desde el primer toque: el jugador está usando la pantalla táctil. */
+  public isActive(): boolean {
+    return this.visible
+  }
+
   private show(): void {
     if (this.visible) return
     this.visible = true

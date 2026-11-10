@@ -72,6 +72,8 @@ describe("createDefaultMeta", () => {
       runsCompleted: 0,
       totalDebris: 0,
       upgrades: {},
+      seenTips: [],
+      tipsEnabled: true,
     })
   })
 })
@@ -294,5 +296,22 @@ describe("sanitizeMeta", () => {
     expect(meta.upgrades.speed).toBe(5)
     expect(meta.upgrades).not.toHaveProperty("fantasma")
     expect(meta.upgrades).not.toHaveProperty("other")
+  })
+
+  it("conserva los avisos vistos válidos, sin duplicados", () => {
+    const meta = sanitizeMeta({
+      seenTips: ["leak_seen", "inventado", 4, "leak_seen", "time_low"],
+      tipsEnabled: false,
+    })
+
+    expect(meta.seenTips).toEqual(["leak_seen", "time_low"])
+    expect(meta.tipsEnabled).toBe(false)
+  })
+
+  it("un guardado sin avisos los deja activados y sin ver", () => {
+    const meta = sanitizeMeta({ seenTips: "todos", tipsEnabled: "no" })
+
+    expect(meta.seenTips).toEqual([])
+    expect(meta.tipsEnabled).toBe(true)
   })
 })

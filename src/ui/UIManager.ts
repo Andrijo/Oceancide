@@ -63,6 +63,8 @@ export class UIManager {
   private currentMessage?: HTMLElement
   private messageTimeout?: number
   private liveRegion: HTMLElement
+  private tipEl: HTMLElement
+  private tipTextEl: HTMLElement
 
   constructor() {
     this.debrisCountEl = document.getElementById("debris-count")!
@@ -193,6 +195,22 @@ export class UIManager {
       border: 0;
     `
     document.getElementById("game-container")!.appendChild(this.liveRegion)
+
+    // Aviso contextual del onboarding (estilos en styles.css).
+    this.tipEl = document.createElement("div")
+    this.tipEl.id = "tip-toast"
+    this.tipEl.className = "tip-toast"
+    this.tipEl.setAttribute("aria-hidden", "true") // lo lee la región viva
+
+    const tipLabel = document.createElement("div")
+    tipLabel.className = "tip-toast-label"
+    tipLabel.textContent = "Consejo"
+
+    this.tipTextEl = document.createElement("div")
+    this.tipTextEl.className = "tip-toast-text"
+
+    this.tipEl.append(tipLabel, this.tipTextEl)
+    document.getElementById("game-container")!.appendChild(this.tipEl)
   }
 
   public createPauseButton(onClick: () => void): void {
@@ -423,6 +441,17 @@ export class UIManager {
     this.liveRegion.textContent = message
   }
 
+  /** Enseña un aviso contextual; se queda hasta que se llame a `hideTip`. */
+  public showTip(text: string): void {
+    this.tipTextEl.textContent = text
+    this.tipEl.classList.add("visible")
+    this.announce(`Consejo: ${text}`)
+  }
+
+  public hideTip(): void {
+    this.tipEl.classList.remove("visible")
+  }
+
   public showMessage(message: string, duration: number = 2000): void {
     this.currentMessage?.remove()
     window.clearTimeout(this.messageTimeout)
@@ -577,5 +606,6 @@ export class UIManager {
     this.boostBarEl.remove()
     this.dangerClusterEl.remove()
     this.liveRegion.remove()
+    this.tipEl.remove()
   }
 }

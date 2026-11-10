@@ -30,3 +30,229 @@
   opacity: 0;
   will-change: transform, opacity;
 }
+
+/* Aviso contextual del onboarding (ver UIManager.showTip). Va bajo el mensaje
+   central para no taparlo ni tapar la calavera. */
+.tip-toast {
+  position: absolute;
+  top: calc(20% + 90px);
+  left: 50%;
+  width: max-content;
+  max-width: min(460px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 10px 18px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: center;
+  font-family: "DMSans", Tahoma, Geneva, Verdana, sans-serif;
+  color: #f5eedd;
+  background: rgba(22, 88, 123, 0.92);
+  border: 1.5px solid #84b3c3;
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  z-index: 900;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, 8px);
+  transition:
+    opacity 0.35s ease,
+    transform 0.35s ease,
+    visibility 0s linear 0.35s;
+}
+
+.tip-toast.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  transition-delay: 0s;
+}
+
+.tip-toast-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #84b3c3;
+}
+
+.tip-toast-text {
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tip-toast {
+    transform: translate(-50%, 0);
+    transition: none;
+  }
+}
+
+/* Pantalla "Cómo jugar" (ver src/ui/HowToPlay.ts). */
+.help-body {
+  width: 100%;
+  max-width: 960px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  text-align: left;
+  color: #f5eedd;
+  font-family: "DMSans", Tahoma, Geneva, Verdana, sans-serif;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.help-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.help-heading {
+  font-family: "Pogonia", Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1.1;
+  color: #84b3c3;
+}
+
+.help-lead {
+  max-width: 68ch;
+  font-size: 16px;
+  line-height: 1.55;
+  color: rgba(245, 238, 221, 0.9);
+}
+
+.help-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.help-panel,
+.help-card {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(245, 238, 221, 0.045);
+  border: 1px solid rgba(245, 238, 221, 0.1);
+}
+
+.help-panel-active {
+  border-color: rgba(132, 179, 195, 0.6);
+}
+
+.help-subheading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-family: "Pogonia", Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.help-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font:
+    700 10px "DMSans",
+    Tahoma,
+    Geneva,
+    Verdana,
+    sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #16587b;
+  background: #84b3c3;
+}
+
+.help-controls {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 14px;
+  align-items: center;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.help-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.help-key {
+  min-width: 24px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid rgba(132, 179, 195, 0.45);
+  background: rgba(245, 238, 221, 0.08);
+  font:
+    700 12px "DMSans",
+    Tahoma,
+    Geneva,
+    Verdana,
+    sans-serif;
+  text-align: center;
+  white-space: nowrap;
+  color: #f5eedd;
+}
+
+.help-action {
+  color: rgba(245, 238, 221, 0.82);
+}
+
+.help-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.help-card {
+  --help-tone: #84b3c3;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.help-tone-warn {
+  --help-tone: #f9a84d;
+}
+
+.help-tone-danger {
+  --help-tone: #ff7a6b;
+}
+
+.help-tone-good {
+  --help-tone: #7cf7d4;
+}
+
+.help-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--help-tone);
+}
+
+.help-card-name {
+  font-family: "Pogonia", Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.help-card-text {
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(245, 238, 221, 0.78);
+}
+
+.help-card-example {
+  margin-top: auto;
+  padding-top: 4px;
+  font-size: 12px;
+  font-style: italic;
+  color: rgba(245, 238, 221, 0.55);
+}

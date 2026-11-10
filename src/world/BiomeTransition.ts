@@ -2,6 +2,8 @@
 // Transición entre biomas: una masa negra de borde irregular (con zarcillos) barre la
 // pantalla, se mantiene un instante mientras se carga el bioma y se retira.
 
+import { TITLE_FONT } from "@ui/fonts"
+
 type Phase = "idle" | "covering" | "holding" | "revealing"
 
 const COVER_TIME = 0.75 // s que tarda en cubrir la pantalla
@@ -216,7 +218,7 @@ export class BiomeTransition {
     ctx.fillStyle = "#f5eedd"
     ctx.textAlign = "center"
     ctx.textBaseline = "middle"
-    ctx.font = `600 ${Math.max(18, Math.min(34, w * 0.035))}px system-ui, sans-serif`
+    ctx.font = `900 ${Math.max(20, Math.min(40, w * 0.04))}px ${TITLE_FONT}`
     ctx.fillText(this.label ?? "", w / 2, h / 2)
   }
 }
