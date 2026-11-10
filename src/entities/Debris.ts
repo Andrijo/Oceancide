@@ -372,19 +372,26 @@ function getMaterial(
     1,
   )
 
+  // La transmisión real de three.js fuerza un render pass extra de toda la
+  // escena en cada frame, así que el vidrio/plástico se falsea: más
+  // transparencia y más clearcoat cuanto más "transmisivo" sea el catálogo.
+  const fakeTransmission = visual.transmission ?? 0
+  const finalOpacity = opacity * (1 - fakeTransmission * 0.45)
+
   const material = new THREE.MeshPhysicalMaterial({
     color: visual.color,
     roughness,
     metalness,
-    transparent: opacity < 1 || (visual.transmission ?? 0) > 0,
-    opacity,
+    transparent: finalOpacity < 1,
+    opacity: finalOpacity,
     wireframe: visual.wireframe ?? false,
     side: THREE.DoubleSide,
 
-    transmission: visual.transmission ?? 0,
-    ior: visual.ior ?? 1.45,
-    thickness: visual.thickness ?? 0.2,
-    clearcoat: Math.max(visual.clearcoat ?? 0, wetness * 0.6),
+    clearcoat: Math.max(
+      visual.clearcoat ?? 0,
+      wetness * 0.6,
+      fakeTransmission * 0.8,
+    ),
     clearcoatRoughness: visual.clearcoatRoughness ?? 0.25,
 
     emissive: visual.emissive ?? 0x000000,

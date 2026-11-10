@@ -85,7 +85,6 @@ export class Game {
   private cameraRig: CameraRig
   private renderPipeline!: RenderPipeline
   private timer: THREE.Timer
-  private ambientLight!: THREE.AmbientLight
   private directionalLight!: THREE.DirectionalLight
   private pointLights: THREE.PointLight[] = []
   private pointLightBoost = 1
@@ -257,9 +256,11 @@ export class Game {
   }
 
   private setupLighting(): void {
-    this.ambientLight = new THREE.AmbientLight(0x404040, 0.1)
-    this.scene.add(this.ambientLight)
-
+    // Presupuesto de luces FIJO: 1 direccional + 5 puntuales aquí, 1 puntual
+    // en la tortuga y ambiente + hemisferio en BiomeGenerator. El número de
+    // luces forma parte de la clave de los programas de three.js: si cambia,
+    // se recompilan los shaders de toda la escena. Nunca añadir ni quitar
+    // luces en caliente; apagarlas con intensity = 0.
     this.directionalLight = new THREE.DirectionalLight(0xffffff, 0.8)
     this.directionalLight.position.copy(SUN_DIRECTION).multiplyScalar(100)
     this.scene.add(this.directionalLight)
