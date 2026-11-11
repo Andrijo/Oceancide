@@ -18,6 +18,7 @@ export interface RunSummary {
   debrisCollected: number
   ecoBase: number // Conciencia Ecológica recolectada
   ecoBonus: number // bono por completar la run
+  ecoLost: number // Eco perdido por no cerrar la vuelta (solo inmersión sin fin)
   durationSeconds: number
   seed: number
   cardsPicked: string[] // ID de cartas elegidas

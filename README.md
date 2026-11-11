@@ -246,6 +246,8 @@ Desde la pantalla de inicio puedes lanzar una **Inmersión sin fin** en lugar de
 - La **densidad de niebla** se multiplica por `1 + 0.2 · loop`.
 - La **densidad de desechos** se multiplica por `1 + 0.3 · loop`.
 
+El Eco se **asegura al cerrar cada vuelta**: al pasar del último bioma al primero, todo lo acumulado queda guardado (la transición lo anuncia). Si mueres o abandonas a mitad de vuelta, de lo conseguido en esa vuelta solo conservas el **50%** (`ENDLESS_UNBANKED_KEEP` en `MetaState.ts`); lo asegurado no se pierde nunca. La pausa muestra cuánto llevas asegurado, la confirmación de abandono avisa de lo que perderías y el resumen indica lo perdido. No hay bono de completar, porque la inmersión sin fin no se completa.
+
 El resumen de una inmersión sin fin es propio: muestra los **biomas sobrevividos** y el loop alcanzado, y el botón principal pasa a ser "Otra inmersión sin fin".
 
 ## Controles

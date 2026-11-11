@@ -7,7 +7,9 @@ import {
   sanitizeMeta,
   applyRunToMeta,
   computeEco,
+  computeEndlessEco,
   createDefaultMeta,
+  ENDLESS_UNBANKED_KEEP,
 } from "@core/MetaState"
 import type { RunSummary } from "@core/types"
 
@@ -47,6 +49,7 @@ function makeSummary(overrides: Partial<RunSummary> = {}): RunSummary {
     debrisCollected: 0,
     ecoBase: 0,
     ecoBonus: 0,
+    ecoLost: 0,
     durationSeconds: 0,
     seed: 1,
     cardsPicked: [],
@@ -90,6 +93,38 @@ describe("computeEco", () => {
     expect(base).toBe(100)
     expect(bonus).toBe(100 * COMPLETION_BONUS)
     expect(computeEco(100, "abandoned").bonus).toBe(0)
+  })
+})
+
+describe("computeEndlessEco", () => {
+  it("conserva todo lo asegurado y solo una parte de la vuelta en curso", () => {
+    expect(computeEndlessEco(1000, 600)).toEqual({
+      base: 600 + 400 * ENDLESS_UNBANKED_KEEP,
+      bonus: 0,
+      lost: 400 * (1 - ENDLESS_UNBANKED_KEEP),
+    })
+  })
+
+  it("sin vuelta cerrada, todo está en riesgo", () => {
+    const { base, lost } = computeEndlessEco(300, 0)
+    expect(base + lost).toBe(300)
+    expect(base).toBe(Math.round(300 * ENDLESS_UNBANKED_KEEP))
+  })
+
+  it("justo al cerrar una vuelta no se pierde nada", () => {
+    expect(computeEndlessEco(800, 800)).toEqual({
+      base: 800,
+      bonus: 0,
+      lost: 0,
+    })
+  })
+
+  it("si un evento baja el Eco por debajo de lo asegurado, no inventa pérdidas", () => {
+    expect(computeEndlessEco(500, 800)).toEqual({
+      base: 500,
+      bonus: 0,
+      lost: 0,
+    })
   })
 })
 

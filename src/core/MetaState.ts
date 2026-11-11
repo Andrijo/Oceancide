@@ -63,6 +63,29 @@ export function computeEco(
   return { base, bonus }
 }
 
+/**
+ * Parte del Eco de la vuelta en curso que se conserva al morir o abandonar una
+ * inmersión sin fin antes de cerrarla.
+ */
+export const ENDLESS_UNBANKED_KEEP = 0.5
+
+/**
+ * Eco de una inmersión sin fin. Lo ganado hasta la última vuelta cerrada
+ * (`banked`) está asegurado; de lo conseguido en la vuelta en curso solo se
+ * conserva `ENDLESS_UNBANKED_KEEP`. Así no sale gratis cobrar en cualquier
+ * momento: hay que decidir si arriesgarse a terminar la vuelta.
+ */
+export function computeEndlessEco(
+  ecoAwareness: number,
+  banked: number,
+): { base: number; bonus: number; lost: number } {
+  const total = Math.round(ecoAwareness)
+  const safe = Math.min(Math.round(banked), total)
+  const atRisk = total - safe
+  const kept = Math.round(atRisk * ENDLESS_UNBANKED_KEEP)
+  return { base: safe + kept, bonus: 0, lost: atRisk - kept }
+}
+
 /** Suma el resultado de una run al progreso persistente (modifica `meta`). */
 export function applyRunToMeta(meta: MetaState, summary: RunSummary): void {
   const earned = summary.ecoBase + summary.ecoBonus

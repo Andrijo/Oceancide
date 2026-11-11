@@ -218,7 +218,12 @@ export class BiomeTransition {
     ctx.fillStyle = "#f5eedd"
     ctx.textAlign = "center"
     ctx.textBaseline = "middle"
-    ctx.font = `900 ${Math.max(20, Math.min(40, w * 0.04))}px ${TITLE_FONT}`
-    ctx.fillText(this.label ?? "", w / 2, h / 2)
+    const size = Math.max(20, Math.min(40, w * 0.04))
+    ctx.font = `900 ${size}px ${TITLE_FONT}`
+    // Admite varias líneas separadas por "\n", centradas en vertical.
+    const lines = (this.label ?? "").split("\n")
+    const lineHeight = size * 1.3
+    const top = h / 2 - ((lines.length - 1) * lineHeight) / 2
+    lines.forEach((line, i) => ctx.fillText(line, w / 2, top + i * lineHeight))
   }
 }

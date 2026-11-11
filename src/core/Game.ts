@@ -36,6 +36,7 @@ import {
   SaveManager,
   applyRunToMeta,
   computeEco,
+  computeEndlessEco,
   type MetaState,
 } from "@core/MetaState"
 import { Rng, deriveSeed, randomSeed } from "@core/rng"
@@ -129,6 +130,8 @@ export class Game {
   private pendingAdvance = false
 
   private endlessMode = false
+  /** Eco asegurado en la inmersión sin fin: el que había al cerrar la última vuelta. */
+  private endlessBankedEco = 0
   private loop = 0
 
   private biomeTimeRemaining = 0
@@ -721,6 +724,7 @@ export class Game {
           biomeName: this.biomeGenerator.getBiomeName(),
           depth: this.biomeGenerator.getBiome().depth,
           ecoAwareness: this.state.ecoAwareness,
+          ecoBanked: this.endlessMode ? this.endlessBankedEco : undefined,
           stats: buildStatLines(
             readBuild({
               turtle: this.turtle,
@@ -763,6 +767,7 @@ export class Game {
 
   private startRun(endless = false): void {
     this.endlessMode = endless
+    this.endlessBankedEco = 0
     this.transition.cancel()
     this.pendingAdvance = false
     this.paused = false
@@ -806,7 +811,9 @@ export class Game {
     this.enemyManager.clear()
     this.tips.clear()
 
-    const { base, bonus } = computeEco(this.state.ecoAwareness, outcome)
+    const { base, bonus, lost } = this.endlessMode
+      ? computeEndlessEco(this.state.ecoAwareness, this.endlessBankedEco)
+      : { ...computeEco(this.state.ecoAwareness, outcome), lost: 0 }
     const summary: RunSummary = {
       outcome,
       biomeIndex: this.biomeIndex,
@@ -814,6 +821,7 @@ export class Game {
       debrisCollected: this.state.debrisCollected,
       ecoBase: base,
       ecoBonus: bonus,
+      ecoLost: lost,
       durationSeconds: this.runTime,
       seed: this.runSeed,
       cardsPicked: this.runState.cards.map((c) => c.id),
@@ -838,11 +846,20 @@ export class Game {
       return
     }
 
+    // Cerrar una vuelta de la inmersión sin fin asegura todo el Eco acumulado.
+    const closesLoop = this.endlessMode && next % BIOME_ORDER.length === 0
+    if (closesLoop) this.endlessBankedEco = this.state.ecoAwareness
+
     const started = this.transition.play(async () => {
       this.loadBiome(next)
       // La transición ya rotula el bioma y su profundidad: no hace falta
       // repetirlo con un mensaje al retirarse.
-      this.transition.setLabel(this.biomeBanner())
+      const banked = Math.round(this.endlessBankedEco).toLocaleString("es")
+      this.transition.setLabel(
+        closesLoop
+          ? `Vuelta completada · ${banked} Eco asegurado\n${this.biomeBanner()}`
+          : this.biomeBanner(),
+      )
       // Compila los shaders del bioma nuevo con la pantalla aún en negro,
       // para que el tirón no se vea al retirarse la transición.
       try {

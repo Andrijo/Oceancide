@@ -4,7 +4,7 @@ import {
   type RunOutcome,
   type RunSummary,
 } from "@core/types"
-import type { MetaState } from "@core/MetaState"
+import { computeEndlessEco, type MetaState } from "@core/MetaState"
 import type { Card, CardRarity } from "@cards/Card"
 import {
   cardValueParts,
@@ -53,6 +53,8 @@ export interface RunInfo {
   biomeName: string
   depth: number
   ecoAwareness: number
+  /** Inmersión sin fin: Eco asegurado al cerrar la última vuelta. */
+  ecoBanked?: number
   /** Atributos actuales de la tortuga, listos para pintar. */
   stats: BuildStatLine[]
   /** Cartas elegidas en esta run, en orden. */
@@ -913,7 +915,9 @@ export class ScreenManager {
       sub:
         summary.ecoBonus > 0
           ? `Incluye +${summary.ecoBonus} de bono`
-          : undefined,
+          : summary.ecoLost > 0
+            ? `${summary.ecoLost.toLocaleString("es")} perdido por no cerrar la vuelta`
+            : undefined,
       highlight: true,
     })
 
@@ -1053,6 +1057,7 @@ export class ScreenManager {
 
     let statsLine: HTMLElement | undefined
     let buildPanel: HTMLElement | undefined
+    let lossWarning: HTMLElement | undefined
     if (runInfo) {
       // Con la build el contenido puede no caber: centrado solo si cabe.
       content.style.justifyContent = "safe center"
@@ -1060,13 +1065,34 @@ export class ScreenManager {
 
       const zoneLabel = `${runInfo.biomeIndex + 1}. ${runInfo.biomeName}`
       const eco = Math.floor(runInfo.ecoAwareness).toLocaleString("es")
+      const banked =
+        runInfo.ecoBanked !== undefined
+          ? ` (${Math.round(runInfo.ecoBanked).toLocaleString("es")} asegurado)`
+          : ""
       statsLine = el(
         "div",
         `max-width: 640px; text-align: center; color: #bae6fd;
          font-family: ${PARAGRAPH_FONT}; font-size: 14px; line-height: 1.4;`,
-        `${zoneLabel} · ${runInfo.depth} m · Eco ${eco}`,
+        `${zoneLabel} · ${runInfo.depth} m · Eco ${eco}${banked}`,
       )
       content.append(statsLine)
+
+      // Inmersión sin fin: al confirmar el abandono se avisa de lo que se pierde.
+      if (runInfo.ecoBanked !== undefined) {
+        const { lost } = computeEndlessEco(
+          runInfo.ecoAwareness,
+          runInfo.ecoBanked,
+        )
+        if (lost > 0) {
+          lossWarning = el(
+            "div",
+            `display: none; max-width: 640px; text-align: center; color: #ffbaba;
+             font-family: ${PARAGRAPH_FONT}; font-size: 14px; line-height: 1.4;`,
+            `Perderás ${lost.toLocaleString("es")} Eco de esta vuelta. Ciérrala para asegurarlo todo.`,
+          )
+          content.append(lossWarning)
+        }
+      }
     }
 
     const buttons = el(
@@ -1099,6 +1125,7 @@ export class ScreenManager {
     const showConfirm = (): void => {
       title.textContent = "¿Abandonar la inmersión?"
       for (const n of secondary()) n.style.display = "none"
+      if (lossWarning) lossWarning.style.display = ""
       const confirmBtn = this.makeGhostAction(
         "Sí, abandonar",
         onAbandon,
@@ -1112,6 +1139,7 @@ export class ScreenManager {
         () => {
           title.textContent = "Pausa"
           for (const n of secondary()) n.style.display = ""
+          if (lossWarning) lossWarning.style.display = "none"
           buttons.replaceChildren(abandonBtn, resumeBtn)
           resumeBtn.focus()
         },

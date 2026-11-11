@@ -138,13 +138,21 @@
         width: 76px;
         height: 92px;
         pointer-events: none;
-        opacity: 0;
-        transition: opacity 0.4s ease;
+        opacity: 1;
+        transition:
+          opacity 0.4s ease,
+          height 0.4s ease,
+          margin 0.4s ease;
         will-change: transform, opacity;
       }
 
-      .toxicity-skull.active {
-        opacity: 1;
+      /* Sin toxicidad la calavera se pliega (alto 0 y sin el hueco del gap)
+         para que lo de debajo, como el corazón de revivir, suba bajo el
+         temporizador en lugar de quedarse flotando. */
+      .toxicity-skull:not(.active) {
+        height: 0;
+        margin-bottom: -6px;
+        opacity: 0;
       }
 
       .toxicity-skull svg {
