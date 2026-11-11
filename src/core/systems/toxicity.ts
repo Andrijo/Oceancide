@@ -72,7 +72,7 @@ export const TOXICITY_RESISTANCE_CAP = 0.9
 
 /**
  * Suma resistencia con rendimientos decrecientes: cada punto adicional vale
- * menos. Es la única forma de sumar resistencia (cartas y mejoras del Refugio),
+ * menos. Es la única forma de sumar resistencia (cartas y mejoras permanentes),
  * para que un mismo "+3%" valga igual venga de donde venga.
  */
 export function addToxicityResistance(current: number, amount: number): number {

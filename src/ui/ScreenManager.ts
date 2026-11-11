@@ -1,4 +1,3 @@
-// src/ui/ScreenManager.ts
 import {
   BIOME_ORDER,
   BIOMES,
@@ -20,7 +19,7 @@ import {
   type CardPreviewLine,
 } from "@cards/BuildStats"
 import { revealCards } from "@ui/animations"
-import { PARAGRAPH_FONT, TITLE_FONT } from "@ui/fonts"
+import { PARAGRAPH_FONT, TITLE_FONT, TITULO_FONT } from "@ui/fonts"
 import { MIST } from "@ui/palette"
 import { createHowToPlayBody } from "@ui/HowToPlay"
 import { UPGRADES } from "@/tycoon/Upgrades"
@@ -124,6 +123,14 @@ const CARD_KEYS: Record<string, number> = {
   Numpad1: 0,
   Numpad2: 1,
   Numpad3: 2,
+}
+
+/** Vector unitario (en coordenadas de pantalla) de cada flecha. */
+const ARROW_DIRECTIONS: Record<string, { x: number; y: number }> = {
+  ArrowLeft: { x: -1, y: 0 },
+  ArrowRight: { x: 1, y: 0 },
+  ArrowUp: { x: 0, y: -1 },
+  ArrowDown: { x: 0, y: 1 },
 }
 
 const HUB_ACCENT = MIST
@@ -243,10 +250,7 @@ export class ScreenManager {
 
     // Mantener el foco dentro del diálogo mientras haya una elección abierta.
     this.overlay.addEventListener("keydown", (event) => {
-      if (
-        (!this.eventActive && !this.cardChoiceActive) ||
-        event.key !== "Tab"
-      ) {
+      if (this.overlay.style.display === "none" || event.key !== "Tab") {
         return
       }
 
@@ -320,7 +324,11 @@ export class ScreenManager {
     return this.eventActive
   }
 
-  public showHub(meta: MetaState): void {
+  /**
+   * @param focus Botón que recibe el foco al volver de una subpantalla, para
+   *   no perder la posición al navegar con teclado. Por defecto, "Empezar".
+   */
+  public showHub(meta: MetaState, focus?: "upgrades" | "help"): void {
     this.ensureHubAnimation()
 
     const bestIndex = meta.bestBiomeIndex
@@ -367,10 +375,11 @@ export class ScreenManager {
       "div",
       `width: 100%;
       overflow: visible;
-      font-family: ${TITLE_FONT};
-      font-size: clamp(56px, 9.5vw, 132px);
+      font-family: ${TITULO_FONT};
+      font-size: clamp(28px, 8vw, 112px);
       font-weight: 500;
       font-stretch: condensed;
+      letter-spacing: 0.25rem;
       line-height: 0.8;
       white-space: nowrap;`,
     )
@@ -407,23 +416,26 @@ export class ScreenManager {
       ),
     )
 
-    const stats = this.makeBentoGrid([
-      {
-        label: "Conciencia ecológica",
-        value: meta.ecoPoints.toLocaleString("es"),
-        highlight: true,
-      },
-      { label: "Mejor zona", value: bestBiome },
-      {
-        label: "Runs jugadas",
-        value: String(meta.runsPlayed),
-        sub: `${meta.runsCompleted} completadas`,
-      },
-      {
-        label: "Desechos recolectados",
-        value: meta.totalDebris.toLocaleString("es"),
-      },
-    ])
+    const stats = this.makeBentoGrid(
+      [
+        {
+          label: "Conciencia ecológica",
+          value: meta.ecoPoints.toLocaleString("es"),
+          highlight: true,
+        },
+        { label: "Mejor zona", value: bestBiome },
+        {
+          label: "Runs jugadas",
+          value: String(meta.runsPlayed),
+          sub: `${meta.runsCompleted} completadas`,
+        },
+        {
+          label: "Desechos recolectados",
+          value: meta.totalDebris.toLocaleString("es"),
+        },
+      ],
+      true,
+    )
 
     const endless = () => this.callbacks.onStartEndless()
 
@@ -465,7 +477,7 @@ export class ScreenManager {
 
     const upgradesBtn = this.makeGhostAction(
       "Mejoras",
-      () => this.showUpgrades(meta, () => this.showHub(meta)),
+      () => this.showUpgrades(meta, () => this.showHub(meta, "upgrades")),
       "upgrade",
       true,
     )
@@ -474,7 +486,10 @@ export class ScreenManager {
 
     const helpBtn = this.makeGhostAction(
       "Cómo jugar",
-      () => this.showHowToPlay("Volver al Refugio", () => this.showHub(meta)),
+      () =>
+        this.showHowToPlay("Volver al inicio", () =>
+          this.showHub(meta, "help"),
+        ),
       "neutral",
       true,
     )
@@ -491,8 +506,16 @@ export class ScreenManager {
       enter(secondaryRow, 440),
     )
 
+    // Flechas entre los cuatro botones (dos filas de dos). "Eliminar progreso"
+    // queda fuera a propósito: solo se llega a él con Tab, y es el último.
+    this.enableArrowNav(content, "grid")
+
     root.append(topBar)
     this.open(root, start)
+
+    const focusTarget =
+      focus === "upgrades" ? upgradesBtn : focus === "help" ? helpBtn : primary
+    focusTarget.focus()
   }
 
   public showEvent(
@@ -622,19 +645,27 @@ export class ScreenManager {
         btn.append(previewBox)
       }
 
-      btn.addEventListener("mouseenter", () => {
+      // Mismo resaltado con ratón y con teclado.
+      const highlight = (): void => {
         btn.style.background = "rgba(245, 238, 221, 0.10)"
         btn.style.borderColor = "rgba(132, 179, 195, 0.83)"
-      })
-      btn.addEventListener("mouseleave", () => {
+      }
+      const unhighlight = (): void => {
+        if (btn.matches(":hover") || document.activeElement === btn) return
         btn.style.background = "rgba(245, 238, 221, 0.03)"
         btn.style.borderColor = "rgba(245, 238, 221, 0.15)"
-      })
+      }
+      btn.addEventListener("mouseenter", highlight)
+      btn.addEventListener("mouseleave", unhighlight)
+      btn.addEventListener("focus", highlight)
+      btn.addEventListener("blur", () => queueMicrotask(unhighlight))
       btn.addEventListener("click", () => choose(index))
 
       optionButtons.push(btn)
       optionsCol.append(btn)
     })
+
+    this.enableArrowNav(optionsCol, "vertical")
 
     content.append(title, desc, optionsCol)
     this.open(root, () => {})
@@ -645,11 +676,20 @@ export class ScreenManager {
     optionButtons[0]?.focus()
   }
 
-  public showUpgrades(meta: MetaState, onClose: () => void): void {
+  /**
+   * @param focusId Mejora cuyo botón recupera el foco tras redibujar (al
+   *   comprar), para no perder la posición al navegar con teclado.
+   */
+  public showUpgrades(
+    meta: MetaState,
+    onClose: () => void,
+    focusId?: string,
+  ): void {
     const { root, content } = this.makeWindowFrame()
     const manager = new UpgradeManager()
+    const buyButtons = new Map<string, HTMLButtonElement>()
 
-    const title = this.makeScreenTitle("Mejoras del Refugio")
+    const title = this.makeScreenTitle("Mejoras")
     const subtitle = el(
       "div",
       `font-size: 16px; color: ${UPGRADE_TEXT}; margin-bottom: 20px; font-family: ${TITLE_FONT}; font-weight: bold;`,
@@ -714,7 +754,7 @@ export class ScreenManager {
         () => {
           if (manager.buy(meta, upgrade.id)) {
             this.callbacks.onSaveMeta() // Guardar en localStorage
-            this.showUpgrades(meta, onClose) // Redibujar
+            this.showUpgrades(meta, onClose, upgrade.id) // Redibujar
           }
         },
         isMax ? "upgrade" : canBuy ? "primary" : "neutral",
@@ -722,24 +762,39 @@ export class ScreenManager {
       )
 
       if (!canBuy) {
+        // `disabled` (no solo pointer-events) para que Tab y Enter tampoco
+        // lleguen a él.
+        btn.disabled = true
         btn.style.opacity = "0.5"
-        btn.style.pointerEvents = "none"
+        btn.style.cursor = "default"
+        if (!isMax) btn.title = "No tienes suficiente Eco"
       }
+      buyButtons.set(upgrade.id, btn)
 
       card.append(header, desc, btn)
       grid.append(card)
     })
 
     const backBtn = this.makeGhostAction(
-      "Volver al Refugio",
+      "Volver al inicio",
       onClose,
       "neutral",
       true,
     )
     backBtn.style.maxWidth = "400px"
 
+    this.enableArrowNav(grid, "grid")
+
     content.append(title, subtitle, grid, backBtn)
     this.open(root, onClose)
+
+    // Foco: la mejora recién comprada si aún se puede subir; si no, la primera
+    // comprable; si no queda ninguna, el botón de volver.
+    const enabled = [...buyButtons.values()].filter((b) => !b.disabled)
+    const target = focusId ? buyButtons.get(focusId) : undefined
+    const toFocus =
+      target && !target.disabled ? target : (enabled[0] ?? backBtn)
+    toFocus.focus()
   }
 
   /**
@@ -904,6 +959,7 @@ export class ScreenManager {
     hubBtn.style.width = "auto"
 
     buttons.append(hubBtn, againBtn)
+    this.enableArrowNav(buttons)
     content.append(buttons)
 
     content.append(
@@ -916,6 +972,7 @@ export class ScreenManager {
     )
 
     this.open(root, again)
+    againBtn.focus()
   }
 
   public showCardChoice(
@@ -968,11 +1025,20 @@ export class ScreenManager {
       )
     }
 
+    this.enableArrowNav(row)
+
     content.append(title, row)
     this.open(root, () => {})
     this.cardChoiceActive = true
     this.cardChoiceHandler = pick
-    revealCards(cardButtons)
+    // La animación de entrada limpia el transform al acabar: se vuelve a
+    // aplicar el realce a la carta que tenga el foco.
+    void revealCards(cardButtons).then(() => {
+      const focused = document.activeElement
+      if (focused instanceof HTMLElement && cardButtons.includes(focused)) {
+        focused.dispatchEvent(new FocusEvent("focus"))
+      }
+    })
     cardButtons[0]?.focus()
   }
 
@@ -985,23 +1051,22 @@ export class ScreenManager {
     const title = this.makeScreenTitle("Pausa")
     content.append(title)
 
+    let statsLine: HTMLElement | undefined
+    let buildPanel: HTMLElement | undefined
     if (runInfo) {
       // Con la build el contenido puede no caber: centrado solo si cabe.
       content.style.justifyContent = "safe center"
       title.style.marginBottom = "8px"
 
       const zoneLabel = `${runInfo.biomeIndex + 1}. ${runInfo.biomeName}`
-      content.append(
-        this.makeBentoGrid([
-          { label: "Zona actual", value: zoneLabel },
-          { label: "Profundidad", value: `${runInfo.depth} m` },
-          {
-            label: "Eco acumulado",
-            value: Math.floor(runInfo.ecoAwareness).toLocaleString("es"),
-            highlight: true,
-          },
-        ]),
+      const eco = Math.floor(runInfo.ecoAwareness).toLocaleString("es")
+      statsLine = el(
+        "div",
+        `max-width: 640px; text-align: center; color: #bae6fd;
+         font-family: ${PARAGRAPH_FONT}; font-size: 14px; line-height: 1.4;`,
+        `${zoneLabel} · ${runInfo.depth} m · Eco ${eco}`,
       )
+      content.append(statsLine)
     }
 
     const buttons = el(
@@ -1029,49 +1094,113 @@ export class ScreenManager {
     abandonBtn.style.width = "auto"
 
     // Confirmación en dos pasos para no perder la run por un clic accidental.
+    const secondary = (): HTMLElement[] =>
+      [statsLine, buildPanel].filter((n): n is HTMLElement => n !== undefined)
     const showConfirm = (): void => {
       title.textContent = "¿Abandonar la inmersión?"
+      for (const n of secondary()) n.style.display = "none"
       const confirmBtn = this.makeGhostAction(
         "Sí, abandonar",
         onAbandon,
         "danger",
         true,
       )
-      confirmBtn.style.flex = "50 1 0"
+      confirmBtn.style.flex = "35 1 0"
       confirmBtn.style.width = "auto"
       const cancelBtn = this.makeGhostAction(
         "Seguir buceando",
         () => {
           title.textContent = "Pausa"
+          for (const n of secondary()) n.style.display = ""
           buttons.replaceChildren(abandonBtn, resumeBtn)
           resumeBtn.focus()
         },
         "primary",
         true,
       )
-      cancelBtn.style.flex = "50 1 0"
+      cancelBtn.style.flex = "65 1 0"
       cancelBtn.style.width = "auto"
-      buttons.replaceChildren(confirmBtn, cancelBtn)
+      // "Seguir buceando" ocupa el sitio donde estaba "Abandonar": un doble
+      // clic accidental cancela en vez de confirmar.
+      buttons.replaceChildren(cancelBtn, confirmBtn)
       cancelBtn.focus()
     }
 
     buttons.append(abandonBtn, resumeBtn)
 
-    const helpBtn = this.makeGhostAction(
-      "Cómo jugar",
-      () =>
-        this.showHowToPlay("Volver a la pausa", () =>
-          this.showPause(onResume, onAbandon, runInfo),
-        ),
-      "neutral",
-      true,
-    )
-    helpBtn.style.maxWidth = "640px"
+    this.enableArrowNav(buttons)
 
     content.append(buttons)
-    if (runInfo) content.append(this.makeBuildPanel(runInfo))
-    content.append(helpBtn)
+    if (runInfo) {
+      buildPanel = this.makeBuildPanel(runInfo)
+      content.append(buildPanel)
+    }
     this.open(root, onResume)
+    resumeBtn.focus()
+  }
+
+  /**
+   * Flechas para moverse entre los botones de un grupo: izquierda/derecha en
+   * una fila, arriba/abajo en una columna (al llegar al final vuelve al
+   * inicio), o las cuatro en una cuadrícula, saltando al botón más cercano en
+   * esa dirección según su posición en pantalla.
+   */
+  private enableArrowNav(
+    group: HTMLElement,
+    axis: "horizontal" | "vertical" | "grid" = "horizontal",
+  ): void {
+    if (axis === "grid") {
+      group.addEventListener("keydown", (event) => {
+        const dir = ARROW_DIRECTIONS[event.key]
+        if (!dir) return
+        const items = Array.from(
+          group.querySelectorAll<HTMLButtonElement>("button:not([disabled])"),
+        )
+        const current = document.activeElement
+        if (!(current instanceof HTMLButtonElement)) return
+        if (!items.includes(current)) return
+        const from = current.getBoundingClientRect()
+        const fx = from.left + from.width / 2
+        const fy = from.top + from.height / 2
+        let best: HTMLButtonElement | undefined
+        let bestScore = Infinity
+        for (const item of items) {
+          if (item === current) continue
+          const r = item.getBoundingClientRect()
+          const dx = r.left + r.width / 2 - fx
+          const dy = r.top + r.height / 2 - fy
+          // Distancia en la dirección pedida; la desviación lateral pesa más
+          // para preferir el vecino alineado.
+          const along = dx * dir.x + dy * dir.y
+          if (along <= 1) continue
+          const across = Math.abs(dx * dir.y) + Math.abs(dy * dir.x)
+          const score = along + across * 2
+          if (score < bestScore) {
+            bestScore = score
+            best = item
+          }
+        }
+        event.preventDefault()
+        best?.focus()
+      })
+      return
+    }
+
+    const [prev, next] =
+      axis === "horizontal"
+        ? ["ArrowLeft", "ArrowRight"]
+        : ["ArrowUp", "ArrowDown"]
+    group.addEventListener("keydown", (event) => {
+      if (event.key !== prev && event.key !== next) return
+      const items = Array.from(
+        group.querySelectorAll<HTMLButtonElement>("button:not([disabled])"),
+      )
+      const current = items.indexOf(document.activeElement as HTMLButtonElement)
+      if (current === -1) return
+      const step = event.key === next ? 1 : -1
+      items[(current + step + items.length) % items.length]?.focus()
+      event.preventDefault()
+    })
   }
 
   /** Panel "Tu tortuga": atributos actuales, cartas y reliquias de la run. */
@@ -1117,18 +1246,38 @@ export class ScreenManager {
         ),
       )
     } else {
+      // La descripción se muestra en un recuadro fijo bajo las fichas, no en un
+      // tooltip: así llega también con teclado y en pantallas táctiles.
+      const detail = node(
+        "p",
+        "build-chip-detail",
+        "Selecciona una carta para ver qué hace.",
+      )
+      detail.setAttribute("aria-live", "polite")
       const chips = node("div", "build-chips")
+      const select = (chip: HTMLButtonElement, text: string): void => {
+        for (const other of chips.querySelectorAll(".build-chip")) {
+          other.setAttribute("aria-pressed", "false")
+        }
+        chip.setAttribute("aria-pressed", "true")
+        detail.textContent = text
+      }
       for (const card of runInfo.cards) {
-        const chip = node("div", "build-chip")
+        const chip = node("button", "build-chip")
+        chip.type = "button"
+        chip.setAttribute("aria-pressed", "false")
         chip.style.setProperty("--chip-color", RARITY_COLORS[card.rarity])
-        chip.title = `${RARITY_LABELS[card.rarity]} · ${card.description}`
+        const text = `${card.name} (${RARITY_LABELS[card.rarity]}): ${card.description}`
         chip.append(
           node("span", "build-chip-name", card.name),
           node("span", "build-chip-value", cardValueText(card)),
         )
+        for (const type of ["click", "focus", "mouseenter"] as const) {
+          chip.addEventListener(type, () => select(chip, text))
+        }
         chips.append(chip)
       }
-      panel.append(chips)
+      panel.append(chips, detail)
     }
 
     if (runInfo.relics.length > 0) {
@@ -1204,7 +1353,24 @@ export class ScreenManager {
       sub?: string
       highlight?: boolean
     }>,
+    singleRow = false,
   ): HTMLElement {
+    // Una sola línea (menú de inicio): todas las casillas en fila para ocupar
+    // menos alto; en pantallas estrechas bajan a dos por fila.
+    if (singleRow) {
+      const row = el(
+        "div",
+        `display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 12px; width: 100%; max-width: 960px;`,
+      )
+      for (const item of items) {
+        row.append(
+          this.makeBentoStat(item.label, item.value, item.sub, item.highlight),
+        )
+      }
+      return row
+    }
+
     const wrap = el(
       "div",
       `display: flex; flex-direction: column; align-items: center; gap: 14px;
@@ -1385,6 +1551,13 @@ export class ScreenManager {
       outline-offset: 3px;
     }
     .event-option:focus:not(:focus-visible) {
+      outline: none;
+    }
+    .card-choice:focus-visible {
+      outline: 3px solid #f5eedd;
+      outline-offset: 5px;
+    }
+    .card-choice:focus:not(:focus-visible) {
       outline: none;
     }
   `
@@ -1677,16 +1850,25 @@ export class ScreenManager {
       `${label}: ${card.name}. ${cardValueText(card)}. ${card.description}${previewText}`,
     )
 
-    btn.addEventListener("mouseenter", () => {
+    btn.classList.add("card-choice")
+    btn.style.setProperty("--card-accent", accent)
+
+    // El mismo realce para ratón y teclado: la carta enfocada se levanta.
+    const lift = (): void => {
       btn.style.transform = "translateY(-6px) scale(1.02)"
       btn.style.filter = "brightness(1.15)"
       btn.style.boxShadow = `0 14px 32px rgba(0, 0, 0, 0.65), inset 0 0 0 1px rgba(245, 238, 221, 0.12), 0 0 24px ${accent}66`
-    })
-    btn.addEventListener("mouseleave", () => {
+    }
+    const rest = (): void => {
+      if (btn.matches(":hover") || document.activeElement === btn) return
       btn.style.transform = "translateY(0) scale(1)"
       btn.style.filter = "brightness(1)"
       btn.style.boxShadow = `0 6px 20px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(245, 238, 221, 0.06)`
-    })
+    }
+    btn.addEventListener("mouseenter", lift)
+    btn.addEventListener("mouseleave", rest)
+    btn.addEventListener("focus", lift)
+    btn.addEventListener("blur", () => queueMicrotask(rest))
     btn.addEventListener("click", onClick)
 
     const keyBadge = el(

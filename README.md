@@ -83,7 +83,7 @@ Cada desecho tiene un **valor ecológico** (derivado de su toxicidad) que se sum
 - Cada esfera absorbe un número limitado de desechos y luego desaparece.
 - Solo puedes tener unas pocas activas a la vez.
 
-La Conciencia Ecológica sobrante se guarda como progreso persistente en el **Refugio**.
+La Conciencia Ecológica sobrante se guarda como progreso persistente entre runs.
 
 ### Avisos y ayuda
 
@@ -100,7 +100,7 @@ La primera vez que pasa cada cosa importante aparece un **aviso contextual** baj
 
 Los avisos salen de uno en uno, con un respiro entre ellos, y se congelan con la pausa. Los textos y la cola están en `src/core/tips.ts`.
 
-La pantalla **Cómo jugar** (desde el Refugio y desde la pausa) reúne el objetivo, los controles de teclado y táctiles, una ficha por cada tipo de desecho, peligro y herramienta, y un glosario de los atributos de las cartas. Ahí mismo se pueden **desactivar los avisos** o **volver a mostrarlos**.
+La pantalla **Cómo jugar** (desde la pantalla de inicio) reúne el objetivo, los controles de teclado y táctiles, una ficha por cada tipo de desecho, peligro y herramienta, y un glosario de los atributos de las cartas. Ahí mismo se pueden **desactivar los avisos** o **volver a mostrarlos**.
 
 ### Dash de giro
 
@@ -125,7 +125,7 @@ El mazo tiene **55 cartas** repartidas en 7 rarezas: **común, rara, épica, leg
 
 Las cartas de **caos** no son mejoras seguras: pueden duplicar o partir tu eco, mutar dos stats al azar, añadir medusas a los siguientes biomas o subir la toxicidad pasiva. Algunas devuelven un texto con el resultado aleatorio para que sepas qué te ha tocado.
 
-La **resistencia a la toxicidad** se acumula con **rendimientos decrecientes**, venga de cartas o de mejoras del Refugio: cada punto adicional vale menos que el anterior, así que apilar caparazones nunca te vuelve inmune (tope del 90%).
+La **resistencia a la toxicidad** se acumula con **rendimientos decrecientes**, venga de cartas o de mejoras permanentes: cada punto adicional vale menos que el anterior, así que apilar caparazones nunca te vuelve inmune (tope del 90%).
 
 Cada carta declara sus efectos (`effects` en `src/cards/CardPool.ts`) y de ahí salen tanto el valor que se muestra como lo que se aplica, así que ninguna carta hace algo que no enseñe. En la elección, cada tramo del valor se pinta según su signo: verde lo que mejora y rojo lo que penaliza.
 
@@ -240,7 +240,7 @@ Los eventos no aparecen en la **Inmersión sin fin**. Su elección se deriva de 
 
 ### Modo sin fin
 
-Desde el Refugio puedes lanzar una **Inmersión sin fin** en lugar de la run normal. No termina al limpiar los **6 biomas de la vuelta**: al llegar al fondo vuelve a empezar desde el primero en un nuevo **loop**, y la dificultad escala en cada vuelta (`BiomeGenerator.generateBiome(biomeKey, rng, loop)`):
+Desde la pantalla de inicio puedes lanzar una **Inmersión sin fin** en lugar de la run normal. No termina al limpiar los **6 biomas de la vuelta**: al llegar al fondo vuelve a empezar desde el primero en un nuevo **loop**, y la dificultad escala en cada vuelta (`BiomeGenerator.generateBiome(biomeKey, rng, loop)`):
 
 - La **tasa de toxicidad** se multiplica por `1 + loop`.
 - La **densidad de niebla** se multiplica por `1 + 0.2 · loop`.
@@ -315,7 +315,7 @@ A medida que limpias un bioma, **el agua se aclara**: sube el brillo, baja la de
 
 El renderizado pasa por un **pipeline de post-proceso** (`src/core/RenderPipeline.ts`): tonemapping neutro y un **bloom dinámico** que solo se activa en las profundidades (cuando el sol se apaga). Cuando el bloom es inapreciable, el pipeline se salta el composer y renderiza directo para ahorrar recursos.
 
-## Progreso y Refugio
+## Progreso
 
 Al terminar cada run se muestra un resumen (zona alcanzada, desechos, duración, semilla, cartas elegidas y conciencia obtenida) y se actualiza el progreso persistente guardado en `localStorage` bajo la clave `oceancide.meta`:
 
@@ -324,7 +324,7 @@ Al terminar cada run se muestra un resumen (zona alcanzada, desechos, duración,
 - **Runs jugadas / completadas**.
 - **Total de desechos** recolectados.
 
-Completar todos los biomas de la run otorga un **bono del 25%** sobre la conciencia obtenida en la run. Desde el Refugio puedes empezar una nueva inmersión, abrir **Cómo jugar** o eliminar el progreso guardado. El guardado también recuerda qué avisos has visto y si están activados.
+Completar todos los biomas de la run otorga un **bono del 25%** sobre la conciencia obtenida en la run. Desde la pantalla de inicio puedes empezar una nueva inmersión, abrir **Cómo jugar** o eliminar el progreso guardado. El guardado también recuerda qué avisos has visto y si están activados.
 
 ### Reproducir una run
 
@@ -408,7 +408,7 @@ oceancide/
     │   ├── InputController.ts  # Teclado → InputState y acciones
     │   ├── CameraRig.ts        # Seguimiento, look-back y órbita
     │   ├── RenderPipeline.ts   # Tonemapping + bloom dinámico
-    │   ├── MetaState.ts        # Progreso persistente (Refugio) y guardado
+    │   ├── MetaState.ts        # Progreso persistente y guardado
     │   ├── rng.ts              # Generador pseudoaleatorio con semilla
     │   ├── tips.ts             # Avisos contextuales: textos y cola
     │   ├── systems/            # Fórmulas puras y testeables
@@ -440,7 +440,7 @@ oceancide/
     ├── events/           # Eventos narrativos con opciones
     │   ├── EventPool.ts        # Catálogo de eventos
     │   └── EventEffects.ts     # Efectos declarativos, preview y aplicación
-    ├── tycoon/           # Mejoras permanentes del Refugio
+    ├── tycoon/           # Mejoras permanentes
     │   ├── Upgrades.ts         # Catálogo de mejoras
     │   └── UpgradeManager.ts   # Compra y aplicación de mejoras
     └── ui/               # Interfaz y controles
