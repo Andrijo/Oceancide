@@ -204,7 +204,7 @@ describe("mazo: texto y efectos coherentes", () => {
     expect(cardValueText(getCard("mutation"))).toBe("↑ AL AZAR / ↓ AL AZAR")
   })
 
-  it("ninguna carta comparte nombre con otra ni con una mejora del Refugio", () => {
+  it("ninguna carta comparte nombre con otra ni con una mejora permanente", () => {
     const names = [
       ...CARD_POOL.map((card) => card.name),
       ...UPGRADES.map((upgrade) => upgrade.name),

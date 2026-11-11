@@ -1,4 +1,3 @@
-// src/ui/animations.ts
 import gsap from "gsap"
 
 const reduceMotionQuery =

@@ -6,6 +6,13 @@
 }
 
 @font-face {
+  font-family: "Tanbuster";
+  src: url("/fonts/tanbuster-bold.woff2") format("woff2");
+  font-weight: 400 900;
+  font-display: swap;
+}
+
+@font-face {
   font-family: "DMSans";
   src: url("/fonts/dm-sans-regular.woff") format("woff");
   font-weight: 500;
@@ -36,7 +43,7 @@
    .biome-bubble. */
 .tip-toast {
   position: absolute;
-  top: calc(20% + 90px);
+  top: calc(20% + 100px);
   left: 50%;
   width: max-content;
   max-width: min(460px, calc(100vw - 32px));
@@ -75,6 +82,7 @@
 .tip-toast-text {
   font-size: 15px;
   line-height: 1.4;
+  text-wrap: balance;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -333,8 +341,14 @@
 
 .build-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
+}
+
+@media (max-width: 640px) {
+  .build-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .build-stat {
@@ -381,12 +395,42 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: 2px 8px;
-  padding: 6px 12px;
+  min-height: 44px;
+  padding: 8px 14px;
   border-radius: 10px;
   border: 1.5px solid var(--chip-color);
   background: rgba(245, 238, 221, 0.04);
+  color: inherit;
+  font: inherit;
   font-size: 13px;
   line-height: 1.3;
+  text-align: left;
+}
+
+button.build-chip {
+  align-items: center;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+button.build-chip:hover,
+button.build-chip[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--chip-color) 18%, transparent);
+}
+
+button.build-chip:focus-visible {
+  outline: 2px solid var(--chip-color);
+  outline-offset: 3px;
+}
+
+.build-chip-detail {
+  min-height: 2.7em;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(245, 238, 221, 0.045);
+  font-size: 13px;
+  line-height: 1.35;
+  color: rgba(245, 238, 221, 0.8);
 }
 
 .build-chip-name {
@@ -425,7 +469,7 @@
   display: flex;
 }
 
-/* Burbuja translúcida teñida con el bioma: la comparten el aviso de reliquia
+/* Caja translúcida teñida con el bioma, con un racimo de burbujas: la comparten el aviso de reliquia
    y los consejos. UIManager pone --bubble-water (agua) y --bubble-accent
    (acento) como tríos RGB. */
 .biome-bubble {
@@ -450,17 +494,69 @@
       transparent 52%
     ),
     color-mix(in srgb, var(--bubble-tint) 44%, transparent);
-  -webkit-backdrop-filter: blur(8px) saturate(1.25);
-  backdrop-filter: blur(8px) saturate(1.25);
-  border: 1.5px solid color-mix(in srgb, var(--bubble-edge) 80%, transparent);
-  box-shadow:
-    inset 0 0 26px color-mix(in srgb, var(--bubble-edge) 26%, transparent),
-    inset -5px -8px 16px rgba(0, 0, 0, 0.2),
-    inset 3px 4px 10px rgba(255, 255, 255, 0.14),
-    0 0 22px color-mix(in srgb, var(--bubble-edge) 30%, transparent),
-    0 10px 30px rgba(0, 0, 0, 0.35);
+  -webkit-backdrop-filter: blur(12px) saturate(1.25);
+  backdrop-filter: blur(12px) saturate(1.25);
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
   pointer-events: none;
+}
+
+/* Racimo de burbujas que se escapa por la esquina superior derecha: tres
+   círculos del mismo tinte, cada uno con su reflejo, que se mecen despacio. */
+.biome-bubble::before {
+  --bubble-fill: color-mix(in srgb, var(--bubble-tint) 50%, transparent);
+  content: "";
+  position: absolute;
+  right: 18px;
+  bottom: 100%;
+  width: 66px;
+  height: 58px;
+  margin-bottom: 3px;
+  background:
+    radial-gradient(
+      circle at 17px 37px,
+      rgba(255, 255, 255, 0.55) 0,
+      rgba(255, 255, 255, 0) 5px
+    ),
+    radial-gradient(
+      circle at 22px 43px,
+      var(--bubble-fill) 0,
+      var(--bubble-fill) 13.5px,
+      transparent 14.5px
+    ),
+    radial-gradient(
+      circle at 42px 19px,
+      rgba(255, 255, 255, 0.5) 0,
+      rgba(255, 255, 255, 0) 3.5px
+    ),
+    radial-gradient(
+      circle at 45px 22px,
+      var(--bubble-fill) 0,
+      var(--bubble-fill) 8.5px,
+      transparent 9.5px
+    ),
+    radial-gradient(
+      circle at 58px 6px,
+      var(--bubble-fill) 0,
+      var(--bubble-fill) 4.5px,
+      transparent 5.5px
+    );
+  pointer-events: none;
+  animation: bubbleCluster 3.2s ease-in-out infinite alternate;
+}
+
+@keyframes bubbleCluster {
+  from {
+    transform: translateY(2px);
+  }
+  to {
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .biome-bubble::before {
+    animation: none;
+  }
 }
 
 /* Aviso de reliquia (ver UIManager.showRelicToast). */
@@ -511,6 +607,7 @@
     Verdana,
     sans-serif;
   color: rgba(245, 238, 221, 0.9);
+  text-wrap: balance;
 }
 
 .relic-toast-reward {

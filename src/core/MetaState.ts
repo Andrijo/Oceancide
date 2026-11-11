@@ -1,5 +1,5 @@
 // src/core/MetaState.ts
-// Progreso persistente entre runs (Refugio) y su guardado en localStorage.
+// Progreso persistente entre runs y su guardado en localStorage.
 
 import type { RunOutcome, RunSummary } from "@core/types"
 import { UPGRADES } from "@tycoon/Upgrades"
