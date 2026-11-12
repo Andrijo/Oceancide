@@ -25,6 +25,7 @@ export default mergeConfig(
           "src/cards/BuildStats.ts",
           "src/tycoon/UpgradeManager.ts",
           "src/tycoon/Upgrades.ts",
+          "src/ui/centerNotices.ts",
         ],
         exclude: ["**/*.test.ts"],
         thresholds: {

@@ -1,8 +1,11 @@
 // src/ui/UIManager.ts
 import type { GameState } from "@core/types"
 import { PARAGRAPH_FONT, TITLE_FONT } from "@ui/fonts"
+import { CenterNotices, messageTopBelow } from "@ui/centerNotices"
 
 const CLEANSING_DURATION = 600
+/** Separación entre el aviso de reliquia y un mensaje que conviva con él. */
+const MESSAGE_BELOW_RELIC_GAP = 4
 const CLEANSING_THRESHOLD = 0.5
 
 const TOXICITY_LEVEL_LABELS: Record<string, string> = {
@@ -84,8 +87,8 @@ export class UIManager {
   private trendHoldUntil = 0 // En segundos
   private lastTrendClass = ""
 
-  private currentMessage?: HTMLElement
-  private messageTimeout?: number
+  /** Mensajes cortos y aviso de reliquia, cada uno en su hueco. */
+  private centerNotices = new CenterNotices<HTMLElement>()
   private liveRegion: HTMLElement
   private tipEl: HTMLElement
   private tipTextEl: HTMLElement
@@ -530,11 +533,11 @@ export class UIManager {
     this.tipEl.classList.remove("visible")
   }
 
+  /**
+   * Mensaje corto en la zona central. Sustituye al mensaje anterior, pero no
+   * al aviso de reliquia: si hay uno en pantalla, el mensaje sale debajo.
+   */
   public showMessage(message: string, duration: number = 2000): void {
-    this.currentMessage?.remove()
-    window.clearTimeout(this.messageTimeout)
-    this.messageTimeout = undefined
-
     const msgEl = document.createElement("div")
     msgEl.textContent = message
     msgEl.setAttribute("role", "status")
@@ -559,19 +562,34 @@ export class UIManager {
     `
 
     document.getElementById("game-container")!.appendChild(msgEl)
-    this.currentMessage = msgEl
+    this.centerNotices.show("message", msgEl, duration)
+    this.placeMessageBelowRelic()
+  }
 
-    this.messageTimeout = window.setTimeout(() => {
-      msgEl.remove()
-      if (this.currentMessage === msgEl) this.currentMessage = undefined
-      this.messageTimeout = undefined
-    }, duration)
+  /**
+   * Si conviven un mensaje y el aviso de reliquia, baja el mensaje justo bajo
+   * el aviso para que no se tapen.
+   */
+  private placeMessageBelowRelic(): void {
+    const relic = this.centerNotices.get("relic")
+    const message = this.centerNotices.get("message")
+    if (!relic || !message) return
+
+    const container = document.getElementById("game-container")!
+    const top = messageTopBelow(
+      relic.getBoundingClientRect().bottom,
+      container.getBoundingClientRect().top,
+      MESSAGE_BELOW_RELIC_GAP,
+    )
+    message.style.top = `${top}px`
+    message.style.transform = "translate(-50%, 0)"
   }
 
   /**
    * Aviso de reliquia encontrada: nombre, texto de ambientación y recompensa,
    * dentro de una burbuja translúcida teñida con el agua y el acento del bioma
-   * (estilos en styles.css). Ocupa el hueco del mensaje central y se va solo.
+   * (estilos en styles.css). Tiene su propio hueco: los mensajes cortos no lo
+   * retiran. Se va solo.
    */
   public showRelicToast(
     name: string,
@@ -580,9 +598,6 @@ export class UIManager {
     tint?: BiomeTint,
     duration: number = 4200,
   ): void {
-    this.currentMessage?.remove()
-    window.clearTimeout(this.messageTimeout)
-
     const toast = document.createElement("div")
     toast.className = "relic-toast biome-bubble"
     toast.setAttribute("aria-hidden", "true") // lo lee la región viva (announce)
@@ -604,13 +619,9 @@ export class UIManager {
       part("relic-toast-reward", reward),
     )
     document.getElementById("game-container")!.appendChild(toast)
-    this.currentMessage = toast
-
-    this.messageTimeout = window.setTimeout(() => {
-      toast.remove()
-      if (this.currentMessage === toast) this.currentMessage = undefined
-      this.messageTimeout = undefined
-    }, duration)
+    this.centerNotices.show("relic", toast, duration)
+    // Un mensaje que ya estuviera en pantalla se aparta bajo el aviso.
+    this.placeMessageBelowRelic()
   }
 
   public showFloatingEco(
@@ -656,10 +667,9 @@ export class UIManager {
   public dispose(): void {
     for (const el of this.floatingEcoPool) el.remove()
     this.floatingEcoPool.length = 0
-    window.clearTimeout(this.messageTimeout)
     window.clearTimeout(this.cleansingTimeout)
 
-    this.currentMessage?.remove()
+    this.centerNotices.clear()
     this.buildHudEl.remove()
     this.spinBoostHudEl.remove()
     this.boostBarEl.remove()
