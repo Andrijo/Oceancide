@@ -12,6 +12,7 @@ const DEPTH_DEADZONE = 0.12
 const FLICK_DISTANCE = 44 // px desde el punto de apoyo
 const FLICK_TIME = 0.25 // segundos
 
+// Medidas a escala 1; el ajuste de tamaño las multiplica (--touch-scale).
 // Joystick de movimiento (mitad izquierda)
 const BASE_SIZE = 140 // debe coincidir con #joystick-base en el CSS
 const STICK_RADIUS = 60
@@ -20,6 +21,9 @@ const STICK_RADIUS = 60
 const DEPTH_W = 70 // debe coincidir con #depth-base en el CSS
 const DEPTH_H = 160
 const DEPTH_RANGE = 50
+
+/** Expresión CSS (para usar dentro de `calc()`) de una medida que sigue la escala. */
+const scaled = (px: number): string => `${px}px * var(--touch-scale, 1)`
 
 /** Dirección del giro de 360°. */
 export type DashDirection = "left" | "right"
@@ -57,6 +61,9 @@ export class TouchControls {
   // Botón de dash: alterna el sentido del giro en cada pulsación
   private dashFlip = false
 
+  /** Escala elegida en los ajustes (1 = tamaño original). */
+  private scale = 1
+
   constructor(input: InputState, actions: TouchActions) {
     this.input = input
     this.actions = actions
@@ -82,7 +89,7 @@ export class TouchControls {
       </button>
 
       <button id="build-btn" class="touch-btn" aria-label="Construir filtro"
-        style="position: absolute; right: calc(36px + env(safe-area-inset-right, 0px)); bottom: calc(var(--touch-bottom, 50px) + 256px);">
+        style="position: absolute; right: calc(${scaled(36)} + env(safe-area-inset-right, 0px)); bottom: calc(var(--touch-bottom, 50px) + ${scaled(256)});">
         <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M4 5h16l-6 7.5V19l-4 1.5v-8z" />
@@ -90,7 +97,7 @@ export class TouchControls {
       </button>
 
       <button id="lookback-btn" class="touch-btn" aria-label="Ver hacia atrás"
-        style="position: absolute; right: calc(112px + env(safe-area-inset-right, 0px)); bottom: calc(var(--touch-bottom, 50px) + 180px);">
+        style="position: absolute; right: calc(${scaled(112)} + env(safe-area-inset-right, 0px)); bottom: calc(var(--touch-bottom, 50px) + ${scaled(180)});">
         <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M9 14L4 9l5-5" />
@@ -99,7 +106,7 @@ export class TouchControls {
       </button>
 
       <button id="dash-btn" class="touch-btn" aria-label="Giro de 360° (dash)"
-        style="position: absolute; left: calc(36px + env(safe-area-inset-left, 0px)); bottom: calc(var(--touch-bottom, 50px) + 180px);">
+        style="position: absolute; left: calc(${scaled(36)} + env(safe-area-inset-left, 0px)); bottom: calc(var(--touch-bottom, 50px) + ${scaled(180)});">
         <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M20 12a8 8 0 1 1-2.34-5.66" />
@@ -136,6 +143,13 @@ export class TouchControls {
     return this.visible
   }
 
+  /** Tamaño (1 = original) y opacidad (0..1) de los controles, al momento. */
+  public setAppearance(scale: number, opacity: number): void {
+    this.scale = scale
+    this.root.style.setProperty("--touch-scale", String(scale))
+    this.root.style.opacity = String(opacity)
+  }
+
   private show(): void {
     if (this.visible) return
     this.visible = true
@@ -155,7 +169,7 @@ export class TouchControls {
       this.movePointer = e.pointerId
       this.moveZone.setPointerCapture(e.pointerId)
 
-      const half = BASE_SIZE / 2
+      const half = (BASE_SIZE * this.scale) / 2
       this.moveCenter.x = this.clamp(
         e.clientX,
         half + EDGE_MARGIN,
@@ -207,16 +221,17 @@ export class TouchControls {
     let dx = e.clientX - this.moveCenter.x
     let dy = e.clientY - this.moveCenter.y
 
+    const radius = STICK_RADIUS * this.scale
     const dist = Math.hypot(dx, dy)
-    if (dist > STICK_RADIUS) {
-      dx = (dx / dist) * STICK_RADIUS
-      dy = (dy / dist) * STICK_RADIUS
+    if (dist > radius) {
+      dx = (dx / dist) * radius
+      dy = (dy / dist) * radius
     }
 
     this.moveKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`
 
-    const x = dx / STICK_RADIUS
-    const y = -dy / STICK_RADIUS // arriba = adelante
+    const x = dx / radius
+    const y = -dy / radius // arriba = adelante
 
     // Ejes analógicos con zona muerta reescalada (aprovecha todo el recorrido)
     const mag = Math.hypot(x, y)
@@ -264,8 +279,8 @@ export class TouchControls {
       this.depthPointer = e.pointerId
       this.depthZone.setPointerCapture(e.pointerId)
 
-      const halfW = DEPTH_W / 2
-      const halfH = DEPTH_H / 2
+      const halfW = (DEPTH_W * this.scale) / 2
+      const halfH = (DEPTH_H * this.scale) / 2
       const cx = this.clamp(
         e.clientX,
         window.innerWidth * 0.5 + halfW + EDGE_MARGIN,
@@ -310,14 +325,11 @@ export class TouchControls {
   }
 
   private depthStick(e: PointerEvent): void {
-    const dy = this.clamp(
-      e.clientY - this.depthCenterY,
-      -DEPTH_RANGE,
-      DEPTH_RANGE,
-    )
+    const range = DEPTH_RANGE * this.scale
+    const dy = this.clamp(e.clientY - this.depthCenterY, -range, range)
     this.depthKnob.style.transform = `translate(-50%, calc(-50% + ${dy}px))`
 
-    const y = -dy / DEPTH_RANGE // arriba = subir
+    const y = -dy / range // arriba = subir
 
     const mag = Math.abs(y)
     let v = 0

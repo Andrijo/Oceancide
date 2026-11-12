@@ -13,16 +13,21 @@ import {
   QUALITY_LABELS,
   QUALITY_PRESETS,
   effectivePixelRatio,
-  loadQualityChoice,
   lowerPreset,
+  qualityChoiceFromUrl,
   rememberAutoPreset,
   resolveQuality,
-  saveQualityChoice,
   wantsAntialias,
   type QualityChoice,
   type QualitySettings,
 } from "@core/quality"
+import {
+  SettingsManager,
+  sanitizeSettings,
+  type Settings,
+} from "@core/settings"
 import { TouchControls } from "@ui/TouchControls"
+import { setColorVisionMode } from "@ui/colorVision"
 import { CardManager } from "@cards/CardManager"
 import { createRunState, type RunState } from "@cards/Card"
 import { buildStatLines, previewCard, readBuild } from "@cards/BuildStats"
@@ -32,7 +37,11 @@ import { BiomeTransition } from "@world/BiomeTransition"
 import { StructureManager } from "@world/StructureManager"
 import { STRUCTURES, type StructureKey } from "@world/StructureConfig"
 import { ScreenManager } from "@ui/ScreenManager"
-import { setAnimationsPaused } from "@ui/animations"
+import {
+  prefersReducedMotion,
+  setAnimationsPaused,
+  setReduceMotionChoice,
+} from "@ui/animations"
 import { RenderPipeline } from "@core/RenderPipeline"
 import {
   SaveManager,
@@ -152,7 +161,10 @@ export class Game {
   private devMenu?: DevMenu
   private perfOverlay?: PerfOverlay
 
-  private qualityChoice: QualityChoice = loadQualityChoice()
+  private settingsManager = new SettingsManager()
+  private settings: Settings = this.settingsManager.load()
+  private qualityChoice: QualityChoice =
+    qualityChoiceFromUrl() ?? this.settings.quality
   private quality: QualitySettings = resolveQuality(this.qualityChoice)
   private adaptiveQuality = new AdaptiveQuality()
   private screen: Screen = "hub"
@@ -167,7 +179,7 @@ export class Game {
     this.scene = new THREE.Scene()
 
     this.camera = new THREE.PerspectiveCamera(
-      75,
+      this.settings.fov,
       window.innerWidth / window.innerHeight,
       0.1,
       1000,
@@ -225,23 +237,24 @@ export class Game {
       onSaveMeta: () => this.saveManager.save(this.meta),
       getHelpState: () => ({
         touch: this.touchControls.isActive(),
-        tipsEnabled: this.meta.tipsEnabled,
+        tipsEnabled: this.settings.tipsEnabled,
         seenTips: this.meta.seenTips.length,
       }),
       onSetTipsEnabled: (enabled) => {
-        this.meta.tipsEnabled = enabled
-        if (!enabled) this.tips.clear()
-        this.saveManager.save(this.meta)
+        this.updateSettings({ tipsEnabled: enabled })
       },
       onResetTips: () => {
         this.meta.seenTips = []
         this.saveManager.save(this.meta)
       },
+      // La calidad en uso (puede venir de ?quality=), no solo la guardada.
+      getSettings: () => ({ ...this.settings, quality: this.qualityChoice }),
+      onUpdateSettings: (patch) => this.updateSettings(patch),
     })
 
     this.tips = new TipQueue({
       isSeen: (id) => this.meta.seenTips.includes(id),
-      isEnabled: () => this.meta.tipsEnabled,
+      isEnabled: () => this.settings.tipsEnabled,
       onShow: (id) => this.showTip(id),
       onHide: () => this.uiManager.hideTip(),
     })
@@ -268,8 +281,12 @@ export class Game {
     }
 
     this.inputController = new InputController(this.input, {
+      // En los ajustes, las flechas, Espacio y Esc son de la pantalla (sliders,
+      // casillas, volver), no del juego.
       isOverlayActive: () =>
-        this.screens.isEventActive() || this.screens.isCardChoiceActive(),
+        this.screens.isEventActive() ||
+        this.screens.isCardChoiceActive() ||
+        this.screens.isSettingsActive(),
       isPaused: () => this.paused,
       isPlaying: () => this.screen === "run",
       blocksGameplay: () => this.transition.blocksGameplay,
@@ -295,6 +312,7 @@ export class Game {
     this.timer = new THREE.Timer()
     this.timer.connect(document)
 
+    this.applySettings()
     this.setupLighting()
     this.setupEventListeners()
     this.showHub()
@@ -410,9 +428,40 @@ export class Game {
 
   /** Elige la calidad gráfica ("auto" o un preset fijo) y la guarda entre sesiones. */
   public setQualityChoice(choice: QualityChoice): void {
-    this.qualityChoice = choice
-    saveQualityChoice(choice)
-    this.applyQuality(resolveQuality(choice))
+    this.updateSettings({ quality: choice })
+  }
+
+  /**
+   * Cambia los ajustes indicados, los guarda y aplica en caliente solo lo que
+   * ha cambiado (sin recargar).
+   */
+  private updateSettings(patch: Partial<Settings>): void {
+    const previous = this.settings
+    const next = sanitizeSettings({ ...previous, ...patch }, previous)
+    this.settings = next
+    this.settingsManager.save(next)
+
+    // La calidad se compara con la que está en uso, no con la guardada: con
+    // ?quality= pueden no coincidir.
+    if (patch.quality !== undefined && next.quality !== this.qualityChoice) {
+      this.qualityChoice = next.quality
+      this.applyQuality(resolveQuality(next.quality))
+    }
+    if (!next.tipsEnabled && previous.tipsEnabled) this.tips.clear()
+
+    this.applySettings()
+  }
+
+  /** Aplica los ajustes que no dependen de la calidad gráfica. Idempotente. */
+  private applySettings(): void {
+    const s = this.settings
+    this.cameraRig.setFov(s.fov)
+    setReduceMotionChoice(s.reduceMotion)
+    setColorVisionMode(s.colorVision)
+    this.touchControls.setAppearance(s.touchScale, s.touchOpacity)
+    document
+      .getElementById("controls-hint")
+      ?.classList.toggle("user-hidden", !s.showControlsHint)
   }
 
   /**
@@ -574,7 +623,7 @@ export class Game {
     }
 
     this.turtle.trigger360Spin(direction)
-    navigator.vibrate?.(15)
+    if (this.settings.vibration) navigator.vibrate?.(15)
 
     if (!this.turtle.isSpinBoosting()) {
       this.uiManager.showMessage("¡DASH!", 700)
@@ -1243,7 +1292,11 @@ export class Game {
     this.update(deltaTime, time)
 
     if (this.screen !== "run") {
-      this.cameraRig.orbit(time, this.turtle.mesh.position)
+      // Con movimiento reducido, la cámara del menú se queda quieta.
+      this.cameraRig.orbit(
+        prefersReducedMotion() ? 0 : time,
+        this.turtle.mesh.position,
+      )
       if (!this.paused) this.biomeGenerator.updateVisuals(deltaTime)
     }
 

@@ -23,6 +23,14 @@ import { ChoiceGuard, isRepeatedActivation } from "@ui/choiceGuard"
 import { PARAGRAPH_FONT, TITLE_FONT, TITULO_FONT } from "@ui/fonts"
 import { MIST } from "@ui/palette"
 import { createHowToPlayBody } from "@ui/HowToPlay"
+import { createSettingsBody, type SettingsPatch } from "@ui/SettingsScreen"
+import { createDefaultSettings, type Settings } from "@core/settings"
+import { SEMANTIC, tint } from "@ui/colorVision"
+
+/** Clase que añade ▲ o ▼ con el modo para daltonismo (ver styles.css). */
+function toneMarkClass(tone: "positive" | "negative"): string {
+  return tone === "positive" ? "tone-mark-good" : "tone-mark-bad"
+}
 import { UPGRADES } from "@/tycoon/Upgrades"
 import { UpgradeManager } from "@/tycoon/UpgradeManager"
 import { type GameEvent, type EventOption } from "@/events/EventPool"
@@ -39,6 +47,9 @@ export interface ScreenCallbacks {
   onSetTipsEnabled(enabled: boolean): void
   /** Olvida los avisos vistos para que vuelvan a salir. */
   onResetTips(): void
+  getSettings(): Settings
+  /** Cambia (y guarda) los ajustes indicados; se aplican al momento. */
+  onUpdateSettings(patch: SettingsPatch): void
 }
 
 export interface HelpState {
@@ -212,6 +223,10 @@ export class ScreenManager {
    * elección o durante el bloqueo): el clic que genera el navegador no elige.
    */
   private suppressActivation = false
+  /** Pantalla de ajustes abierta: el juego no debe reaccionar al teclado. */
+  private settingsActive = false
+  /** Qué hace Esc en la pantalla actual (volver), si hace algo. */
+  private escapeAction: (() => void) | null = null
 
   constructor(callbacks: ScreenCallbacks) {
     this.callbacks = callbacks
@@ -313,6 +328,20 @@ export class ScreenManager {
       }
     })
 
+    // Esc vuelve atrás en las subpantallas que lo permiten (ajustes). En
+    // captura y sin propagar: si no, el juego lo recibiría después como
+    // "alternar pausa" y reanudaría la inmersión.
+    window.addEventListener(
+      "keydown",
+      (event) => {
+        if (event.code !== "Escape" || !this.escapeAction) return
+        event.preventDefault()
+        event.stopPropagation()
+        if (!event.repeat) this.escapeAction()
+      },
+      true,
+    )
+
     window.addEventListener("keydown", (event) => {
       if (
         event.code !== "Enter" ||
@@ -323,12 +352,14 @@ export class ScreenManager {
         return
       }
 
-      // Si hay un control enfocado, Enter debe activarlo a él, no a la acción
-      // principal del overlay.
+      // Si hay un control enfocado, Enter debe activarlo a él (o no hacer
+      // nada, en un slider o una casilla), no la acción principal del overlay.
       const target = event.target
       if (
         target instanceof HTMLElement &&
-        target.closest("button, a[href], [role='button']")
+        target.closest(
+          "button, a[href], [role='button'], input, select, textarea",
+        )
       ) {
         return
       }
@@ -346,6 +377,8 @@ export class ScreenManager {
     this.cardChoiceHandler = null
     this.eventActive = false
     this.eventChoiceHandler = null
+    this.settingsActive = false
+    this.escapeAction = null
     this.overlay.removeAttribute("aria-labelledby")
     this.overlay.removeAttribute("aria-describedby")
     this.setHudVisible(true)
@@ -363,11 +396,18 @@ export class ScreenManager {
     return this.eventActive
   }
 
+  public isSettingsActive(): boolean {
+    return this.settingsActive
+  }
+
   /**
    * @param focus Botón que recibe el foco al volver de una subpantalla, para
    *   no perder la posición al navegar con teclado. Por defecto, "Empezar".
    */
-  public showHub(meta: MetaState, focus?: "upgrades" | "help"): void {
+  public showHub(
+    meta: MetaState,
+    focus?: "upgrades" | "help" | "settings",
+  ): void {
     this.ensureHubAnimation()
 
     const bestIndex = meta.bestBiomeIndex
@@ -535,7 +575,19 @@ export class ScreenManager {
     helpBtn.style.flex = "1 1 0"
     helpBtn.style.width = "auto"
 
-    secondaryRow.append(upgradesBtn, helpBtn)
+    const settingsBtn = this.makeGhostAction(
+      "Ajustes",
+      () =>
+        this.showSettings("Volver al inicio", () =>
+          this.showHub(meta, "settings"),
+        ),
+      "neutral",
+      true,
+    )
+    settingsBtn.style.flex = "1 1 0"
+    settingsBtn.style.width = "auto"
+
+    secondaryRow.append(upgradesBtn, helpBtn, settingsBtn)
 
     content.append(
       enter(title, 0),
@@ -545,15 +597,19 @@ export class ScreenManager {
       enter(secondaryRow, 440),
     )
 
-    // Flechas entre los cuatro botones (dos filas de dos). "Eliminar progreso"
-    // queda fuera a propósito: solo se llega a él con Tab, y es el último.
+    // Flechas entre los botones (dos filas). "Eliminar progreso" queda fuera
+    // a propósito: solo se llega a él con Tab, y es el último.
     this.enableArrowNav(content, "grid")
 
     root.append(topBar)
     this.open(root, start)
 
-    const focusTarget =
-      focus === "upgrades" ? upgradesBtn : focus === "help" ? helpBtn : primary
+    const focusTargets = {
+      upgrades: upgradesBtn,
+      help: helpBtn,
+      settings: settingsBtn,
+    }
+    const focusTarget = focus ? focusTargets[focus] : primary
     focusTarget.focus()
   }
 
@@ -639,43 +695,46 @@ export class ScreenManager {
         )
 
         for (const line of preview.lines) {
-          const palette =
+          const tone =
             line.tone === "positive"
-              ? {
-                  color: "#86efac",
-                  border: "rgba(134, 239, 172, 0.35)",
-                  background: "rgba(34, 197, 94, 0.10)",
-                }
+              ? SEMANTIC.good
               : line.tone === "negative"
-                ? {
-                    color: "#fca5a5",
-                    border: "rgba(252, 165, 165, 0.35)",
-                    background: "rgba(239, 68, 68, 0.10)",
-                  }
-                : {
-                    color: "rgba(245, 238, 221, 0.72)",
-                    border: "rgba(132, 179, 195, 0.27)",
-                    background: "rgba(245, 238, 221, 0.04)",
-                  }
+                ? SEMANTIC.bad
+                : null
+          // Texto aclarado hacia el crema para que se lea sobre el fondo oscuro.
+          const palette = tone
+            ? {
+                color: `color-mix(in srgb, ${tone} 70%, #f5eedd)`,
+                border: tint(tone, 35),
+                background: tint(tone, 10),
+              }
+            : {
+                color: "rgba(245, 238, 221, 0.72)",
+                border: "rgba(132, 179, 195, 0.27)",
+                background: "rgba(245, 238, 221, 0.04)",
+              }
 
-          previewBox.append(
-            el(
-              "span",
-              `display: inline-flex; align-items: center; gap: 4px;
-               padding: 3px 8px; border-radius: 999px; border: 1px solid ${palette.border};
-               background: ${palette.background}; color: ${palette.color};
-               font-family: ${PARAGRAPH_FONT}; font-size: 11px; line-height: 1.3;
-               ${line.noEffect ? "opacity: 0.55;" : ""}`,
-              `${line.label}: ${line.value}`,
-            ),
+          const chip = el(
+            "span",
+            `display: inline-flex; align-items: center; gap: 4px;
+             padding: 3px 8px; border-radius: 999px; border: 1px solid ${palette.border};
+             background: ${palette.background}; color: ${palette.color};
+             font-family: ${PARAGRAPH_FONT}; font-size: 11px; line-height: 1.3;
+             ${line.noEffect ? "opacity: 0.55;" : ""}`,
+            `${line.label}: ${line.value}`,
           )
+          if (line.tone !== "neutral" && !line.noEffect) {
+            chip.classList.add(toneMarkClass(line.tone))
+          }
+          previewBox.append(chip)
         }
 
         if (preview.warning) {
           previewBox.append(
             el(
               "div",
-              `width: 100%; font-size: 12px; font-weight: bold; color: #fecaca;`,
+              `width: 100%; font-size: 12px; font-weight: bold;
+               color: color-mix(in srgb, ${SEMANTIC.bad} 45%, #f5eedd);`,
               preview.warning,
             ),
           )
@@ -903,6 +962,65 @@ export class ScreenManager {
     this.open(root, onBack)
   }
 
+  /**
+   * Pantalla "Ajustes". Cada cambio se guarda y se aplica al momento; Esc o
+   * `backLabel` vuelven a la pantalla que la abrió (`onBack`).
+   */
+  public showSettings(
+    backLabel: string,
+    onBack: () => void,
+    focus?: "reset",
+  ): void {
+    const { root, content } = this.makeWindowFrame()
+    content.style.justifyContent = "flex-start"
+
+    const title = this.makeScreenTitle("Ajustes")
+    title.id = "settings-dialog-title"
+    title.style.marginBottom = "4px"
+
+    const body = createSettingsBody(this.callbacks.getSettings(), {
+      touch: this.callbacks.getHelpState().touch,
+      onChange: (patch) => this.callbacks.onUpdateSettings(patch),
+    })
+
+    const buttons = el(
+      "div",
+      `width: 100%; max-width: 640px; display: flex; flex-wrap: wrap;
+      align-items: stretch; gap: 12px; margin-top: 4px;`,
+    )
+
+    const resetBtn = this.makeGhostAction(
+      "Restablecer ajustes",
+      () => {
+        this.callbacks.onUpdateSettings(createDefaultSettings())
+        this.showSettings(backLabel, onBack, "reset")
+      },
+      "neutral",
+      true,
+    )
+    resetBtn.style.flex = "1 1 200px"
+    resetBtn.style.width = "auto"
+
+    const backBtn = this.makeGhostAction(backLabel, onBack, "primary", true)
+    backBtn.style.flex = "1 1 200px"
+    backBtn.style.width = "auto"
+
+    buttons.append(resetBtn, backBtn)
+    this.enableArrowNav(buttons)
+
+    content.append(title, body, buttons)
+    this.open(root, onBack)
+    this.settingsActive = true
+    this.escapeAction = onBack
+    this.overlay.setAttribute("aria-labelledby", title.id)
+
+    // Foco en la opción marcada del primer grupo (calidad gráfica).
+    const first =
+      body.querySelector<HTMLElement>("input:checked") ??
+      body.querySelector<HTMLElement>("input")
+    ;(focus === "reset" ? resetBtn : (first ?? backBtn)).focus()
+  }
+
   public showSummary(summary: RunSummary, meta: MetaState): void {
     const again = () => this.callbacks.onStartRun()
     const { root, content } = this.makeWindowFrame()
@@ -1087,10 +1205,15 @@ export class ScreenManager {
     cardButtons[0]?.focus()
   }
 
+  /**
+   * @param focus Botón que recibe el foco al volver de los ajustes. Por
+   *   defecto, "Reanudar".
+   */
   public showPause(
     onResume: () => void,
     onAbandon: () => void,
     runInfo?: RunInfo,
+    focus?: "settings",
   ): void {
     const { root, content } = this.makeWindowFrame()
     const title = this.makeScreenTitle("Pausa")
@@ -1160,6 +1283,18 @@ export class ScreenManager {
     abandonBtn.style.flex = "35 1 0"
     abandonBtn.style.width = "auto"
 
+    const settingsBtn = this.makeGhostAction(
+      "Ajustes",
+      () =>
+        this.showSettings("Volver a la pausa", () =>
+          this.showPause(onResume, onAbandon, runInfo, "settings"),
+        ),
+      "neutral",
+      true,
+    )
+    settingsBtn.style.flex = "35 1 0"
+    settingsBtn.style.width = "auto"
+
     // Confirmación en dos pasos para no perder la inmersión por un clic accidental.
     const secondary = (): HTMLElement[] =>
       [statsLine, buildPanel].filter((n): n is HTMLElement => n !== undefined)
@@ -1181,7 +1316,7 @@ export class ScreenManager {
           title.textContent = "Pausa"
           for (const n of secondary()) n.style.display = ""
           if (lossWarning) lossWarning.style.display = "none"
-          buttons.replaceChildren(abandonBtn, resumeBtn)
+          buttons.replaceChildren(abandonBtn, settingsBtn, resumeBtn)
           resumeBtn.focus()
         },
         "primary",
@@ -1195,7 +1330,7 @@ export class ScreenManager {
       cancelBtn.focus()
     }
 
-    buttons.append(abandonBtn, resumeBtn)
+    buttons.append(abandonBtn, settingsBtn, resumeBtn)
 
     this.enableArrowNav(buttons)
 
@@ -1205,7 +1340,7 @@ export class ScreenManager {
       content.append(buildPanel)
     }
     this.open(root, onResume)
-    resumeBtn.focus()
+    ;(focus === "settings" ? settingsBtn : resumeBtn).focus()
   }
 
   /** Pasado el bloqueo y sin un Espacio/Enter "viejo" de por medio. */
@@ -1697,7 +1832,6 @@ export class ScreenManager {
       83% { border-color: #0a9396; box-shadow: 0 0 20px rgba(10, 147, 150, 0.9), inset 0 0 14px rgba(10, 147, 150, 0.4); }
       100% { border-color: #94a3b8; box-shadow: 0 0 14px rgba(148, 163, 184, 0.7), inset 0 0 12px rgba(148, 163, 184, 0.3); }
     }
-    @media (prefers-reduced-motion: reduce) { .card-ultra-legendary { animation: none !important; } }
   `
     document.head.appendChild(style)
   }
@@ -1714,7 +1848,6 @@ export class ScreenManager {
       60% { border-color: #ef4444; box-shadow: 0 0 18px rgba(239, 68, 68, 0.7), inset 0 0 12px rgba(239, 68, 68, 0.28); }
       80% { border-color: #facc15; box-shadow: 0 0 20px rgba(250, 204, 21, 0.72), inset 0 0 13px rgba(250, 204, 21, 0.3); }
     }
-    @media (prefers-reduced-motion: reduce) { .card-chaos { animation: none !important; } }
   `
     document.head.appendChild(style)
   }
@@ -1740,7 +1873,6 @@ export class ScreenManager {
     style.id = "menu-hub-animation"
     style.textContent = `
       @keyframes hubFadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-      @media (prefers-reduced-motion: reduce) { [data-hub-anim], [data-hub-cta] { animation: none !important; } }
     `
     document.head.appendChild(style)
   }
@@ -1907,6 +2039,7 @@ export class ScreenManager {
         box-shadow: inset -3px -4px 7px rgba(0, 77, 110, 0.22), inset 2px 2px 5px rgba(245, 238, 221, 0.35), 0 0 12px rgba(91, 236, 255, 0.28);
         animation: menuBubbleFloat ${bubble.duration} ease-in-out ${bubble.delay} infinite;`,
       )
+      node.className = "menu-bubble"
       layer.append(node)
     }
     return layer
@@ -1917,6 +2050,8 @@ export class ScreenManager {
     this.eventChoiceHandler = null
     this.cardChoiceActive = false
     this.cardChoiceHandler = null
+    this.settingsActive = false
+    this.escapeAction = null
     this.overlay.removeAttribute("aria-labelledby")
     this.overlay.removeAttribute("aria-describedby")
     this.overlay.replaceChildren(this.makeCornerBubbles(), container)
@@ -2027,11 +2162,12 @@ export class ScreenManager {
       card.name,
     )
     // Cada tramo del valor se pinta según su signo: las penalizaciones van en
-    // rojo aunque la carta sea buena en conjunto (maldiciones, caos).
+    // rojo aunque la carta sea buena en conjunto (maldiciones, caos). Con el
+    // modo para daltonismo, además, llevan ▲ o ▼.
     const neutralColor = isUltra ? "#f5eedd" : isChaos ? "#fb923c" : "#e2e8f0"
     const toneColors: Record<CardTone, string> = {
-      positive: isUltra ? "#f5eedd" : "#4ade80",
-      negative: "#f87171",
+      positive: isUltra ? "#f5eedd" : SEMANTIC.good,
+      negative: SEMANTIC.bad,
       neutral: neutralColor,
     }
     const value = el(
@@ -2044,7 +2180,9 @@ export class ScreenManager {
     const separator = cardValueSeparator(card)
     cardValueParts(card).forEach((part, i) => {
       if (i > 0) value.append(document.createTextNode(separator))
-      value.append(el("span", `color: ${toneColors[part.tone]};`, part.text))
+      const span = el("span", `color: ${toneColors[part.tone]};`, part.text)
+      if (part.tone !== "neutral") span.classList.add(toneMarkClass(part.tone))
+      value.append(span)
     })
     const desc = el(
       "div",

@@ -326,7 +326,11 @@ Al terminar cada run se muestra un resumen (zona alcanzada, desechos, duración,
 - **Runs jugadas / completadas**.
 - **Total de desechos** recolectados.
 
-Completar todos los biomas de la run otorga un **bono del 25%** sobre la conciencia obtenida en la run. Desde la pantalla de inicio puedes empezar una nueva inmersión, abrir **Cómo jugar** o eliminar el progreso guardado. El guardado también recuerda qué avisos has visto y si están activados.
+Completar todos los biomas de la run otorga un **bono del 25%** sobre la conciencia obtenida en la run. Desde la pantalla de inicio puedes empezar una nueva inmersión, abrir **Cómo jugar** o **Ajustes**, o eliminar el progreso guardado. El guardado también recuerda qué avisos has visto.
+
+### Ajustes
+
+La pantalla **Ajustes** (en el inicio y en la pausa) permite cambiar la calidad gráfica, el campo de visión, reducir el movimiento (seguir al sistema o forzarlo), el **modo para daltonismo** (protanopía, deuteranopía o tritanopía: cambia la paleta de mejora/empeora/aviso/fuga y añade símbolos ▲ ▼ y formas para no depender solo del color), la vibración, el tamaño y la opacidad de los controles táctiles, la pista de teclas y los consejos. Los cambios se aplican al momento y se guardan en `localStorage` bajo su propia clave, `oceancide.settings`, así que **eliminar el progreso no los borra**. `?quality=low|medium|high|auto` en la URL sobreescribe la calidad durante esa sesión.
 
 ### Reproducir una run
 

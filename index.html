@@ -226,12 +226,12 @@
       .toxicity-trend.up {
         opacity: 1;
         transform: scale(1);
-        color: #ff6b6b;
+        color: var(--c-bad, #ff6b6b);
       }
       .toxicity-trend.down {
         opacity: 1;
         transform: scale(1);
-        color: #4ade80;
+        color: var(--c-good, #4ade80);
       }
 
       .toxicity-skull.level-low {
@@ -310,11 +310,13 @@
         -webkit-touch-callout: none;
       }
 
-      #controls-hint.hidden {
+      #controls-hint.hidden,
+      #controls-hint.user-hidden {
         display: none;
       }
 
-      /* Controles para móviles */
+      /* Controles para móviles. --touch-scale lo fija el ajuste de tamaño
+         (TouchControls.setAppearance) y escala todas las medidas. */
       :root {
         --touch-bottom: calc(50px + env(safe-area-inset-bottom, 0px));
       }
@@ -346,8 +348,8 @@
         position: absolute;
         left: calc(30px + env(safe-area-inset-left, 0px));
         bottom: var(--touch-bottom);
-        width: 140px;
-        height: 140px;
+        width: calc(140px * var(--touch-scale, 1));
+        height: calc(140px * var(--touch-scale, 1));
         border-radius: 50%;
         background: none;
         border: 2px solid #f5eedd;
@@ -366,8 +368,8 @@
         position: absolute;
         left: 50%;
         top: 50%;
-        width: 60px;
-        height: 60px;
+        width: calc(60px * var(--touch-scale, 1));
+        height: calc(60px * var(--touch-scale, 1));
         border-radius: 50%;
         background: rgba(132, 179, 195, 0.85);
         border: 2px solid rgba(245, 238, 221, 0.9);
@@ -390,9 +392,9 @@
         position: absolute;
         right: calc(30px + env(safe-area-inset-right, 0px));
         bottom: var(--touch-bottom);
-        width: 70px;
-        height: 160px;
-        border-radius: 35px;
+        width: calc(70px * var(--touch-scale, 1));
+        height: calc(160px * var(--touch-scale, 1));
+        border-radius: calc(35px * var(--touch-scale, 1));
         background: none;
         border: 2px solid #f5eedd;
         opacity: 0.6;
@@ -430,8 +432,8 @@
         position: absolute;
         left: 50%;
         top: 50%;
-        width: 54px;
-        height: 54px;
+        width: calc(54px * var(--touch-scale, 1));
+        height: calc(54px * var(--touch-scale, 1));
         border-radius: 50%;
         background: #f5eedd;
         border: 2px solid rgba(245, 238, 221, 0.9);
@@ -442,13 +444,27 @@
       /* Botón de boost de velocidad */
       #boost-btn {
         position: absolute;
-        right: calc(36px + env(safe-area-inset-right, 0px));
-        bottom: calc(var(--touch-bottom) + 180px);
+        right: calc(36px * var(--touch-scale, 1) + env(safe-area-inset-right, 0px));
+        bottom: calc(var(--touch-bottom) + 180px * var(--touch-scale, 1));
+      }
+
+      #boost-btn svg {
+        width: calc(34px * var(--touch-scale, 1));
+        height: calc(34px * var(--touch-scale, 1));
+      }
+
+      .touch-btn svg {
+        width: calc(30px * var(--touch-scale, 1));
+        height: calc(30px * var(--touch-scale, 1));
       }
 
       .touch-btn {
-        width: 64px;
-        height: 64px;
+        width: calc(64px * var(--touch-scale, 1));
+        height: calc(64px * var(--touch-scale, 1));
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         border-radius: 50%;
         font-size: 28px;
         color: white;

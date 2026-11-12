@@ -31,10 +31,11 @@ export interface MetaState {
   runsCompleted: number
   totalDebris: number
   upgrades: Record<string, number>
-  /** Avisos contextuales que el jugador ya vio (no se repiten). */
+  /**
+   * Avisos contextuales que el jugador ya vio (no se repiten). Si se muestran
+   * o no es un ajuste (`Settings.tipsEnabled`), no progreso.
+   */
   seenTips: TipId[]
-  /** Avisos contextuales activados. */
-  tipsEnabled: boolean
 }
 
 export function createDefaultMeta(): MetaState {
@@ -48,7 +49,6 @@ export function createDefaultMeta(): MetaState {
     totalDebris: 0,
     upgrades: {},
     seenTips: [],
-    tipsEnabled: true,
   }
 }
 
@@ -136,10 +136,6 @@ export function sanitizeMeta(raw: Record<string, unknown>): MetaState {
     totalDebris: finiteNumber(raw.totalDebris, defaults.totalDebris),
     upgrades,
     seenTips,
-    tipsEnabled:
-      typeof raw.tipsEnabled === "boolean"
-        ? raw.tipsEnabled
-        : defaults.tipsEnabled,
   }
 }
 

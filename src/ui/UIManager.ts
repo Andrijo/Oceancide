@@ -2,6 +2,11 @@
 import type { GameState } from "@core/types"
 import { PARAGRAPH_FONT, TITLE_FONT } from "@ui/fonts"
 import { CenterNotices, messageTopBelow } from "@ui/centerNotices"
+import { SEMANTIC, tint } from "@ui/colorVision"
+
+const TIMER_NORMAL = { color: "#f5eedd", border: "rgba(245, 238, 221, 0.35)" }
+const TIMER_LOW = { color: SEMANTIC.warn, border: tint(SEMANTIC.warn, 70) }
+const TIMER_CRITICAL = { color: SEMANTIC.bad, border: tint(SEMANTIC.bad, 90) }
 
 const CLEANSING_DURATION = 600
 /** Separación entre el aviso de reliquia y un mensaje que conviva con él. */
@@ -134,9 +139,9 @@ export class UIManager {
       font-family: ${PARAGRAPH_FONT};
       font-size: 14px;
       font-weight: bold;
-      color: #facc15;
+      color: ${SEMANTIC.leak};
       background: rgba(0, 0, 0, 0.55);
-      border: 2px solid rgba(250, 204, 21, 0.6);
+      border: 2px solid ${tint(SEMANTIC.leak, 60)};
       border-radius: 10px;
       pointer-events: none;
     `
@@ -311,7 +316,9 @@ export class UIManager {
     if (key === this.lastBuildHud) return
     this.lastBuildHud = key
     this.buildHudEl.textContent = text
-    this.buildHudEl.style.color = available ? "#f5eedd" : "#ff9a9a"
+    this.buildHudEl.style.color = available ? "#f5eedd" : SEMANTIC.bad
+    // Sin depender del color: el filtro no disponible se ve atenuado.
+    this.buildHudEl.style.opacity = available ? "1" : "0.75"
   }
 
   public updateSpinBoostHud(boost: number, active: boolean): void {
@@ -329,9 +336,9 @@ export class UIManager {
     this.boostBarFillEl.style.width = `${percent}%`
 
     if (energy < 0.2) {
-      this.boostBarFillEl.style.background = "#ef4444"
+      this.boostBarFillEl.style.background = SEMANTIC.bad
     } else if (energy < 0.5) {
-      this.boostBarFillEl.style.background = "#f97316"
+      this.boostBarFillEl.style.background = SEMANTIC.warn
     } else {
       this.boostBarFillEl.style.background =
         "linear-gradient(90deg, #84b3c3, #f5eedd)"
@@ -370,23 +377,18 @@ export class UIManager {
       this.lastBiomeTimerText = text
     }
 
-    if (empty) {
-      this.biomeTimerEl.style.color = "#ef4444"
-      this.biomeTimerEl.style.borderColor = "rgba(239, 68, 68, 0.9)"
-      return
-    }
-
     const ratio = remaining / limit
-    if (remaining <= 10) {
-      this.biomeTimerEl.style.color = "#ef4444"
-      this.biomeTimerEl.style.borderColor = "rgba(239, 68, 68, 0.9)"
-    } else if (ratio < 0.3) {
-      this.biomeTimerEl.style.color = "#f97316"
-      this.biomeTimerEl.style.borderColor = "rgba(249, 115, 22, 0.7)"
-    } else {
-      this.biomeTimerEl.style.color = "#f5eedd"
-      this.biomeTimerEl.style.borderColor = "rgba(245, 238, 221, 0.35)"
-    }
+    const style =
+      empty || remaining <= 10
+        ? TIMER_CRITICAL
+        : ratio < 0.3
+          ? TIMER_LOW
+          : TIMER_NORMAL
+    this.biomeTimerEl.style.color = style.color
+    this.biomeTimerEl.style.borderColor = style.border
+    // Sin depender del color: en los últimos segundos el borde se engrosa.
+    this.biomeTimerEl.style.borderWidth =
+      style === TIMER_CRITICAL ? "3px" : "2px"
   }
 
   public updateUI(state: GameState, deltaTime: number): void {

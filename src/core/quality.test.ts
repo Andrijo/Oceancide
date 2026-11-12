@@ -5,12 +5,12 @@ import {
   QUALITY_PRESETS,
   detectAutoPreset,
   effectivePixelRatio,
+  isQualityChoice,
   isTouchDevice,
-  loadQualityChoice,
   lowerPreset,
+  qualityChoiceFromUrl,
   rememberAutoPreset,
   resolveQuality,
-  saveQualityChoice,
   wantsAntialias,
 } from "@core/quality"
 
@@ -112,23 +112,31 @@ describe("detección de dispositivo", () => {
   })
 })
 
+describe("elección de calidad", () => {
+  it("reconoce solo las elecciones válidas", () => {
+    expect(isQualityChoice("auto")).toBe(true)
+    expect(isQualityChoice("low")).toBe(true)
+    expect(isQualityChoice("ultra")).toBe(false)
+    expect(isQualityChoice(null)).toBe(false)
+  })
+
+  it("un preset fijo se resuelve tal cual", () => {
+    expect(resolveQuality("low")).toBe(QUALITY_PRESETS.low)
+  })
+
+  it("?quality= sobreescribe la elección solo si es válido", () => {
+    vi.stubGlobal("location", { search: "?quality=low" })
+    expect(qualityChoiceFromUrl()).toBe("low")
+
+    vi.stubGlobal("location", { search: "?quality=ultra" })
+    expect(qualityChoiceFromUrl()).toBeNull()
+
+    vi.stubGlobal("location", { search: "" })
+    expect(qualityChoiceFromUrl()).toBeNull()
+  })
+})
+
 describe("persistencia", () => {
-  it("por defecto es auto y recuerda la elección del jugador", () => {
-    stubStorage()
-    expect(loadQualityChoice()).toBe("auto")
-
-    saveQualityChoice("low")
-
-    expect(loadQualityChoice()).toBe("low")
-    expect(resolveQuality(loadQualityChoice())).toBe(QUALITY_PRESETS.low)
-  })
-
-  it("ignora valores guardados no válidos", () => {
-    stubStorage({ "oceancide.quality": "ultra" })
-
-    expect(loadQualityChoice()).toBe("auto")
-  })
-
   it("el modo auto recuerda el preset al que bajó, pero nunca sube por ello", () => {
     stubStorage()
     stubDevice({ coarse: true, touchPoints: 5 })
@@ -150,8 +158,9 @@ describe("persistencia", () => {
       },
     })
 
-    expect(loadQualityChoice()).toBe("auto")
-    expect(() => saveQualityChoice("high")).not.toThrow()
+    stubDevice({ coarse: false, touchPoints: 0 })
+    expect(detectAutoPreset()).toBe("high")
+    expect(() => rememberAutoPreset("low")).not.toThrow()
   })
 })
 

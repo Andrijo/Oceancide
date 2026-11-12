@@ -7,10 +7,13 @@ import {
   pickIndicatorSlots,
   type IndicatorCandidate,
 } from "@ui/offscreenIndicators"
+import { SEMANTIC } from "@ui/colorVision"
 
 const MAX_SLOTS = 6
-const COLOR_DEBRIS = "#7dd3fc"
-const COLOR_LEAK = "#facc15"
+// Colores del modo para daltonismo; con él activo, la fuga cambia también de
+// forma (clase edge-arrow-leak, ver styles.css).
+const COLOR_DEBRIS = SEMANTIC.debris
+const COLOR_LEAK = SEMANTIC.leak
 
 interface Candidate extends IndicatorCandidate {
   position: THREE.Vector3
@@ -81,6 +84,7 @@ export class EdgeIndicators {
       arrow.style.display = "block"
       arrow.style.color = color
       arrow.style.borderLeftColor = color
+      arrow.classList.toggle("edge-arrow-leak", candidate.leak)
       arrow.style.transform = `translate(${edge.x.toFixed(1)}px, ${edge.y.toFixed(1)}px) translate(-50%, -50%) rotate(${edge.angle.toFixed(3)}rad)`
     }
     for (let i = shown; i < this.visibleCount; i++) {
