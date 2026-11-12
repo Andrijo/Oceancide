@@ -84,9 +84,12 @@
         z-index: 100;
       }
 
+      /* Fondo común del HUD (--hud-panel en styles.css): el texto crema se
+         lee también sobre el agua clara del primer bioma. */
       .stat-box {
-        background: none;
-        padding: 10px 20px;
+        background: var(--hud-panel);
+        padding: 8px 18px;
+        margin-bottom: 6px;
         border-radius: 10px;
         opacity: 1;
       }
@@ -104,16 +107,14 @@
         opacity: 1;
       }
 
+      /* UIManager la mete al final de #hud-bottom (styles.css). */
       #controls-hint {
-        position: absolute;
-        bottom: calc(20px + env(safe-area-inset-bottom, 0px));
-        left: 50%;
-        transform: translateX(-50%);
-        color: white;
-        background: none;
-        padding: 10px 20px;
+        margin-top: 6px;
+        color: #f5eedd;
+        background: var(--hud-panel);
+        padding: 6px 16px;
         border-radius: 8px;
-        font-size: 17px;
+        font-size: 15px;
         font-family: "DMSans", Tahoma, Geneva, Verdana, sans-serif;
         text-align: center;
         pointer-events: none;
@@ -508,6 +509,43 @@
         /* En móvil el hint de teclado no aplica: se oculta */
         #controls-hint {
           display: none;
+        }
+      }
+
+      /* En táctil la esquina inferior izquierda es del joystick: las
+         estadísticas suben arriba a la izquierda (el centro es de la
+         calavera y la derecha, de la pausa). */
+      :root[data-input="touch"] #ui-overlay {
+        top: calc(10px + env(safe-area-inset-top, 0px));
+        left: calc(10px + env(safe-area-inset-left, 0px));
+        bottom: auto;
+      }
+
+      /* Pantallas bajas (móvil en horizontal): estadísticas en fila y
+         compactas, para dejar libre la columna de botones táctiles. */
+      @media (max-height: 500px) {
+        #ui-overlay {
+          flex-direction: row;
+          gap: 6px;
+        }
+
+        .stat-box {
+          padding: 4px 10px;
+          margin-bottom: 0;
+        }
+
+        .stat-label {
+          font-size: 12px;
+        }
+
+        .stat-value {
+          font-size: 17px;
+          margin-top: 0;
+        }
+
+        .toxicity-skull {
+          width: 48px;
+          height: 58px;
         }
       }
     </style>
