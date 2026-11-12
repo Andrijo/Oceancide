@@ -4,7 +4,11 @@ import {
   type RunOutcome,
   type RunSummary,
 } from "@core/types"
-import { computeEndlessEco, type MetaState } from "@core/MetaState"
+import {
+  computeEndlessEco,
+  isEndlessUnlocked,
+  type MetaState,
+} from "@core/MetaState"
 import type { Card, CardRarity } from "@cards/Card"
 import {
   cardValueParts,
@@ -21,7 +25,7 @@ import {
 import { revealCards } from "@ui/animations"
 import { ChoiceGuard, isRepeatedActivation } from "@ui/choiceGuard"
 import { PARAGRAPH_FONT, TITLE_FONT, TITULO_FONT } from "@ui/fonts"
-import { MIST } from "@ui/palette"
+import { DEEP, DEEP_HOVER, MIST } from "@ui/palette"
 import { createHowToPlayBody } from "@ui/HowToPlay"
 import {
   cancelKeyCapture,
@@ -175,6 +179,10 @@ const ICONS = {
     "M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2",
     "M10 11v6",
     "M14 11v6",
+  ],
+  lock: [
+    "M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z",
+    "M7 11V7a5 5 0 0 1 10 0v4",
   ],
 }
 
@@ -571,9 +579,8 @@ export class ScreenManager {
       true,
     )
 
-    const endless = () => this.callbacks.onStartEndless()
-
-    // Fila de botones de acción
+    // Fila de botones de acción. "Empezar" va primero (orden de lectura y de
+    // tabulación): es el modo principal.
     const actionsRow = el(
       "div",
       `display: flex;
@@ -583,20 +590,27 @@ export class ScreenManager {
       max-width: 640px;`,
     )
 
-    const primary = this.makeHubCta("Empezar", start, true)
+    const primary = this.makePrimaryCta("Empezar", start)
     primary.style.flex = "65 1 0"
     primary.style.width = "auto"
 
-    const secondary = this.makeGhostAction(
-      "Inmersión sin fin",
-      endless,
-      "neutral",
-      true,
-    )
+    // Hasta completar el modo normal, la inmersión sin fin solo se anuncia.
+    const secondary = isEndlessUnlocked(meta)
+      ? this.makeGhostAction(
+          "Inmersión sin fin",
+          () => this.callbacks.onStartEndless(),
+          "neutral",
+          true,
+        )
+      : this.makeLockedAction(
+          "Inmersión sin fin",
+          "Completa una inmersión para desbloquearla",
+        )
     secondary.style.flex = "35 1 0"
     secondary.style.width = "auto"
+    secondary.style.minWidth = "0"
 
-    actionsRow.append(secondary, primary)
+    actionsRow.append(primary, secondary)
 
     // Fila secundaria (debajo de la principal): mejoras y ayuda
     const secondaryRow = el(
@@ -1168,11 +1182,9 @@ export class ScreenManager {
       align-items: stretch; gap: 12px; margin-top: 4px;`,
     )
 
-    const againBtn = this.makeGhostAction(
+    const againBtn = this.makePrimaryCta(
       summary.endless ? "Otra inmersión sin fin" : "Nueva inmersión",
       again,
-      "primary",
-      true,
     )
     againBtn.style.flex = "65 1 0"
     againBtn.style.width = "auto"
@@ -1332,12 +1344,7 @@ export class ScreenManager {
       align-items: stretch; gap: 12px; margin-top: 4px;`,
     )
 
-    const resumeBtn = this.makeGhostAction(
-      "Reanudar",
-      onResume,
-      "primary",
-      true,
-    )
+    const resumeBtn = this.makePrimaryCta("Reanudar", onResume)
     resumeBtn.style.flex = "65 1 0"
     resumeBtn.style.width = "auto"
 
@@ -1758,17 +1765,21 @@ export class ScreenManager {
     variant: ActionVariant = "neutral",
     fullWidth = true,
   ): HTMLButtonElement {
+    const ghostBg = "rgba(245, 238, 221, 0.02)"
     const palette = {
+      // La acción principal de cada pantalla va rellena; el resto, solo borde.
       primary: {
         color: "rgba(245, 238, 221, 0.92)",
+        bg: DEEP,
         border: "rgba(132, 179, 195, 0.42)",
-        hoverBg: "rgba(245, 238, 221, 0.10)",
+        hoverBg: DEEP_HOVER,
         hoverBorder: "rgba(132, 179, 195, 0.83)",
         hoverColor: "#f5eedd",
         focus: HUB_ACCENT,
       },
       upgrade: {
         color: UPGRADE_TEXT,
+        bg: ghostBg,
         border: "rgba(132, 179, 195, 0.45)",
         hoverBg: "rgba(132, 179, 195, 0.16)",
         hoverBorder: "rgba(245, 238, 221, 0.8)",
@@ -1777,6 +1788,7 @@ export class ScreenManager {
       },
       danger: {
         color: "rgba(255, 150, 150, 0.9)",
+        bg: ghostBg,
         border: "rgba(255, 120, 120, 0.28)",
         hoverBg: "rgba(255, 90, 90, 0.14)",
         hoverBorder: "rgba(255, 120, 120, 0.6)",
@@ -1785,6 +1797,7 @@ export class ScreenManager {
       },
       neutral: {
         color: "rgba(245, 238, 221, 0.85)",
+        bg: ghostBg,
         border: "rgba(132, 179, 195, 0.3)",
         hoverBg: "rgba(245, 238, 221, 0.08)",
         hoverBorder: "rgba(132, 179, 195, 0.63)",
@@ -1798,7 +1811,7 @@ export class ScreenManager {
       `display: inline-flex; align-items: center; justify-content: center; gap: 10px;
       ${fullWidth ? "width: 100%;" : "width: auto;"} min-height: 54px; padding: 12px 22px;
       border-radius: 12px; cursor: pointer; color: ${palette.color};
-      font: 700 clamp(15px, 1.9vw, 20px) ${TITLE_FONT}; background: rgba(245, 238, 221, 0.02);
+      font: 700 clamp(15px, 1.9vw, 20px) ${TITLE_FONT}; background: ${palette.bg};
       border: 1.5px solid ${palette.border}; backdrop-filter: blur(6px);
       transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, color 160ms ease;`,
       label,
@@ -1812,7 +1825,7 @@ export class ScreenManager {
     })
     btn.addEventListener("mouseleave", () => {
       btn.style.transform = "translateY(0)"
-      btn.style.background = "rgba(245, 238, 221, 0.02)"
+      btn.style.background = palette.bg
       btn.style.borderColor = palette.border
       btn.style.color = palette.color
     })
@@ -1936,21 +1949,15 @@ export class ScreenManager {
     document.head.appendChild(style)
   }
 
-  private makeHubCta(
+  /**
+   * Acción principal de una pantalla (la que lanza Enter): botón relleno con
+   * la tecla al lado. Mismo aspecto en el hub, la pausa y el resumen.
+   */
+  private makePrimaryCta(
     label: string,
     onClick: () => void,
-    fullWidth = false,
   ): HTMLButtonElement {
-    const btn = el(
-      "button",
-      `display: inline-flex; align-items: center; justify-content: ${fullWidth ? "center" : "flex-start"};
-      gap: 12px; ${fullWidth ? "width: 100%;" : "width: auto;"} padding: 12px 22px;
-      border-radius: 12px; cursor: pointer; color: rgba(245, 238, 221, 0.92);
-      font: 700 clamp(15px, 1.9vw, 21px) ${TITLE_FONT}; background: #16587b;
-      border: 1.5px solid rgba(132, 179, 195, 0.42); backdrop-filter: blur(6px);
-      transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, color 160ms ease;`,
-    )
-
+    const btn = this.makeGhostAction(label, onClick, "primary", true)
     btn.dataset.hubCta = ""
 
     const keycap = el(
@@ -1962,31 +1969,39 @@ export class ScreenManager {
     keycap.setAttribute("aria-hidden", "true")
     // Solo con teclado: en táctil o con mando no hay Enter que pulsar.
     keycap.className = "keyboard-only"
-
-    btn.append(document.createTextNode(label), keycap)
-
-    btn.addEventListener("mouseenter", () => {
-      btn.style.transform = "translateY(-2px)"
-      btn.style.background = "#1d6a92"
-      btn.style.borderColor = "rgba(132, 179, 195, 0.83)"
-      btn.style.color = "#f5eedd"
-    })
-    btn.addEventListener("mouseleave", () => {
-      btn.style.transform = "translateY(0)"
-      btn.style.background = "#16587b"
-      btn.style.borderColor = "rgba(132, 179, 195, 0.42)"
-      btn.style.color = "rgba(245, 238, 221, 0.92)"
-    })
-    btn.addEventListener("focus", () => {
-      btn.style.outline = `2px solid ${HUB_ACCENT}`
-      btn.style.outlineOffset = "5px"
-    })
-    btn.addEventListener("blur", () => {
-      btn.style.outline = "none"
-    })
-    btn.addEventListener("click", onClick)
+    btn.append(keycap)
 
     return btn
+  }
+
+  /**
+   * Modo aún no disponible: no es un botón (no recibe foco ni se pulsa), solo
+   * dice qué hace falta para desbloquearlo.
+   */
+  private makeLockedAction(label: string, requirement: string): HTMLElement {
+    const box = el(
+      "div",
+      `display: flex; align-items: center; justify-content: center; gap: 10px;
+      min-height: 54px; padding: 8px 16px; border-radius: 12px; box-sizing: border-box;
+      color: rgba(245, 238, 221, 0.7); background: rgba(245, 238, 221, 0.02);
+      border: 1.5px dashed rgba(132, 179, 195, 0.3); cursor: default;`,
+    )
+    box.dataset.locked = ""
+
+    const text = el(
+      "div",
+      "display: flex; flex-direction: column; align-items: flex-start; min-width: 0;",
+    )
+    text.append(
+      el("span", `font: 700 clamp(14px, 1.6vw, 17px) ${TITLE_FONT};`, label),
+      el(
+        "span",
+        `font: 12px ${PARAGRAPH_FONT}; line-height: 1.3; text-align: left;`,
+        requirement,
+      ),
+    )
+    box.append(icon(ICONS.lock, 18), text)
+    return box
   }
 
   private makeGhostTrashButton(

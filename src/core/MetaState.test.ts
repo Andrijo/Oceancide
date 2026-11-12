@@ -10,6 +10,7 @@ import {
   computeEndlessEco,
   createDefaultMeta,
   ENDLESS_UNBANKED_KEEP,
+  isEndlessUnlocked,
 } from "@core/MetaState"
 import type { RunSummary } from "@core/types"
 
@@ -125,6 +126,25 @@ describe("computeEndlessEco", () => {
       bonus: 0,
       lost: 0,
     })
+  })
+})
+
+describe("isEndlessUnlocked", () => {
+  it("un guardado nuevo no tiene la inmersión sin fin", () => {
+    expect(isEndlessUnlocked(createDefaultMeta())).toBe(false)
+  })
+
+  it("morir o abandonar no la desbloquea, aunque se llegue lejos", () => {
+    const meta = createDefaultMeta()
+    applyRunToMeta(meta, makeSummary({ outcome: "died", biomeIndex: 5 }))
+    applyRunToMeta(meta, makeSummary({ outcome: "abandoned" }))
+    expect(isEndlessUnlocked(meta)).toBe(false)
+  })
+
+  it("se desbloquea al completar el modo normal", () => {
+    const meta = createDefaultMeta()
+    applyRunToMeta(meta, makeSummary({ outcome: "completed", biomeIndex: 5 }))
+    expect(isEndlessUnlocked(meta)).toBe(true)
   })
 })
 

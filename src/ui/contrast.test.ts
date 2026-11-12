@@ -9,7 +9,7 @@ import {
   parseColor,
   type Rgba,
 } from "@ui/contrast"
-import { CREAM } from "@ui/palette"
+import { CREAM, DEEP, DEEP_HOVER, cream } from "@ui/palette"
 
 const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8")
 
@@ -62,6 +62,17 @@ describe("contrastRatio", () => {
 
   it("rechaza colores que no entiende", () => {
     expect(() => parseColor("var(--c-bad)")).toThrow()
+  })
+})
+
+describe("contraste del botón principal", () => {
+  it("el texto del botón relleno cumple AA, en reposo y con hover", () => {
+    for (const bg of [DEEP, DEEP_HOVER]) {
+      const text = compositeOver(parseColor(cream(0.92)), parseColor(bg))
+      expect(contrastRatio(text, parseColor(bg))).toBeGreaterThanOrEqual(
+        AA_NORMAL_TEXT,
+      )
+    }
   })
 })
 
