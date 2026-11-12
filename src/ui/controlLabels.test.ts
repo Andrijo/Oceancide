@@ -60,6 +60,16 @@ describe("controlsHintText", () => {
 
     expect(controlsHintText(playstation, bindings)).toContain("✕ filtro")
   })
+
+  it("solo nombra las acciones pedidas, en su orden", () => {
+    expect(controlsHintText(keyboard, defaults(), ["build", "move"])).toBe(
+      "WASD mover · B filtro",
+    )
+  })
+
+  it("sin acciones queda vacía", () => {
+    expect(controlsHintText(xbox, defaults(), [])).toBe("")
+  })
 })
 
 describe("padButtonLabel", () => {

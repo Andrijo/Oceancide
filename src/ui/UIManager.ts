@@ -57,7 +57,6 @@ export class UIManager {
   private floatingEcoAnims: (Animation | undefined)[] = []
   private floatingEcoNext = 0
 
-  private debrisCountEl: HTMLElement
   private ecoAwarenessEl: HTMLElement
   private zoneProgressEl: HTMLElement
   private toxicitySkullEl: HTMLElement
@@ -99,7 +98,6 @@ export class UIManager {
   private tipTextEl: HTMLElement
 
   constructor() {
-    this.debrisCountEl = document.getElementById("debris-count")!
     this.ecoAwarenessEl = document.getElementById("eco-awareness")!
     this.zoneProgressEl = document.getElementById("zone-progress")!
     this.toxicitySkullEl = document.getElementById("toxicity-skull")!
@@ -392,7 +390,6 @@ export class UIManager {
   }
 
   public updateUI(state: GameState, deltaTime: number): void {
-    this.setText(this.debrisCountEl, state.debrisCollected.toString())
     this.setText(this.ecoAwarenessEl, Math.floor(state.ecoAwareness).toString())
     this.setText(this.zoneProgressEl, `${Math.round(state.zoneProgress)}%`)
 

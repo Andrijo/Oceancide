@@ -60,6 +60,12 @@ import {
   type ControlDevice,
   type InputDevice,
 } from "@ui/controlLabels"
+import {
+  HELD_CONTROLS,
+  hintActions,
+  isHeldControlActive,
+  type BasicControl,
+} from "@core/controlsHint"
 import { TIP_TIME_LOW_RATIO, TipQueue, tipText, type TipId } from "@core/tips"
 import { CameraRig } from "@core/CameraRig"
 import {
@@ -246,6 +252,7 @@ export class Game {
       onReturnToHub: () => this.showHub(),
       onResetProgress: () => {
         this.meta = this.saveManager.reset()
+        this.refreshControlsHint()
         this.showHub()
       },
       onSaveMeta: () => this.saveManager.save(this.meta),
@@ -523,9 +530,6 @@ export class Game {
     setReduceMotionChoice(s.reduceMotion)
     setColorVisionMode(s.colorVision)
     this.touchControls.setAppearance(s.touchScale, s.touchOpacity)
-    document
-      .getElementById("controls-hint")
-      ?.classList.toggle("user-hidden", !s.showControlsHint)
     this.refreshControlsHint()
   }
 
@@ -547,16 +551,41 @@ export class Game {
     return { keys: this.settings.keyBindings, pad: this.settings.padBindings }
   }
 
-  /** Pista de controles inferior: teclas asignadas o botones del mando. */
+  /**
+   * Pista de controles inferior: teclas asignadas o botones del mando de las
+   * acciones que toca enseñar (en modo automático, las básicas sin usar).
+   */
   private refreshControlsHint(): void {
     const hint = document.getElementById("controls-hint")
     if (!hint) return
-    hint.textContent = controlsHintText(
+    const text = controlsHintText(
       this.controlDevice,
       this.controlBindings(),
+      hintActions(this.settings.controlsHint, this.meta.learnedControls),
     )
+    hint.textContent = text
     // En táctil no hay teclas que nombrar: los botones están en pantalla.
-    hint.classList.toggle("hidden", this.controlDevice.device === "touch")
+    hint.classList.toggle(
+      "hidden",
+      text === "" || this.controlDevice.device === "touch",
+    )
+  }
+
+  /** Da un control básico por aprendido: la pista automática deja de nombrarlo. */
+  private markControlUsed(control: BasicControl): void {
+    if (this.meta.learnedControls.includes(control)) return
+    this.meta.learnedControls.push(control)
+    this.saveManager.save(this.meta)
+    this.refreshControlsHint()
+  }
+
+  /** Detecta el uso de los controles de mantener (mover, profundidad, impulso). */
+  private trackHeldControls(): void {
+    for (const control of HELD_CONTROLS) {
+      if (isHeldControlActive(this.input, control)) {
+        this.markControlUsed(control)
+      }
+    }
   }
 
   /**
@@ -717,12 +746,11 @@ export class Game {
       return
     }
 
+    // Sin mensaje central: el giro de la tortuga ya lo indica y, al
+    // encadenar, el HUD "DASH ×N" muestra el multiplicador.
     this.turtle.trigger360Spin(direction)
     if (this.settings.vibration) navigator.vibrate?.(15)
-
-    if (!this.turtle.isSpinBoosting()) {
-      this.uiManager.showMessage("¡DASH!", 700)
-    }
+    this.markControlUsed("dash")
   }
 
   private tryBuild(key: StructureKey): void {
@@ -734,6 +762,9 @@ export class Game {
     ) {
       return
     }
+
+    // Intentarlo ya cuenta: aunque falte eco, el jugador conoce la tecla.
+    this.markControlUsed("build")
 
     const config = STRUCTURES[key]
     if (this.structures.getActiveCount() >= this.turtle.stats.filterCapacity) {
@@ -1120,6 +1151,7 @@ export class Game {
 
     const bounds = this.biomeGenerator.getBounds()
     this.turtle.update(deltaTime, this.input, bounds)
+    this.trackHeldControls()
 
     const hitByEnemy = this.enemyManager.update(
       deltaTime,

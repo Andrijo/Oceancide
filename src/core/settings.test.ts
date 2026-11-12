@@ -86,7 +86,7 @@ describe("sanitizeSettings", () => {
       vibration: false,
       touchScale: 1.25,
       touchOpacity: 0.5,
-      showControlsHint: false,
+      controlsHint: "always",
       tipsEnabled: false,
     })
 
@@ -97,9 +97,33 @@ describe("sanitizeSettings", () => {
       vibration: false,
       touchScale: 1.25,
       touchOpacity: 0.5,
-      showControlsHint: false,
+      controlsHint: "always",
       tipsEnabled: false,
     })
+  })
+
+  it("la pista de controles es automática por defecto", () => {
+    expect(createDefaultSettings().controlsHint).toBe("auto")
+    expect(sanitizeSettings({ controlsHint: "a veces" }).controlsHint).toBe(
+      "auto",
+    )
+  })
+
+  it("migra el antiguo sí/no de la pista de controles", () => {
+    expect(sanitizeSettings({ showControlsHint: false }).controlsHint).toBe(
+      "off",
+    )
+    expect(sanitizeSettings({ showControlsHint: true }).controlsHint).toBe(
+      "auto",
+    )
+    // Si ya hay modo, manda el modo.
+    expect(
+      sanitizeSettings({ showControlsHint: false, controlsHint: "always" })
+        .controlsHint,
+    ).toBe("always")
+    expect(sanitizeSettings({ showControlsHint: false })).not.toHaveProperty(
+      "showControlsHint",
+    )
   })
 
   it("conserva las teclas reasignadas y sanea las inválidas", () => {

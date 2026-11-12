@@ -1,7 +1,7 @@
 // src/ui/centerNotices.ts
 // Avisos de la zona central de la pantalla. Cada tipo de aviso tiene su propio
 // hueco: un aviso nuevo solo sustituye al anterior del mismo tipo, así un
-// mensaje corto ("¡DASH!", "¡MEDUSA!"...) nunca borra el aviso de reliquia.
+// mensaje corto ("¡MEDUSA!", "Necesitas 10 de Eco"...) nunca borra el aviso de reliquia.
 // Lógica sin DOM para poder probarla; quién pinta y coloca los nodos es
 // UIManager.
 
