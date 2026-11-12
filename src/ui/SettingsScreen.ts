@@ -12,8 +12,47 @@ import {
   type ReduceMotionChoice,
   type Settings,
 } from "@core/settings"
+import {
+  KEY_ACTIONS,
+  KEY_ACTION_LABELS,
+  createDefaultKeyBindings,
+  isReservedKey,
+  keyLabel,
+  rebindKey,
+  type KeyAction,
+  type KeyBindings,
+} from "@core/keyBindings"
+import {
+  PAD_ACTIONS,
+  PAD_ACTION_LABELS,
+  createDefaultPadBindings,
+  rebindPadButton,
+  type PadAction,
+  type PadBindings,
+} from "@core/padBindings"
+import type { PadStyle } from "@core/gamepad"
+import { padButtonLabel, type InputDevice } from "@ui/controlLabels"
 
 export type SettingsPatch = Partial<Settings>
+
+/** Cierra la escucha de la tecla o botón que se está reasignando, si la hay. */
+let stopKeyCapture: (() => void) | null = null
+
+/**
+ * `true` mientras se espera la nueva tecla o botón del mando de una acción:
+ * esa pulsación (Esc incluido, que cancela) es de la reasignación, no del
+ * juego ni de los menús.
+ */
+export function isKeyCaptureActive(): boolean {
+  return stopKeyCapture !== null
+}
+
+/** Cancela la reasignación en curso (al cerrar la pantalla o con el mando). */
+export function cancelKeyCapture(): void {
+  const stop = stopKeyCapture
+  stopKeyCapture = null
+  stop?.()
+}
 
 interface Choice<T extends string> {
   value: T
@@ -179,18 +218,255 @@ function switchField(
   return field
 }
 
+/** Respuesta a la espera de una tecla o botón nuevos. */
+type CaptureResult<V> =
+  | { value: V }
+  | { cancelled: true; message?: string }
+  /** No vale (tecla reservada): se avisa y se sigue esperando. */
+  | { rejected: string }
+
+interface BindingFieldConfig<A extends string, V> {
+  title: string
+  note: string
+  actions: readonly A[]
+  labels: Record<A, string>
+  initial: Record<A, V>
+  defaults(): Record<A, V>
+  format(value: V): string
+  rebind(bindings: Record<A, V>, action: A, value: V): Record<A, V>
+  /** Texto del botón mientras espera ("Pulsa una tecla…"). */
+  waiting: string
+  /** Aviso mientras espera, con el nombre de la acción. */
+  prompt(label: string): string
+  resetLabel: string
+  resetDone: string
+  /** Empieza a escuchar; `done` recibe la respuesta. Devuelve cómo parar. */
+  listen(done: (result: CaptureResult<V>) => void): () => void
+  onChange(bindings: Record<A, V>): void
+}
+
+/**
+ * Lista de acciones con su tecla o botón. Al pulsar el de una acción se espera
+ * la nueva tecla o botón; si ya lo usaba otra acción, se intercambian.
+ */
+function bindingField<A extends string, V>(
+  config: BindingFieldConfig<A, V>,
+): HTMLElement {
+  let bindings = config.initial
+  const field = node("div", "settings-field")
+  const list = node("div", "settings-keys")
+  const status = node("p", "settings-hint settings-key-status")
+  status.setAttribute("role", "status")
+  status.setAttribute("aria-live", "polite")
+
+  const buttons = new Map<A, HTMLButtonElement>()
+  const refresh = (): void => {
+    for (const [action, button] of buttons) {
+      const value = config.format(bindings[action])
+      button.textContent = value
+      // Los glifos sueltos (✕ ○ □ △, flechas) salen diminutos con la fuente
+      // de la interfaz: se dibujan más grandes.
+      button.classList.toggle(
+        "settings-key-symbol",
+        /^[^\p{L}\p{N}]$/u.test(value),
+      )
+      button.setAttribute(
+        "aria-label",
+        `${config.labels[action]}: ${value}. Pulsa para cambiarlo.`,
+      )
+    }
+  }
+
+  const startCapture = (action: A, button: HTMLButtonElement): void => {
+    cancelKeyCapture()
+    const label = config.labels[action]
+    button.textContent = config.waiting
+    button.classList.add("settings-key-capturing")
+    button.setAttribute("aria-pressed", "true")
+    status.textContent = config.prompt(label)
+
+    const stopListening = config.listen((result) => {
+      if ("rejected" in result) {
+        status.textContent = result.rejected
+        return
+      }
+      cancelKeyCapture()
+      if ("cancelled" in result) {
+        status.textContent = result.message ?? "Sin cambios."
+      } else {
+        const next = config.rebind(bindings, action, result.value)
+        const swapped = config.actions.find(
+          (other) => other !== action && next[other] !== bindings[other],
+        )
+        bindings = next
+        config.onChange(next)
+        refresh()
+        const value = config.format(next[action])
+        status.textContent = swapped
+          ? `${label}: ${value}. «${config.labels[swapped]}» pasa a ${config.format(next[swapped])}.`
+          : `${label}: ${value}.`
+      }
+      button.focus()
+    })
+    // Pulsar fuera del botón cancela la espera.
+    const onPointer = (event: PointerEvent): void => {
+      if (event.target !== button) cancelKeyCapture()
+    }
+
+    window.addEventListener("pointerdown", onPointer, true)
+    stopKeyCapture = () => {
+      stopListening()
+      window.removeEventListener("pointerdown", onPointer, true)
+      button.classList.remove("settings-key-capturing")
+      button.setAttribute("aria-pressed", "false")
+      refresh()
+    }
+  }
+
+  for (const action of config.actions) {
+    const row = node("div", "settings-row settings-key-row")
+    const button = node("button", "settings-key")
+    button.type = "button"
+    button.setAttribute("aria-pressed", "false")
+    button.addEventListener("click", () => startCapture(action, button))
+    buttons.set(action, button)
+    row.append(node("span", "settings-label", config.labels[action]), button)
+    list.append(row)
+  }
+  refresh()
+
+  const reset = node("button", "settings-key-reset", config.resetLabel)
+  reset.type = "button"
+  reset.addEventListener("click", () => {
+    cancelKeyCapture()
+    bindings = config.defaults()
+    config.onChange(bindings)
+    refresh()
+    status.textContent = config.resetDone
+  })
+
+  field.append(
+    node("p", "settings-label", config.title),
+    node("p", "settings-hint", config.note),
+    list,
+    status,
+    reset,
+  )
+  return field
+}
+
+/** Escucha la siguiente tecla. En captura y sin propagar: no llega al juego. */
+function listenForKey(
+  done: (result: CaptureResult<string>) => void,
+): () => void {
+  const onKey = (event: KeyboardEvent): void => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (event.repeat) return
+    if (event.code === "Escape") done({ cancelled: true })
+    else if (isReservedKey(event.code)) {
+      done({
+        rejected: `${keyLabel(event.code)} está reservada: elige otra o pulsa Esc.`,
+      })
+    } else done({ value: event.code })
+  }
+  window.addEventListener("keydown", onKey, true)
+  return () => window.removeEventListener("keydown", onKey, true)
+}
+
+/** Segundos que se espera un botón del mando antes de rendirse. */
+const PAD_CAPTURE_TIMEOUT_MS = 8000
+
+function keyBindingsField(
+  initial: KeyBindings,
+  onChange: (bindings: KeyBindings) => void,
+): HTMLElement {
+  return bindingField<KeyAction, string>({
+    title: "Teclas",
+    note: "Esc y Enter pausan y no se pueden cambiar. Las flechas y U, J, I siguen funcionando como alternativa.",
+    actions: KEY_ACTIONS,
+    labels: KEY_ACTION_LABELS,
+    initial,
+    defaults: createDefaultKeyBindings,
+    format: keyLabel,
+    rebind: rebindKey,
+    waiting: "Pulsa una tecla…",
+    prompt: (label) => `Pulsa la nueva tecla para «${label}». Esc cancela.`,
+    resetLabel: "Restablecer teclas",
+    resetDone: "Teclas por defecto restablecidas.",
+    listen: listenForKey,
+    onChange,
+  })
+}
+
+function padBindingsField(
+  initial: PadBindings,
+  padStyle: PadStyle,
+  capturePadButton: SettingsBodyOptions["capturePadButton"],
+  onChange: (bindings: PadBindings) => void,
+): HTMLElement {
+  return bindingField<PadAction, number>({
+    title: "Botones del mando",
+    note: "El stick izquierdo mueve y el derecho sube y baja. La cruceta, A y B sirven para los menús.",
+    actions: PAD_ACTIONS,
+    labels: PAD_ACTION_LABELS,
+    initial,
+    defaults: createDefaultPadBindings,
+    format: (button) => padButtonLabel(padStyle, button),
+    rebind: rebindPadButton,
+    waiting: "Pulsa un botón…",
+    prompt: (label) =>
+      `Pulsa en el mando el nuevo botón para «${label}». La cruceta o Esc cancelan.`,
+    resetLabel: "Restablecer botones",
+    resetDone: "Botones por defecto restablecidos.",
+    listen: (done) => {
+      const stopPad = capturePadButton((button) =>
+        done(button === null ? { cancelled: true } : { value: button }),
+      )
+      const onKey = (event: KeyboardEvent): void => {
+        if (event.code !== "Escape") return
+        event.preventDefault()
+        event.stopPropagation()
+        done({ cancelled: true })
+      }
+      const timer = setTimeout(
+        () =>
+          done({
+            cancelled: true,
+            message: "No se ha pulsado ningún botón del mando. Sin cambios.",
+          }),
+        PAD_CAPTURE_TIMEOUT_MS,
+      )
+      window.addEventListener("keydown", onKey, true)
+      return () => {
+        stopPad()
+        clearTimeout(timer)
+        window.removeEventListener("keydown", onKey, true)
+      }
+    },
+    onChange,
+  })
+}
+
 const percent = (value: number): string => `${Math.round(value * 100)} %`
 
 export interface SettingsBodyOptions {
-  /** El jugador usa la pantalla táctil: sus controles van primero. */
-  touch: boolean
+  /** Dispositivo en uso: sus controles van primero. */
+  device: InputDevice
+  /** Familia del último mando usado, para nombrar sus botones. */
+  padStyle: PadStyle
+  /**
+   * Escucha el siguiente botón del mando (`null` si se cancela con la
+   * cruceta). Devuelve la función que deja de escuchar.
+   */
+  capturePadButton(onButton: (button: number | null) => void): () => void
   onChange(patch: SettingsPatch): void
 }
 
 /** Cuerpo de la pantalla "Ajustes" con los valores de `settings`. */
 export function createSettingsBody(
   settings: Settings,
-  { touch, onChange }: SettingsBodyOptions,
+  { device, padStyle, capturePadButton, onChange }: SettingsBodyOptions,
 ): HTMLElement {
   const body = node("div", "settings-body")
 
@@ -256,19 +532,37 @@ export function createSettingsBody(
       "Una vibración corta al hacer el dash, en los dispositivos que la admiten.",
     ),
   ]
+  const hintField = switchField(
+    "Pista de controles en pantalla",
+    settings.showControlsHint,
+    (showControlsHint) => onChange({ showControlsHint }),
+    "La línea con los controles del teclado o del mando en la parte de abajo.",
+  )
   const keyboardFields = [
-    switchField(
-      "Pista de teclas en pantalla",
-      settings.showControlsHint,
-      (showControlsHint) => onChange({ showControlsHint }),
-      "La línea con los controles de teclado en la parte de abajo.",
+    keyBindingsField(settings.keyBindings, (keyBindings) =>
+      onChange({ keyBindings }),
     ),
   ]
+  const gamepadFields = [
+    padBindingsField(
+      settings.padBindings,
+      padStyle,
+      capturePadButton,
+      (padBindings) => onChange({ padBindings }),
+    ),
+  ]
+  // Primero, los controles del dispositivo en uso.
+  const groups = {
+    keyboard: keyboardFields,
+    gamepad: gamepadFields,
+    touch: touchFields,
+  }
+  const order: InputDevice[] = ["keyboard", "gamepad", "touch"]
   const controls = section(
     "Controles",
-    ...(touch
-      ? [...touchFields, ...keyboardFields]
-      : [...keyboardFields, ...touchFields]),
+    hintField,
+    ...groups[device],
+    ...order.filter((d) => d !== device).flatMap((d) => groups[d]),
   )
 
   const notices = section(

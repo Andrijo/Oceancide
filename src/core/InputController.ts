@@ -1,7 +1,14 @@
 // src/core/InputController.ts
 // Traduce el teclado a InputState y acciones de juego (pausa, dash, build...).
+// Las teclas de cada acción salen de las asignaciones de los ajustes.
 
 import type { InputState } from "@core/types"
+import {
+  createDefaultKeyBindings,
+  resolveKeyAction,
+  type KeyAction,
+  type KeyBindings,
+} from "@core/keyBindings"
 
 export interface InputControllerActions {
   /** Hay un evento o una elección de carta abiertos. */
@@ -31,59 +38,53 @@ function isInteractiveTarget(target: EventTarget | null): boolean {
   )
 }
 
+type HoldField =
+  "forward" | "backward" | "left" | "right" | "up" | "down" | "boost"
+
+const HOLD_FIELDS: Partial<Record<KeyAction, HoldField>> = {
+  forward: "forward",
+  backward: "backward",
+  left: "left",
+  right: "right",
+  up: "up",
+  down: "down",
+  boost: "boost",
+}
+
 /**
- * Aplica una tecla de movimiento al estado. Devuelve `true` si la tecla era de
- * movimiento, para que el llamador pueda distinguirla de una acción.
+ * Aplica una acción de mantener (movimiento o impulso) al estado. Devuelve
+ * `true` si la acción era de ese tipo, para distinguirla de una acción puntual.
  */
-export function applyMovementKey(
+export function applyHoldAction(
   input: InputState,
-  code: string,
+  action: KeyAction,
   pressed: boolean,
 ): boolean {
-  switch (code) {
-    case "KeyW":
-    case "ArrowUp":
-      input.forward = pressed
-      return true
-    case "KeyS":
-    case "ArrowDown":
-      input.backward = pressed
-      return true
-    case "KeyA":
-    case "ArrowLeft":
-      input.left = pressed
-      return true
-    case "KeyD":
-    case "ArrowRight":
-      input.right = pressed
-      return true
-    case "KeyU":
-      input.up = pressed
-      return true
-    case "KeyJ":
-      input.down = pressed
-      return true
-    case "KeyI":
-      input.boost = pressed
-      return true
-    default:
-      return false
-  }
+  const field = HOLD_FIELDS[action]
+  if (!field) return false
+  input[field] = pressed
+  return true
 }
 
 export class InputController {
   private readonly input: InputState
   private readonly actions: InputControllerActions
+  private readonly getBindings: () => KeyBindings
 
-  constructor(input: InputState, actions: InputControllerActions) {
+  constructor(
+    input: InputState,
+    actions: InputControllerActions,
+    getBindings: () => KeyBindings = createDefaultKeyBindings,
+  ) {
     this.input = input
     this.actions = actions
+    this.getBindings = getBindings
   }
 
   public handleKeyDown(e: KeyboardEvent): void {
     // Durante un evento o una elección de carta, el overlay controla la
     // interacción (botones, Tab y teclas numéricas). No dejamos que el juego
-    // procese movimiento, pausa, dash, construcción ni el backflip.
+    // procese movimiento, pausa, dash, construcción ni la voltereta.
     if (this.actions.isOverlayActive()) return
 
     if (e.code === "Escape") {
@@ -109,54 +110,52 @@ export class InputController {
       return
     }
 
-    if (e.code === "Space") {
-      if (
-        !e.repeat &&
-        this.actions.isPlaying() &&
-        !this.actions.blocksGameplay()
-      ) {
-        this.actions.backflip()
-        e.preventDefault()
-      }
-      return
+    const action = resolveKeyAction(this.getBindings(), e.code)
+    if (!action || this.actions.isPaused()) return
+
+    const playing = this.actions.isPlaying()
+    // En la inmersión, las teclas del juego no hacen lo que harían en la
+    // página (Espacio pulsaría el botón de pausa enfocado, por ejemplo).
+    if (playing) e.preventDefault()
+
+    if (applyHoldAction(this.input, action, true)) return
+
+    switch (action) {
+      case "lookBack":
+        this.actions.setLookBack(true)
+        return
+      case "backflip":
+        if (!e.repeat && playing && !this.actions.blocksGameplay()) {
+          this.actions.backflip()
+        }
+        return
+      case "abandon":
+        if (!e.repeat && playing) this.actions.requestAbandon()
+        return
+      case "build":
+        if (!e.repeat) this.actions.build()
+        return
+      case "dashLeft":
+      case "dashRight":
+        if (!e.repeat) {
+          this.actions.dash(action === "dashLeft" ? "left" : "right")
+        }
+        return
     }
-
-    if (this.actions.isPaused()) return
-
-    if (e.code === "KeyR") {
-      if (!e.repeat && this.actions.isPlaying()) this.actions.requestAbandon()
-      return
-    }
-
-    if (e.code === "KeyB") {
-      if (!e.repeat) this.actions.build()
-      return
-    }
-
-    if (e.code === "KeyC") {
-      this.actions.setLookBack(true)
-      return
-    }
-
-    if (e.code === "KeyQ" || e.code === "KeyE") {
-      if (!e.repeat) {
-        this.actions.dash(e.code === "KeyQ" ? "left" : "right")
-      }
-      return
-    }
-
-    applyMovementKey(this.input, e.code, true)
   }
 
   public handleKeyUp(e: KeyboardEvent): void {
     if (this.actions.isOverlayActive()) return
 
-    if (e.code === "KeyC") {
+    const action = resolveKeyAction(this.getBindings(), e.code)
+    if (!action) return
+
+    if (action === "lookBack") {
       this.actions.setLookBack(false)
       return
     }
 
-    applyMovementKey(this.input, e.code, false)
+    applyHoldAction(this.input, action, false)
   }
 
   public clear(): void {

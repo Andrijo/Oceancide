@@ -2,9 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import type { InputState } from "@core/types"
 import {
   InputController,
-  applyMovementKey,
+  applyHoldAction,
   type InputControllerActions,
 } from "@core/InputController"
+import { createDefaultKeyBindings, rebindKey } from "@core/keyBindings"
 
 function makeInput(): InputState {
   return {
@@ -58,7 +59,25 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe("applyMovementKey", () => {
+describe("applyHoldAction", () => {
+  it("aplica las acciones de mantener a su campo", () => {
+    const input = makeInput()
+
+    expect(applyHoldAction(input, "boost", true)).toBe(true)
+    expect(input.boost).toBe(true)
+    expect(applyHoldAction(input, "boost", false)).toBe(true)
+    expect(input.boost).toBe(false)
+  })
+
+  it("devuelve false y no toca el estado con una acción puntual", () => {
+    const input = makeInput()
+
+    expect(applyHoldAction(input, "build", true)).toBe(false)
+    expect(input).toEqual(makeInput())
+  })
+})
+
+describe("InputController: teclas por defecto", () => {
   const mappings: Array<{
     codes: string[]
     field: "forward" | "backward" | "left" | "right" | "up" | "down" | "boost"
@@ -67,30 +86,75 @@ describe("applyMovementKey", () => {
     { codes: ["KeyS", "ArrowDown"], field: "backward" },
     { codes: ["KeyA", "ArrowLeft"], field: "left" },
     { codes: ["KeyD", "ArrowRight"], field: "right" },
-    { codes: ["KeyU"], field: "up" },
-    { codes: ["KeyJ"], field: "down" },
-    { codes: ["KeyI"], field: "boost" },
+    { codes: ["Space", "KeyU"], field: "up" },
+    { codes: ["KeyC", "KeyJ"], field: "down" },
+    { codes: ["ShiftLeft", "ShiftRight", "KeyI"], field: "boost" },
   ]
 
-  it("mapea cada tecla de movimiento a su eje", () => {
+  it("mapea cada tecla (principal y alternativas) a su eje", () => {
     for (const { codes, field } of mappings) {
       for (const code of codes) {
         const input = makeInput()
+        const controller = new InputController(input, makeActions())
 
-        expect(applyMovementKey(input, code, true)).toBe(true)
+        controller.handleKeyDown(keyEvent(code))
         expect(input[field]).toBe(true)
 
-        expect(applyMovementKey(input, code, false)).toBe(true)
+        controller.handleKeyUp(keyEvent(code))
         expect(input[field]).toBe(false)
       }
     }
   })
 
-  it("devuelve false y no toca el estado con una tecla desconocida", () => {
+  it("ignora las teclas sin acción", () => {
     const input = makeInput()
+    const actions = makeActions()
+    const controller = new InputController(input, actions)
+    const event = keyEvent("KeyZ")
 
-    expect(applyMovementKey(input, "KeyZ", true)).toBe(false)
+    controller.handleKeyDown(event)
+
     expect(input).toEqual(makeInput())
+    expect(event.preventDefault).not.toHaveBeenCalled()
+  })
+})
+
+describe("InputController: teclas reasignadas", () => {
+  it("usa las asignaciones actuales en cada pulsación", () => {
+    let bindings = createDefaultKeyBindings()
+    const input = makeInput()
+    const actions = makeActions()
+    const controller = new InputController(input, actions, () => bindings)
+
+    bindings = rebindKey(bindings, "build", "KeyG")
+    controller.handleKeyDown(keyEvent("KeyG"))
+    controller.handleKeyDown(keyEvent("KeyB"))
+
+    expect(actions.build).toHaveBeenCalledOnce()
+  })
+
+  it("al intercambiar teclas, cada una hace la acción nueva", () => {
+    const bindings = rebindKey(createDefaultKeyBindings(), "up", "KeyC")
+    const input = makeInput()
+    const controller = new InputController(input, makeActions(), () => bindings)
+
+    controller.handleKeyDown(keyEvent("KeyC"))
+    controller.handleKeyDown(keyEvent("Space"))
+
+    expect(input.up).toBe(true)
+    expect(input.down).toBe(true)
+  })
+
+  it("la tecla principal gana a una alternativa de otra acción", () => {
+    const bindings = rebindKey(createDefaultKeyBindings(), "build", "ArrowUp")
+    const input = makeInput()
+    const actions = makeActions()
+    const controller = new InputController(input, actions, () => bindings)
+
+    controller.handleKeyDown(keyEvent("ArrowUp"))
+
+    expect(actions.build).toHaveBeenCalledOnce()
+    expect(input.forward).toBe(false)
   })
 })
 
@@ -198,10 +262,10 @@ describe("InputController.handleKeyDown", () => {
     expect(actions.setPaused).not.toHaveBeenCalled()
   })
 
-  it("Space hace un backflip si no hay transición", () => {
+  it("F hace la voltereta si no hay transición", () => {
     const actions = makeActions()
     const controller = new InputController(makeInput(), actions)
-    const event = keyEvent("Space")
+    const event = keyEvent("KeyF")
 
     controller.handleKeyDown(event)
 
@@ -209,13 +273,36 @@ describe("InputController.handleKeyDown", () => {
     expect(event.preventDefault).toHaveBeenCalledOnce()
   })
 
-  it("Space no hace backflip durante una transición", () => {
+  it("F no hace la voltereta durante una transición", () => {
     const actions = makeActions({ blocksGameplay: () => true })
     const controller = new InputController(makeInput(), actions)
 
-    controller.handleKeyDown(keyEvent("Space"))
+    controller.handleKeyDown(keyEvent("KeyF"))
 
     expect(actions.backflip).not.toHaveBeenCalled()
+  })
+
+  it("en la inmersión, Espacio sube y no activa el botón enfocado", () => {
+    const input = makeInput()
+    const controller = new InputController(input, makeActions())
+    const event = keyEvent("Space")
+
+    controller.handleKeyDown(event)
+
+    expect(input.up).toBe(true)
+    expect(event.preventDefault).toHaveBeenCalledOnce()
+  })
+
+  it("fuera de la inmersión, Espacio conserva su comportamiento normal", () => {
+    const controller = new InputController(
+      makeInput(),
+      makeActions({ isPlaying: () => false }),
+    )
+    const event = keyEvent("Space")
+
+    controller.handleKeyDown(event)
+
+    expect(event.preventDefault).not.toHaveBeenCalled()
   })
 
   it("R pide abandonar (pausa con confirmación) solo si se está jugando y no es auto-repeat", () => {
@@ -246,11 +333,11 @@ describe("InputController.handleKeyDown", () => {
     expect(actions.build).toHaveBeenCalledOnce()
   })
 
-  it("C activa el look-back", () => {
+  it("V activa el look-back", () => {
     const actions = makeActions()
     const controller = new InputController(makeInput(), actions)
 
-    controller.handleKeyDown(keyEvent("KeyC"))
+    controller.handleKeyDown(keyEvent("KeyV"))
 
     expect(actions.setLookBack).toHaveBeenCalledWith(true)
   })
@@ -292,11 +379,11 @@ describe("InputController.handleKeyUp", () => {
     expect(input.forward).toBe(false)
   })
 
-  it("desactiva el look-back al soltar C", () => {
+  it("desactiva el look-back al soltar V", () => {
     const actions = makeActions()
     const controller = new InputController(makeInput(), actions)
 
-    controller.handleKeyUp(keyEvent("KeyC"))
+    controller.handleKeyUp(keyEvent("KeyV"))
 
     expect(actions.setLookBack).toHaveBeenCalledWith(false)
   })

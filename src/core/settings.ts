@@ -9,6 +9,16 @@ import {
   isQualityChoice,
   type QualityChoice,
 } from "@core/quality"
+import {
+  createDefaultKeyBindings,
+  sanitizeKeyBindings,
+  type KeyBindings,
+} from "@core/keyBindings"
+import {
+  createDefaultPadBindings,
+  sanitizePadBindings,
+  type PadBindings,
+} from "@core/padBindings"
 
 export const SETTINGS_VERSION = 1
 export const SETTINGS_KEY = "oceancide.settings"
@@ -44,8 +54,12 @@ export interface Settings {
   touchScale: number
   /** Opacidad de los controles táctiles (0..1). */
   touchOpacity: number
-  /** Pista de teclas en la parte inferior durante la inmersión. */
+  /** Pista de controles en la parte inferior durante la inmersión. */
   showControlsHint: boolean
+  /** Tecla principal de cada acción (reasignable desde Ajustes). */
+  keyBindings: KeyBindings
+  /** Botón del mando de cada acción (reasignable desde Ajustes). */
+  padBindings: PadBindings
   /** Avisos contextuales durante la inmersión. */
   tipsEnabled: boolean
   /** Volumen de la música (0..1). Reservado para cuando haya audio. */
@@ -77,6 +91,8 @@ export function createDefaultSettings(): Settings {
     touchScale: 1,
     touchOpacity: 1,
     showControlsHint: true,
+    keyBindings: createDefaultKeyBindings(),
+    padBindings: createDefaultPadBindings(),
     tipsEnabled: true,
     musicVolume: 0.8,
     sfxVolume: 0.8,
@@ -139,6 +155,14 @@ export function sanitizeSettings(
       defaults.touchOpacity,
     ),
     showControlsHint: bool(data.showControlsHint, defaults.showControlsHint),
+    keyBindings:
+      data.keyBindings === undefined
+        ? { ...defaults.keyBindings }
+        : sanitizeKeyBindings(data.keyBindings),
+    padBindings:
+      data.padBindings === undefined
+        ? { ...defaults.padBindings }
+        : sanitizePadBindings(data.padBindings),
     tipsEnabled: bool(data.tipsEnabled, defaults.tipsEnabled),
     musicVolume: clampToLimit(
       data.musicVolume,
