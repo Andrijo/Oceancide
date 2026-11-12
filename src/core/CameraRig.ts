@@ -57,6 +57,13 @@ export class CameraRig {
     this.camera.lookAt(center)
   }
 
+  /** Campo de visión vertical en grados (ajuste del jugador). */
+  public setFov(fov: number): void {
+    if (this.camera.fov === fov) return
+    this.camera.fov = fov
+    this.camera.updateProjectionMatrix()
+  }
+
   public resize(aspect: number): void {
     this.camera.aspect = aspect
     this.camera.updateProjectionMatrix()

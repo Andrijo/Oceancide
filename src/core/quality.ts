@@ -51,7 +51,11 @@ export const QUALITY_LABELS: Record<QualityChoice, string> = {
   high: "Alta",
 }
 
-const CHOICE_KEY = "oceancide.quality"
+/**
+ * Clave donde se guardaba la elección antes de los ajustes. Ahora vive en
+ * `Settings.quality`; solo se lee para migrarla (ver settings.ts).
+ */
+export const LEGACY_QUALITY_KEY = "oceancide.quality"
 /** Preset al que bajó el modo automático en este dispositivo (para no repetir el tirón). */
 const AUTO_KEY = "oceancide.quality.auto"
 
@@ -61,7 +65,7 @@ function isPreset(value: unknown): value is QualityPreset {
   return value === "low" || value === "medium" || value === "high"
 }
 
-function isChoice(value: unknown): value is QualityChoice {
+export function isQualityChoice(value: unknown): value is QualityChoice {
   return value === "auto" || isPreset(value)
 }
 
@@ -95,18 +99,14 @@ export function isTouchDevice(): boolean {
   return coarse && (navigator.maxTouchPoints ?? 0) > 0
 }
 
-/** Elección guardada del jugador. `?quality=low|medium|high|auto` la sobreescribe (pruebas). */
-export function loadQualityChoice(): QualityChoice {
-  if (typeof location !== "undefined") {
-    const fromUrl = new URLSearchParams(location.search).get("quality")
-    if (isChoice(fromUrl)) return fromUrl
-  }
-  const stored = readStorage(CHOICE_KEY)
-  return isChoice(stored) ? stored : "auto"
-}
-
-export function saveQualityChoice(choice: QualityChoice): void {
-  writeStorage(CHOICE_KEY, choice)
+/**
+ * `?quality=low|medium|high|auto` sobreescribe el ajuste guardado durante esta
+ * sesión (pruebas y mediciones). `null` si no viene o no es válido.
+ */
+export function qualityChoiceFromUrl(): QualityChoice | null {
+  if (typeof location === "undefined") return null
+  const fromUrl = new URLSearchParams(location.search).get("quality")
+  return isQualityChoice(fromUrl) ? fromUrl : null
 }
 
 /** Preset de partida del modo automático en este dispositivo. */

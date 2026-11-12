@@ -1,14 +1,41 @@
 import gsap from "gsap"
+import { resolveReducedMotion, type ReduceMotionChoice } from "@core/settings"
+
+/** Clase en <html> con la que el CSS apaga las animaciones decorativas. */
+export const REDUCE_MOTION_CLASS = "reduce-motion"
 
 const reduceMotionQuery =
-  typeof window !== "undefined"
+  typeof window !== "undefined" && typeof window.matchMedia === "function"
     ? window.matchMedia("(prefers-reduced-motion: reduce)")
     : null
 
-/** ¿El usuario pidió reducir el movimiento? */
+let reduceMotionChoice: ReduceMotionChoice = "system"
+
+/** ¿Hay que reducir el movimiento (ajuste del jugador o, si no, el del sistema)? */
 export function prefersReducedMotion(): boolean {
-  return reduceMotionQuery?.matches ?? false
+  return resolveReducedMotion(
+    reduceMotionChoice,
+    reduceMotionQuery?.matches ?? false,
+  )
 }
+
+function syncReduceMotionClass(): void {
+  if (typeof document === "undefined") return
+  document.documentElement.classList.toggle(
+    REDUCE_MOTION_CLASS,
+    prefersReducedMotion(),
+  )
+}
+
+/** Fija el ajuste "Reducir movimiento" y lo aplica al momento. */
+export function setReduceMotionChoice(choice: ReduceMotionChoice): void {
+  reduceMotionChoice = choice
+  syncReduceMotionClass()
+}
+
+// En "system", seguir los cambios de la preferencia sin recargar.
+reduceMotionQuery?.addEventListener?.("change", syncReduceMotionClass)
+syncReduceMotionClass()
 
 /**
  * Congela o reanuda todas las animaciones GSAP.
@@ -30,7 +57,7 @@ export function setAnimationsPaused(paused: boolean): void {
  *
  * Desactiva la `transition` de CSS durante el tween (si no, la transición
  * suaviza cada fotograma de GSAP y el efecto se ve con retraso) y la restaura
- * al terminar. Con `prefers-reduced-motion` las cartas aparecen ya colocadas.
+ * al terminar. Con el movimiento reducido las cartas aparecen ya colocadas.
  */
 export function revealCards(
   targets: Element[],
