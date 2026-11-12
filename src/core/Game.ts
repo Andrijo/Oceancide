@@ -241,6 +241,9 @@ export class Game {
     })
     this.renderer.setSize(window.innerWidth, window.innerHeight)
     this.renderer.setPixelRatio(pixelRatio)
+    // La escena no tiene contenido accesible: lo que importa (estadísticas,
+    // toxicidad, avisos) está en el HUD y en las regiones vivas.
+    this.renderer.domElement.setAttribute("aria-hidden", "true")
     document
       .getElementById("game-container")!
       .appendChild(this.renderer.domElement)

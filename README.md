@@ -403,12 +403,12 @@ oceancide/
 ├── .prettierignore
 ├── .github/workflows/    # CI: typecheck, lint, formato, tests y build
 ├── public/
-│   ├── fonts/            # Fuentes (Pogonia para títulos, DM Sans para párrafos)
+│   ├── fonts/            # Fuentes woff2 con subconjunto latino (Pogonia, Tanbuster, DM Sans regular y bold)
 │   ├── favicon.svg
 │   └── icons.svg
 └── src/
     ├── main.ts           # Bootstrap del juego
-    ├── styles.css        # @font-face
+    ├── styles.css        # @font-face, tokens de diseño (--color-*, --radius-*, --rarity-*) y estilos de la UI
     ├── core/             # Núcleo y estado global
     │   ├── Game.ts             # Lógica principal, loop y orquestación
     │   ├── InputController.ts  # Teclado → InputState y acciones
@@ -452,6 +452,9 @@ oceancide/
     └── ui/               # Interfaz y controles
         ├── UIManager.ts        # HUD, números flotantes, calavera y mensajes
         ├── ScreenManager.ts    # Menús (hub, resumen, pausa, ayuda, eventos y elección de cartas)
+        ├── ConfirmDialog.ts    # Diálogo de confirmación propio (sin window.confirm)
+        ├── dom.ts              # Nodos y botones base de las pantallas (estilos en styles.css)
+        ├── rarity.ts           # Nombre e icono con forma propia de cada rareza
         ├── HowToPlay.ts        # Contenido de la pantalla "Cómo jugar"
         ├── TouchControls.ts    # Controles táctiles (joysticks)
         └── DevMenu.ts          # Menú de desarrollo (solo en DEV o con ?dev)

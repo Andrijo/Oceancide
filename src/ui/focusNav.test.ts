@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { pickNeighbor, type Rect } from "@ui/focusNav"
+import { pickNeighbor, trapTabTarget, type Rect } from "@ui/focusNav"
 
 const box = (left: number, top: number): Rect => ({
   left,
@@ -45,5 +45,28 @@ describe("pickNeighbor", () => {
   it("devuelve undefined si no hay nada en esa dirección", () => {
     expect(neighbor("a", "up")).toBeUndefined()
     expect(neighbor("b", "right")).toBeUndefined()
+  })
+})
+
+describe("trapTabTarget", () => {
+  const items = ["a", "b", "c"]
+
+  it("da la vuelta en los extremos", () => {
+    expect(trapTabTarget(items, "c", false)).toBe("a")
+    expect(trapTabTarget(items, "a", true)).toBe("c")
+  })
+
+  it("deja al navegador moverse por el medio", () => {
+    expect(trapTabTarget(items, "a", false)).toBeNull()
+    expect(trapTabTarget(items, "b", true)).toBeNull()
+  })
+
+  it("devuelve dentro el foco que se había escapado", () => {
+    expect(trapTabTarget(items, null, false)).toBe("a")
+    expect(trapTabTarget(items, "canvas", true)).toBe("c")
+  })
+
+  it("sin controles no hace nada", () => {
+    expect(trapTabTarget([], null, false)).toBeNull()
   })
 })
