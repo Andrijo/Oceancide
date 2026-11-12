@@ -66,9 +66,17 @@ import {
   HELD_CONTROLS,
   hintActions,
   isHeldControlActive,
-  type BasicControl,
+  touchLabelActions,
+  type HintAction,
 } from "@core/controlsHint"
-import { TIP_TIME_LOW_RATIO, TipQueue, tipText, type TipId } from "@core/tips"
+import {
+  TIP_TIME_LOW_RATIO,
+  TOUCH_TIP_CONTROL,
+  TOUCH_TIP_IDS,
+  TipQueue,
+  tipText,
+  type TipId,
+} from "@core/tips"
 import { CameraRig } from "@core/CameraRig"
 import {
   BIOME_ORDER,
@@ -366,6 +374,8 @@ export class Game {
       onBuild: () => this.tryBuild("filter"),
       onLookBack: (active) => {
         this.cameraRig.setLookBack(active)
+        // En táctil es un botón con etiqueta: usarlo la retira.
+        if (active) this.markControlUsed("lookBack")
       },
       onDash: (direction) => this.tryDash(direction),
     })
@@ -565,6 +575,11 @@ export class Game {
    * acciones que toca enseñar (en modo automático, las básicas sin usar).
    */
   private refreshControlsHint(): void {
+    // En táctil el mismo ajuste decide las etiquetas bajo los botones.
+    this.touchControls.setLabels(
+      touchLabelActions(this.settings.controlsHint, this.meta.learnedControls),
+    )
+
     const hint = document.getElementById("controls-hint")
     if (!hint) return
     const text = controlsHintText(
@@ -580,8 +595,11 @@ export class Game {
     )
   }
 
-  /** Da un control básico por aprendido: la pista automática deja de nombrarlo. */
-  private markControlUsed(control: BasicControl): void {
+  /**
+   * Da un control por aprendido: la pista automática y las etiquetas táctiles
+   * dejan de nombrarlo.
+   */
+  private markControlUsed(control: HintAction): void {
     if (this.meta.learnedControls.includes(control)) return
     this.meta.learnedControls.push(control)
     this.saveManager.save(this.meta)
@@ -842,6 +860,8 @@ export class Game {
 
   /** Dispara los avisos que dependen del estado de la partida y avanza la cola. */
   private updateTips(deltaTime: number): void {
+    if (this.controlDevice.device === "touch") this.triggerTouchTips()
+
     if (
       this.biomeTimeLimit > 0 &&
       this.biomeTimeRemaining / this.biomeTimeLimit <= TIP_TIME_LOW_RATIO
@@ -863,6 +883,23 @@ export class Game {
     }
 
     this.tips.update(deltaTime)
+  }
+
+  /**
+   * Avisos de los controles táctiles, en orden. El que enseña un control que
+   * el jugador ya ha descubierto solo se da por visto sin mostrarlo (también
+   * si estaba esperando en la cola: la cola lo descarta al llegarle el turno).
+   */
+  private triggerTouchTips(): void {
+    for (const id of TOUCH_TIP_IDS) {
+      if (this.meta.seenTips.includes(id)) continue
+      if (this.touchControls.hasUsed(TOUCH_TIP_CONTROL[id])) {
+        this.meta.seenTips.push(id)
+        this.saveManager.save(this.meta)
+      } else {
+        this.tips.trigger(id)
+      }
+    }
   }
 
   /** Primer desecho cerca y primera fuga a la vista (en pantalla y a tiro). */

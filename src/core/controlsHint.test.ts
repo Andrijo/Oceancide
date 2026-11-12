@@ -6,6 +6,8 @@ import {
   isControlsHintMode,
   isHeldControlActive,
   isHintAction,
+  TOUCH_LABEL_ACTIONS,
+  touchLabelActions,
 } from "@core/controlsHint"
 import type { InputState } from "@core/types"
 
@@ -90,5 +92,21 @@ describe("validadores", () => {
     expect(isHintAction("volar")).toBe(false)
     expect(isControlsHintMode("always")).toBe(true)
     expect(isControlsHintMode(true)).toBe(false)
+  })
+})
+
+describe("touchLabelActions", () => {
+  it("en automático etiqueta los controles táctiles que faltan por usar", () => {
+    expect(touchLabelActions("auto", [])).toEqual([...TOUCH_LABEL_ACTIONS])
+    expect(touchLabelActions("auto", ["boost", "lookBack", "move"])).toEqual([
+      "dash",
+      "build",
+    ])
+  })
+
+  it("«siempre» etiqueta todos y «no» ninguno", () => {
+    const all = [...TOUCH_LABEL_ACTIONS]
+    expect(touchLabelActions("always", all)).toEqual(all)
+    expect(touchLabelActions("off", [])).toEqual([])
   })
 })

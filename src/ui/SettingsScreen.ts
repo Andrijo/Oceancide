@@ -544,7 +544,7 @@ export function createSettingsBody(
     CONTROLS_HINT_CHOICES,
     settings.controlsHint,
     (controlsHint) => onChange({ controlsHint }),
-    "La línea con los controles del teclado o del mando en la parte de abajo. «Hasta usarlos» quita cada control básico en cuanto lo usas; «Siempre» los muestra todos.",
+    "La línea con los controles del teclado o del mando en la parte de abajo; en táctil, las etiquetas bajo los botones. «Hasta usarlos» quita cada control básico en cuanto lo usas; «Siempre» los muestra todos.",
   )
   const keyboardFields = [
     keyBindingsField(settings.keyBindings, (keyBindings) =>

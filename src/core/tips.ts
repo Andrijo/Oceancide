@@ -3,6 +3,10 @@
 // se enseñan. Lógica pura; quién los dispara y cómo se pintan lo decide Game.
 
 export const TIP_IDS = [
+  "touch_move",
+  "touch_depth",
+  "touch_boost",
+  "touch_dash",
   "debris_near",
   "leak_seen",
   "fragile_broken",
@@ -12,6 +16,31 @@ export const TIP_IDS = [
 ] as const
 
 export type TipId = (typeof TIP_IDS)[number]
+
+/**
+ * Avisos de los controles táctiles, en el orden en que se enseñan. Solo se
+ * disparan jugando con la pantalla táctil (en teclado y mando ya está la
+ * pista de controles).
+ */
+export const TOUCH_TIP_IDS = [
+  "touch_move",
+  "touch_depth",
+  "touch_boost",
+  "touch_dash",
+] as const satisfies readonly TipId[]
+
+export type TouchTipId = (typeof TOUCH_TIP_IDS)[number]
+
+/**
+ * Control táctil que enseña cada aviso: si el jugador ya lo ha usado, el
+ * aviso sobra y se da por visto sin mostrarlo.
+ */
+export const TOUCH_TIP_CONTROL = {
+  touch_move: "move",
+  touch_depth: "depth",
+  touch_boost: "boost",
+  touch_dash: "dash",
+} as const satisfies Record<TouchTipId, string>
 
 export function isTipId(value: unknown): value is TipId {
   return (
@@ -38,6 +67,14 @@ export interface TipTextContext {
 
 export function tipText(id: TipId, ctx: TipTextContext): string {
   switch (id) {
+    case "touch_move":
+      return "Arrastra el dedo en la mitad izquierda de la pantalla para nadar: hacia arriba avanzas y a los lados giras."
+    case "touch_depth":
+      return "Desliza arriba o abajo en la mitad derecha para subir o bajar. Puedes hacerlo mientras nadas."
+    case "touch_boost":
+      return "Para impulsarte, empuja el joystick más allá de su borde. Así puedes impulsarte y cambiar de profundidad a la vez."
+    case "touch_dash":
+      return "Desliza rápido a un lado en la mitad izquierda para hacer un giro de 360° con dash. También tienes el botón «Dash»."
     case "debris_near":
       return "Eso que flota es un desecho. Nada hacia él para recogerlo."
     case "leak_seen":
@@ -50,7 +87,7 @@ export function tipText(id: TipId, ctx: TipTextContext): string {
       return "Queda poco tiempo. Al llegar a cero, la presión dispara la toxicidad: limpia la zona cuanto antes."
     case "filter_affordable":
       return ctx.buildControl === null
-        ? `Tienes ${ctx.filterCost} de Eco: toca el botón del embudo para colocar una esfera filtradora que recoge desechos por ti.`
+        ? `Tienes ${ctx.filterCost} de Eco: toca el botón «Filtro» (el embudo) para colocar una esfera filtradora que recoge desechos por ti.`
         : `Tienes ${ctx.filterCost} de Eco: pulsa ${ctx.buildControl} para colocar una esfera filtradora que recoge desechos por ti.`
   }
 }

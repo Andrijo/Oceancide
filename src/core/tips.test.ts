@@ -3,6 +3,8 @@ import {
   TIP_DURATION,
   TIP_GAP,
   TIP_IDS,
+  TOUCH_TIP_CONTROL,
+  TOUCH_TIP_IDS,
   TipQueue,
   isTipId,
   tipText,
@@ -40,6 +42,14 @@ describe("isTipId", () => {
   })
 })
 
+describe("avisos táctiles", () => {
+  it("son avisos conocidos y cada uno enseña un control distinto", () => {
+    for (const id of TOUCH_TIP_IDS) expect(isTipId(id)).toBe(true)
+    const controls = TOUCH_TIP_IDS.map((id) => TOUCH_TIP_CONTROL[id])
+    expect(new Set(controls).size).toBe(TOUCH_TIP_IDS.length)
+  })
+})
+
 describe("tipText", () => {
   it("tiene texto para todos los avisos", () => {
     for (const id of TIP_IDS) {
@@ -63,6 +73,14 @@ describe("tipText", () => {
     expect(keyboard).toContain("40")
     expect(touch).not.toContain("pulsa B")
     expect(touch).toContain("botón")
+  })
+
+  it("los avisos táctiles enseñan nadar, profundidad, impulso y dash", () => {
+    const ctx = { buildControl: null, filterCost: 40 }
+    expect(tipText("touch_move", ctx)).toContain("mitad izquierda")
+    expect(tipText("touch_depth", ctx)).toContain("mitad derecha")
+    expect(tipText("touch_boost", ctx)).toContain("borde")
+    expect(tipText("touch_dash", ctx)).toContain("Desliza rápido")
   })
 
   it("nombra el botón del mando cuando se juega con mando", () => {

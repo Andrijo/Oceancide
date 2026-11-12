@@ -878,12 +878,12 @@ button.build-chip:focus-visible,
   bottom: var(--touch-bottom);
 }
 
-/* En vertical ese hueco es demasiado estrecho: sube por encima de la fila
-   de botones táctiles (dash, mirar atrás e impulso, a +180px y 64px de alto;
-   ver TouchControls.ts). */
+/* En vertical ese hueco es demasiado estrecho: sube por encima de los
+   botones táctiles (el más alto, el dash, a +186px y 64px de alto; ver
+   TouchControls.ts). */
 @media (orientation: portrait) {
   :root[data-input="touch"] #hud-bottom {
-    bottom: calc(var(--touch-bottom) + 252px * var(--touch-scale, 1));
+    bottom: calc(var(--touch-bottom) + 258px * var(--touch-scale, 1));
   }
 }
 
