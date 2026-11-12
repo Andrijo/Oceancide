@@ -4,6 +4,7 @@
 import type { RunOutcome, RunSummary } from "@core/types"
 import { UPGRADES } from "@tycoon/Upgrades"
 import { isTipId, type TipId } from "@core/tips"
+import { isHintAction, type HintAction } from "@core/controlsHint"
 
 export const META_VERSION = 1
 const STORAGE_KEY = "oceancide.meta"
@@ -36,6 +37,11 @@ export interface MetaState {
    * o no es un ajuste (`Settings.tipsEnabled`), no progreso.
    */
   seenTips: TipId[]
+  /**
+   * Controles básicos que el jugador ya ha usado alguna vez: la pista de
+   * controles automática deja de nombrarlos.
+   */
+  learnedControls: HintAction[]
 }
 
 export function createDefaultMeta(): MetaState {
@@ -49,6 +55,7 @@ export function createDefaultMeta(): MetaState {
     totalDebris: 0,
     upgrades: {},
     seenTips: [],
+    learnedControls: [],
   }
 }
 
@@ -121,6 +128,9 @@ export function sanitizeMeta(raw: Record<string, unknown>): MetaState {
   const seenTips = Array.isArray(raw.seenTips)
     ? [...new Set(raw.seenTips.filter(isTipId))]
     : defaults.seenTips
+  const learnedControls = Array.isArray(raw.learnedControls)
+    ? [...new Set(raw.learnedControls.filter(isHintAction))]
+    : defaults.learnedControls
 
   return {
     version: META_VERSION,
@@ -136,6 +146,7 @@ export function sanitizeMeta(raw: Record<string, unknown>): MetaState {
     totalDebris: finiteNumber(raw.totalDebris, defaults.totalDebris),
     upgrades,
     seenTips,
+    learnedControls,
   }
 }
 

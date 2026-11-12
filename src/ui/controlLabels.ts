@@ -2,6 +2,7 @@
 // Textos de ayuda de los controles según el dispositivo en uso (teclado,
 // táctil o mando), con las teclas y botones asignados y los glifos del mando.
 
+import { HINT_ACTIONS, type HintAction } from "@core/controlsHint"
 import type { PadStyle } from "@core/gamepad"
 import { keyLabel, type KeyBindings } from "@core/keyBindings"
 import { PAD_BUTTON, type PadBindings } from "@core/padBindings"
@@ -85,36 +86,51 @@ function moveKeys(bindings: KeyBindings): string {
   return keys.every((k) => k.length === 1) ? keys.join("") : keys.join("/")
 }
 
-/** Línea de la pista de controles de la parte inferior (sin táctil). */
-export function controlsHintText(
+/** Texto de cada acción de la pista con las teclas o botones asignados. */
+function hintParts(
   { device, padStyle }: ControlDevice,
   { keys, pad }: ControlBindings,
-): string {
+): Record<HintAction, string> {
   if (device === "gamepad") {
     const b = (button: number): string => padButtonLabel(padStyle, button)
-    return [
-      `${LEFT_STICK} mover`,
-      `${RIGHT_STICK} profundidad`,
-      `${b(pad.boost)} impulso`,
-      `${b(pad.dashLeft)}/${b(pad.dashRight)} dash`,
-      `${b(pad.backflip)} voltereta`,
-      `${b(pad.build)} filtro`,
-      `${b(pad.lookBack)} mirar atrás`,
-      `${b(pad.pause)} pausa`,
-    ].join(" · ")
+    return {
+      move: `${LEFT_STICK} mover`,
+      depth: `${RIGHT_STICK} profundidad`,
+      boost: `${b(pad.boost)} impulso`,
+      dash: `${b(pad.dashLeft)}/${b(pad.dashRight)} dash`,
+      build: `${b(pad.build)} filtro`,
+      backflip: `${b(pad.backflip)} voltereta`,
+      lookBack: `${b(pad.lookBack)} mirar atrás`,
+      pause: `${b(pad.pause)} pausa`,
+    }
   }
 
   const k = (code: string): string => keyLabel(code)
-  return [
-    `${moveKeys(keys)} mover`,
-    `${k(keys.up)}/${k(keys.down)} profundidad`,
-    `${k(keys.boost)} impulso`,
-    `${k(keys.dashLeft)}/${k(keys.dashRight)} dash`,
-    `${k(keys.backflip)} voltereta`,
-    `${k(keys.build)} filtro`,
-    `${k(keys.lookBack)} mirar atrás`,
-    "Esc pausa",
-  ].join(" · ")
+  return {
+    move: `${moveKeys(keys)} mover`,
+    depth: `${k(keys.up)}/${k(keys.down)} profundidad`,
+    boost: `${k(keys.boost)} impulso`,
+    dash: `${k(keys.dashLeft)}/${k(keys.dashRight)} dash`,
+    build: `${k(keys.build)} filtro`,
+    backflip: `${k(keys.backflip)} voltereta`,
+    lookBack: `${k(keys.lookBack)} mirar atrás`,
+    pause: "Esc pausa",
+  }
+}
+
+/**
+ * Línea de la pista de controles de la parte inferior (sin táctil) con las
+ * acciones indicadas, en el orden de `HINT_ACTIONS`. Vacía si no hay ninguna.
+ */
+export function controlsHintText(
+  device: ControlDevice,
+  bindings: ControlBindings,
+  actions: readonly HintAction[] = HINT_ACTIONS,
+): string {
+  const parts = hintParts(device, bindings)
+  return HINT_ACTIONS.filter((action) => actions.includes(action))
+    .map((action) => parts[action])
+    .join(" · ")
 }
 
 /** Tecla o botón que coloca el filtro; `null` en táctil (es un botón en pantalla). */

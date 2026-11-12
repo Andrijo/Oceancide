@@ -30,6 +30,7 @@ import {
   type PadAction,
   type PadBindings,
 } from "@core/padBindings"
+import type { ControlsHintMode } from "@core/controlsHint"
 import type { PadStyle } from "@core/gamepad"
 import { padButtonLabel, type InputDevice } from "@ui/controlLabels"
 
@@ -93,6 +94,12 @@ const MOTION_CHOICES: Choice<ReduceMotionChoice>[] = [
   { value: "system", label: "Como el sistema" },
   { value: "on", label: "Sí" },
   { value: "off", label: "No" },
+]
+
+const CONTROLS_HINT_CHOICES: Choice<ControlsHintMode>[] = [
+  { value: "auto", label: "Hasta usarlos" },
+  { value: "always", label: "Siempre" },
+  { value: "off", label: "Nunca" },
 ]
 
 let fieldCounter = 0
@@ -532,11 +539,12 @@ export function createSettingsBody(
       "Una vibración corta al hacer el dash, en los dispositivos que la admiten.",
     ),
   ]
-  const hintField = switchField(
+  const hintField = choiceField(
     "Pista de controles en pantalla",
-    settings.showControlsHint,
-    (showControlsHint) => onChange({ showControlsHint }),
-    "La línea con los controles del teclado o del mando en la parte de abajo.",
+    CONTROLS_HINT_CHOICES,
+    settings.controlsHint,
+    (controlsHint) => onChange({ controlsHint }),
+    "La línea con los controles del teclado o del mando en la parte de abajo. «Hasta usarlos» quita cada control básico en cuanto lo usas; «Siempre» los muestra todos.",
   )
   const keyboardFields = [
     keyBindingsField(settings.keyBindings, (keyBindings) =>

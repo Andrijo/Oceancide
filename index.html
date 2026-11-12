@@ -234,9 +234,9 @@
         color: var(--c-good, #4ade80);
       }
 
-      .toxicity-skull.level-low {
-        animation: skullPulse 3s ease-in-out infinite;
-      }
+      /* Con toxicidad baja la calavera está quieta: si latiera siempre, el
+         jugador se acostumbraría y dejaría de mirarla cuando importa. Late
+         desde el nivel medio y acelera en alto y crítico. */
       .toxicity-skull.level-mid {
         animation: skullPulse 2s ease-in-out infinite;
       }
@@ -310,8 +310,7 @@
         -webkit-touch-callout: none;
       }
 
-      #controls-hint.hidden,
-      #controls-hint.user-hidden {
+      #controls-hint.hidden {
         display: none;
       }
 
@@ -516,16 +515,6 @@
   <body>
     <div id="game-container">
       <div id="ui-overlay" role="group" aria-label="Estadísticas de la inmersión">
-        <div class="stat-box">
-          <div class="stat-label" id="debris-label">Desechos recolectados</div>
-          <div
-            class="stat-value"
-            id="debris-count"
-            role="status"
-            aria-labelledby="debris-label">
-            0
-          </div>
-        </div>
         <div class="stat-box">
           <div class="stat-label" id="eco-label">Eco</div>
           <div

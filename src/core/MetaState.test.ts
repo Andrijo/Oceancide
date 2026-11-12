@@ -76,6 +76,7 @@ describe("createDefaultMeta", () => {
       totalDebris: 0,
       upgrades: {},
       seenTips: [],
+      learnedControls: [],
     })
   })
 })
@@ -344,6 +345,21 @@ describe("sanitizeMeta", () => {
     const meta = sanitizeMeta({ seenTips: "todos" })
 
     expect(meta.seenTips).toEqual([])
+  })
+
+  it("conserva los controles usados válidos, sin duplicados", () => {
+    const meta = sanitizeMeta({
+      learnedControls: ["move", "volar", "dash", "move", 3],
+    })
+
+    expect(meta.learnedControls).toEqual(["move", "dash"])
+  })
+
+  it("un guardado antiguo sin controles usados los deja por enseñar", () => {
+    expect(sanitizeMeta({}).learnedControls).toEqual([])
+    expect(sanitizeMeta({ learnedControls: "todos" }).learnedControls).toEqual(
+      [],
+    )
   })
 
   it("descarta tipsEnabled: ahora es un ajuste, no progreso", () => {

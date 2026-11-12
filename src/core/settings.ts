@@ -4,6 +4,7 @@
 // Viven en su propia clave de localStorage, separada del progreso: "Eliminar
 // progreso" (SaveManager.reset) no los toca.
 
+import { isControlsHintMode, type ControlsHintMode } from "@core/controlsHint"
 import {
   LEGACY_QUALITY_KEY,
   isQualityChoice,
@@ -54,8 +55,11 @@ export interface Settings {
   touchScale: number
   /** Opacidad de los controles táctiles (0..1). */
   touchOpacity: number
-  /** Pista de controles en la parte inferior durante la inmersión. */
-  showControlsHint: boolean
+  /**
+   * Pista de controles en la parte inferior durante la inmersión: automática
+   * (hasta usar cada control básico), fija o desactivada.
+   */
+  controlsHint: ControlsHintMode
   /** Tecla principal de cada acción (reasignable desde Ajustes). */
   keyBindings: KeyBindings
   /** Botón del mando de cada acción (reasignable desde Ajustes). */
@@ -90,7 +94,7 @@ export function createDefaultSettings(): Settings {
     vibration: true,
     touchScale: 1,
     touchOpacity: 1,
-    showControlsHint: true,
+    controlsHint: "auto",
     keyBindings: createDefaultKeyBindings(),
     padBindings: createDefaultPadBindings(),
     tipsEnabled: true,
@@ -124,6 +128,20 @@ function bool(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback
 }
 
+/**
+ * Modo de la pista de controles. Los ajustes antiguos guardaban un sí/no
+ * (`showControlsHint`): el no se respeta y el sí pasa a la pista automática.
+ */
+function controlsHintMode(
+  data: Record<string, unknown>,
+  fallback: ControlsHintMode,
+): ControlsHintMode {
+  if (isControlsHintMode(data.controlsHint)) return data.controlsHint
+  if (data.showControlsHint === false) return "off"
+  if (data.showControlsHint === true) return "auto"
+  return fallback
+}
+
 /** Rellena y sanea unos ajustes leídos de disco (o parciales). */
 export function sanitizeSettings(
   raw: unknown,
@@ -154,7 +172,7 @@ export function sanitizeSettings(
       SETTING_LIMITS.touchOpacity,
       defaults.touchOpacity,
     ),
-    showControlsHint: bool(data.showControlsHint, defaults.showControlsHint),
+    controlsHint: controlsHintMode(data, defaults.controlsHint),
     keyBindings:
       data.keyBindings === undefined
         ? { ...defaults.keyBindings }
