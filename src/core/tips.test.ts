@@ -44,22 +44,34 @@ describe("tipText", () => {
   it("tiene texto para todos los avisos", () => {
     for (const id of TIP_IDS) {
       expect(
-        tipText(id, { touch: false, filterCost: 40 }).length,
+        tipText(id, { buildControl: "B", filterCost: 40 }).length,
       ).toBeGreaterThan(10)
     }
   })
 
   it("nombra la tecla en teclado y el botón en táctil", () => {
     const keyboard = tipText("filter_affordable", {
-      touch: false,
+      buildControl: "B",
       filterCost: 40,
     })
-    const touch = tipText("filter_affordable", { touch: true, filterCost: 40 })
+    const touch = tipText("filter_affordable", {
+      buildControl: null,
+      filterCost: 40,
+    })
 
     expect(keyboard).toContain("pulsa B")
     expect(keyboard).toContain("40")
     expect(touch).not.toContain("pulsa B")
     expect(touch).toContain("botón")
+  })
+
+  it("nombra el botón del mando cuando se juega con mando", () => {
+    const gamepad = tipText("filter_affordable", {
+      buildControl: "□",
+      filterCost: 40,
+    })
+
+    expect(gamepad).toContain("pulsa □")
   })
 })
 

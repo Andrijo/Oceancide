@@ -102,6 +102,39 @@ describe("sanitizeSettings", () => {
     })
   })
 
+  it("conserva las teclas reasignadas y sanea las inválidas", () => {
+    const settings = sanitizeSettings({
+      keyBindings: { ...createDefaultSettings().keyBindings, build: "KeyG" },
+    })
+
+    expect(settings.keyBindings.build).toBe("KeyG")
+    expect(
+      sanitizeSettings({ keyBindings: { up: "Escape" } }).keyBindings.up,
+    ).toBe("Space")
+  })
+
+  it("las teclas reasignadas sobreviven a guardar y cargar", () => {
+    stubStorage()
+    const manager = new SettingsManager()
+    const settings = createDefaultSettings()
+    settings.keyBindings.boost = "KeyK"
+
+    manager.save(settings)
+
+    expect(manager.load().keyBindings.boost).toBe("KeyK")
+  })
+
+  it("los botones del mando reasignados sobreviven a guardar y cargar", () => {
+    stubStorage()
+    const manager = new SettingsManager()
+    const settings = createDefaultSettings()
+    settings.padBindings.boost = 0
+
+    manager.save(settings)
+
+    expect(manager.load().padBindings.boost).toBe(0)
+  })
+
   it("rellena lo que falta con los valores de referencia", () => {
     const base = { ...createDefaultSettings(), fov: 95 }
 

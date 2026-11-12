@@ -52,6 +52,14 @@ import {
 } from "@core/MetaState"
 import { Rng, deriveSeed, randomSeed } from "@core/rng"
 import { InputController } from "@core/InputController"
+import { GamepadController, type PadStyle } from "@core/gamepad"
+import {
+  buildControlLabel,
+  controlsHintText,
+  type ControlBindings,
+  type ControlDevice,
+  type InputDevice,
+} from "@ui/controlLabels"
 import { TIP_TIME_LOW_RATIO, TipQueue, tipText, type TipId } from "@core/tips"
 import { CameraRig } from "@core/CameraRig"
 import {
@@ -121,6 +129,12 @@ export class Game {
   private state: GameState
   private input: InputState
   private inputController: InputController
+  private gamepad: GamepadController
+  /** Último dispositivo usado: decide qué teclas o botones muestra la ayuda. */
+  private controlDevice: ControlDevice = {
+    device: "keyboard",
+    padStyle: "xbox",
+  }
   private cameraRig: CameraRig
   private renderPipeline!: RenderPipeline
   private timer: THREE.Timer
@@ -236,7 +250,7 @@ export class Game {
       },
       onSaveMeta: () => this.saveManager.save(this.meta),
       getHelpState: () => ({
-        touch: this.touchControls.isActive(),
+        controls: { ...this.controlDevice },
         tipsEnabled: this.settings.tipsEnabled,
         seenTips: this.meta.seenTips.length,
       }),
@@ -250,6 +264,7 @@ export class Game {
       // La calidad en uso (puede venir de ?quality=), no solo la guardada.
       getSettings: () => ({ ...this.settings, quality: this.qualityChoice }),
       onUpdateSettings: (patch) => this.updateSettings(patch),
+      capturePadButton: (onButton) => this.gamepad.captureButton(onButton),
     })
 
     this.tips = new TipQueue({
@@ -280,26 +295,63 @@ export class Game {
       vertical: 0,
     }
 
-    this.inputController = new InputController(this.input, {
-      // En los ajustes, las flechas, Espacio y Esc son de la pantalla (sliders,
-      // casillas, volver), no del juego.
-      isOverlayActive: () =>
-        this.screens.isEventActive() ||
-        this.screens.isCardChoiceActive() ||
-        this.screens.isSettingsActive(),
-      isPaused: () => this.paused,
-      isPlaying: () => this.screen === "run",
-      blocksGameplay: () => this.transition.blocksGameplay,
-      togglePause: () => this.togglePause(),
-      setPaused: (paused) => this.setPaused(paused),
-      backflip: () => this.turtle.triggerBackflip(),
-      requestAbandon: () => this.setPaused(true),
-      build: () => this.tryBuild("filter"),
-      dash: (direction) => this.tryDash(direction),
-      setLookBack: (active) => {
-        this.cameraRig.setLookBack(active)
+    this.inputController = new InputController(
+      this.input,
+      {
+        // En los ajustes, las flechas, Espacio y Esc son de la pantalla
+        // (sliders, casillas, volver), no del juego.
+        isOverlayActive: () =>
+          this.screens.isEventActive() ||
+          this.screens.isCardChoiceActive() ||
+          this.screens.isSettingsActive(),
+        isPaused: () => this.paused,
+        isPlaying: () => this.screen === "run",
+        blocksGameplay: () => this.transition.blocksGameplay,
+        togglePause: () => this.togglePause(),
+        setPaused: (paused) => this.setPaused(paused),
+        backflip: () => this.turtle.triggerBackflip(),
+        requestAbandon: () => this.setPaused(true),
+        build: () => this.tryBuild("filter"),
+        dash: (direction) => this.tryDash(direction),
+        setLookBack: (active) => {
+          this.cameraRig.setLookBack(active)
+        },
       },
-    })
+      () => this.settings.keyBindings,
+    )
+
+    this.gamepad = new GamepadController(
+      this.input,
+      {
+        // Con una pantalla abierta (menús, pausa, cartas, eventos), el mando
+        // navega; en la inmersión, juega; en una transición, no hace nada.
+        getMode: () => {
+          if (this.screens.isOpen()) return "menu"
+          if (
+            this.screen === "run" &&
+            !this.paused &&
+            !this.transition.blocksGameplay
+          ) {
+            return "gameplay"
+          }
+          return "none"
+        },
+        onActivity: (style) => this.setControlDevice("gamepad", style),
+        togglePause: () => this.togglePause(),
+        dash: (direction) => this.tryDash(direction),
+        backflip: () => this.turtle.triggerBackflip(),
+        build: () => this.tryBuild("filter"),
+        setLookBack: (active) => {
+          this.cameraRig.setLookBack(active)
+        },
+        navigate: (direction) => this.screens.navigateFocus(direction),
+        activate: () => this.screens.activateFocus(),
+        back: () => this.screens.goBack(),
+        scroll: (pixels) => this.screens.scrollBy(pixels),
+      },
+      undefined,
+      () => this.settings.padBindings,
+    )
 
     this.touchControls = new TouchControls(this.input, {
       onBuild: () => this.tryBuild("filter"),
@@ -412,6 +464,18 @@ export class Game {
       this.inputController.handleKeyDown(e),
     )
     window.addEventListener("keyup", (e) => this.inputController.handleKeyUp(e))
+    // En captura: cuenta aunque otra escucha detenga la tecla (reasignación).
+    window.addEventListener(
+      "keydown",
+      () => this.setControlDevice("keyboard"),
+      true,
+    )
+    window.addEventListener(
+      "pointerdown",
+      (e) =>
+        this.setControlDevice(e.pointerType === "touch" ? "touch" : "keyboard"),
+      true,
+    )
     window.addEventListener("resize", () => this.handleResize())
 
     document.addEventListener("visibilitychange", () => {
@@ -462,6 +526,37 @@ export class Game {
     document
       .getElementById("controls-hint")
       ?.classList.toggle("user-hidden", !s.showControlsHint)
+    this.refreshControlsHint()
+  }
+
+  /**
+   * Cambia el dispositivo con el que se juega (teclado y ratón, táctil o
+   * mando) para que la ayuda muestre sus teclas, botones o glifos.
+   */
+  private setControlDevice(device: InputDevice, padStyle?: PadStyle): void {
+    const current = this.controlDevice
+    const style = padStyle ?? current.padStyle
+    if (current.device === device && current.padStyle === style) return
+
+    this.controlDevice = { device, padStyle: style }
+    document.documentElement.dataset.input = device
+    this.refreshControlsHint()
+  }
+
+  private controlBindings(): ControlBindings {
+    return { keys: this.settings.keyBindings, pad: this.settings.padBindings }
+  }
+
+  /** Pista de controles inferior: teclas asignadas o botones del mando. */
+  private refreshControlsHint(): void {
+    const hint = document.getElementById("controls-hint")
+    if (!hint) return
+    hint.textContent = controlsHintText(
+      this.controlDevice,
+      this.controlBindings(),
+    )
+    // En táctil no hay teclas que nombrar: los botones están en pantalla.
+    hint.classList.toggle("hidden", this.controlDevice.device === "touch")
   }
 
   /**
@@ -677,8 +772,13 @@ export class Game {
     const active = this.structures.getActiveCount()
     const max = this.turtle.stats.filterCapacity
     const available = this.state.ecoAwareness >= config.cost && active < max
+    const control = buildControlLabel(
+      this.controlDevice,
+      this.controlBindings(),
+    )
+    const name = control ? `${config.name} (${control})` : config.name
     this.uiManager.updateBuildHud(
-      `${config.name} (B) · cuesta ${config.cost} · activos ${active}/${max}`,
+      `${name} · cuesta ${config.cost} · activos ${active}/${max}`,
       available,
     )
   }
@@ -690,7 +790,10 @@ export class Game {
     const biome = this.biomeGenerator.getBiome()
     this.uiManager.showTip(
       tipText(id, {
-        touch: this.touchControls.isActive(),
+        buildControl: buildControlLabel(
+          this.controlDevice,
+          this.controlBindings(),
+        ),
         filterCost: STRUCTURES.filter.cost,
       }),
       { water: biome.waterColor, accent: biome.accentColor },
@@ -1289,6 +1392,7 @@ export class Game {
 
     this.updateAdaptiveQuality(rawDelta)
 
+    this.gamepad.update(deltaTime)
     this.update(deltaTime, time)
 
     if (this.screen !== "run") {

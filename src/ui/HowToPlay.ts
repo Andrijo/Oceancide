@@ -6,11 +6,13 @@ import { BIOME_ORDER } from "@core/types"
 import { BIOME_DEBRIS, type OceanDebrisType } from "@entities/debrisCatalog"
 import { STRUCTURES } from "@world/StructureConfig"
 import { STAT_INFO, STAT_KEYS } from "@cards/BuildStats"
-
-interface ControlRow {
-  keys: string[]
-  action: string
-}
+import {
+  gamepadControlRows,
+  keyboardControlRows,
+  type ControlBindings,
+  type ControlDevice,
+  type ControlRow,
+} from "@ui/controlLabels"
 
 interface HelpCard {
   /** Etiqueta pequeña sobre el nombre ("Movimiento", "Peligro"...). */
@@ -20,19 +22,6 @@ interface HelpCard {
   text: string
   example?: string
 }
-
-const KEYBOARD_CONTROLS: ControlRow[] = [
-  { keys: ["W", "S"], action: "Avanzar y retroceder (o ↑ ↓)" },
-  { keys: ["A", "D"], action: "Girar (o ← →)" },
-  { keys: ["U", "J"], action: "Subir y bajar" },
-  { keys: ["I"], action: "Impulso (mantener)" },
-  { keys: ["Q", "E"], action: "Giro de 360° con dash" },
-  { keys: ["Espacio"], action: "Backflip" },
-  { keys: ["B"], action: "Colocar esfera filtradora" },
-  { keys: ["C"], action: "Mirar atrás (mantener)" },
-  { keys: ["Esc", "Enter"], action: "Pausa" },
-  { keys: ["R"], action: "Abandonar (pide confirmación)" },
-]
 
 const TOUCH_CONTROLS: ControlRow[] = [
   { keys: ["Mitad izquierda"], action: "Joystick: avanzar y girar" },
@@ -242,8 +231,14 @@ function cardGrid(cards: HelpCard[]): HTMLElement {
   return grid
 }
 
-/** Cuerpo informativo de "Cómo jugar". `touch` resalta los controles en uso. */
-export function createHowToPlayBody(touch: boolean): HTMLElement {
+/**
+ * Cuerpo informativo de "Cómo jugar". Los controles del dispositivo en uso se
+ * resaltan y van primero; teclado y mando muestran lo que hay asignado.
+ */
+export function createHowToPlayBody(
+  { device, padStyle }: ControlDevice,
+  bindings: ControlBindings,
+): HTMLElement {
   const body = node("div", "help-body")
 
   const goal = node(
@@ -259,10 +254,25 @@ export function createHowToPlayBody(touch: boolean): HTMLElement {
   )
 
   const controls = node("div", "help-columns")
-  const keyboard = controlList("Teclado", KEYBOARD_CONTROLS, !touch)
-  const touchList = controlList("Táctil", TOUCH_CONTROLS, touch)
+  const lists = {
+    keyboard: controlList(
+      "Teclado",
+      keyboardControlRows(bindings.keys),
+      device === "keyboard",
+    ),
+    gamepad: controlList(
+      "Mando",
+      gamepadControlRows(padStyle, bindings.pad),
+      device === "gamepad",
+    ),
+    touch: controlList("Táctil", TOUCH_CONTROLS, device === "touch"),
+  }
   // Primero, los controles que el jugador está usando.
-  controls.append(...(touch ? [touchList, keyboard] : [keyboard, touchList]))
+  const order: (keyof typeof lists)[] = ["keyboard", "gamepad", "touch"]
+  controls.append(
+    lists[device],
+    ...order.filter((d) => d !== device).map((d) => lists[d]),
+  )
 
   body.append(
     section("Objetivo", goal, currency),

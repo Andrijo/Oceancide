@@ -154,7 +154,6 @@ export class TouchControls {
     if (this.visible) return
     this.visible = true
     this.root.classList.add("visible")
-    document.getElementById("controls-hint")?.classList.add("hidden")
   }
 
   private clamp(v: number, min: number, max: number): number {

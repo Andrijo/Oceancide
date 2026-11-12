@@ -27,8 +27,11 @@ export const TIP_GAP = 1.2
 export const TIP_TIME_LOW_RATIO = 0.3
 
 export interface TipTextContext {
-  /** El jugador usa los controles táctiles (no hay teclas que nombrar). */
-  touch: boolean
+  /**
+   * Tecla o botón del mando que coloca el filtro, o `null` si el jugador usa
+   * los controles táctiles (no hay teclas que nombrar).
+   */
+  buildControl: string | null
   /** Coste en eco de la esfera filtradora. */
   filterCost: number
 }
@@ -46,9 +49,9 @@ export function tipText(id: TipId, ctx: TipTextContext): string {
     case "time_low":
       return "Queda poco tiempo. Al llegar a cero, la presión dispara la toxicidad: limpia la zona cuanto antes."
     case "filter_affordable":
-      return ctx.touch
+      return ctx.buildControl === null
         ? `Tienes ${ctx.filterCost} de Eco: toca el botón del embudo para colocar una esfera filtradora que recoge desechos por ti.`
-        : `Tienes ${ctx.filterCost} de Eco: pulsa B para colocar una esfera filtradora que recoge desechos por ti.`
+        : `Tienes ${ctx.filterCost} de Eco: pulsa ${ctx.buildControl} para colocar una esfera filtradora que recoge desechos por ti.`
   }
 }
 

@@ -23,7 +23,20 @@ import { ChoiceGuard, isRepeatedActivation } from "@ui/choiceGuard"
 import { PARAGRAPH_FONT, TITLE_FONT, TITULO_FONT } from "@ui/fonts"
 import { MIST } from "@ui/palette"
 import { createHowToPlayBody } from "@ui/HowToPlay"
-import { createSettingsBody, type SettingsPatch } from "@ui/SettingsScreen"
+import {
+  cancelKeyCapture,
+  createSettingsBody,
+  isKeyCaptureActive,
+  type SettingsPatch,
+} from "@ui/SettingsScreen"
+import type { ControlDevice } from "@ui/controlLabels"
+import {
+  activateFocused,
+  moveFocus,
+  pickNeighbor,
+  scrollFocused,
+  type Direction,
+} from "@ui/focusNav"
 import { createDefaultSettings, type Settings } from "@core/settings"
 import { SEMANTIC, tint } from "@ui/colorVision"
 
@@ -50,11 +63,16 @@ export interface ScreenCallbacks {
   getSettings(): Settings
   /** Cambia (y guarda) los ajustes indicados; se aplican al momento. */
   onUpdateSettings(patch: SettingsPatch): void
+  /**
+   * Escucha el siguiente botón del mando para reasignarlo (`null` si se
+   * cancela). Devuelve la función que deja de escuchar.
+   */
+  capturePadButton(onButton: (button: number | null) => void): () => void
 }
 
 export interface HelpState {
-  /** El jugador usa los controles táctiles. */
-  touch: boolean
+  /** Dispositivo con el que juega (teclado, táctil o mando). */
+  controls: ControlDevice
   tipsEnabled: boolean
   /** Cuántos avisos ha visto ya. */
   seenTips: number
@@ -139,12 +157,12 @@ const CARD_KEYS: Record<string, number> = {
   Numpad3: 2,
 }
 
-/** Vector unitario (en coordenadas de pantalla) de cada flecha. */
-const ARROW_DIRECTIONS: Record<string, { x: number; y: number }> = {
-  ArrowLeft: { x: -1, y: 0 },
-  ArrowRight: { x: 1, y: 0 },
-  ArrowUp: { x: 0, y: -1 },
-  ArrowDown: { x: 0, y: 1 },
+/** Dirección de cada flecha. */
+const ARROW_DIRECTIONS: Record<string, Direction> = {
+  ArrowLeft: "left",
+  ArrowRight: "right",
+  ArrowUp: "up",
+  ArrowDown: "down",
 }
 
 const HUB_ACCENT = MIST
@@ -227,6 +245,8 @@ export class ScreenManager {
   private settingsActive = false
   /** Qué hace Esc en la pantalla actual (volver), si hace algo. */
   private escapeAction: (() => void) | null = null
+  /** Qué hace el botón "volver" del mando en la pantalla actual. */
+  private backAction: (() => void) | null = null
 
   constructor(callbacks: ScreenCallbacks) {
     this.callbacks = callbacks
@@ -335,6 +355,8 @@ export class ScreenManager {
       "keydown",
       (event) => {
         if (event.code !== "Escape" || !this.escapeAction) return
+        // Esc cancela la reasignación de una tecla, no cierra los ajustes.
+        if (isKeyCaptureActive()) return
         event.preventDefault()
         event.stopPropagation()
         if (!event.repeat) this.escapeAction()
@@ -370,6 +392,7 @@ export class ScreenManager {
   }
 
   public hide(): void {
+    cancelKeyCapture()
     this.overlay.style.display = "none"
     this.overlay.replaceChildren()
     this.primaryAction = null
@@ -379,6 +402,7 @@ export class ScreenManager {
     this.eventChoiceHandler = null
     this.settingsActive = false
     this.escapeAction = null
+    this.backAction = null
     this.overlay.removeAttribute("aria-labelledby")
     this.overlay.removeAttribute("aria-describedby")
     this.setHudVisible(true)
@@ -398,6 +422,38 @@ export class ScreenManager {
 
   public isSettingsActive(): boolean {
     return this.settingsActive
+  }
+
+  /** Hay una pantalla abierta (menú, pausa, cartas, evento...). */
+  public isOpen(): boolean {
+    return this.overlay.style.display !== "none"
+  }
+
+  // --- Mando: navegación por la pantalla abierta ---
+
+  public navigateFocus(direction: Direction): void {
+    if (!this.isOpen() || isKeyCaptureActive()) return
+    moveFocus(this.overlay, direction)
+  }
+
+  public activateFocus(): void {
+    if (!this.isOpen() || isKeyCaptureActive()) return
+    activateFocused(this.overlay)
+  }
+
+  /** Vuelve a la pantalla anterior (o reanuda, en la pausa), si se puede. */
+  public goBack(): void {
+    if (!this.isOpen()) return
+    // Esperando una tecla nueva, "volver" solo cancela la espera.
+    if (isKeyCaptureActive()) {
+      cancelKeyCapture()
+      return
+    }
+    this.backAction?.()
+  }
+
+  public scrollBy(pixels: number): void {
+    if (this.isOpen()) scrollFocused(this.overlay, pixels)
   }
 
   /**
@@ -886,7 +942,7 @@ export class ScreenManager {
     this.enableArrowNav(grid, "grid")
 
     content.append(title, subtitle, grid, backBtn)
-    this.open(root, onClose)
+    this.open(root, onClose, onClose)
 
     // Foco: la mejora recién comprada si aún se puede subir; si no, la primera
     // comprable; si no queda ninguna, el botón de volver.
@@ -958,8 +1014,16 @@ export class ScreenManager {
     backBtn.style.maxWidth = "400px"
     backBtn.style.flex = "none"
 
-    content.append(title, createHowToPlayBody(help.touch), tipsRow, backBtn)
-    this.open(root, onBack)
+    content.append(
+      title,
+      createHowToPlayBody(help.controls, {
+        keys: this.callbacks.getSettings().keyBindings,
+        pad: this.callbacks.getSettings().padBindings,
+      }),
+      tipsRow,
+      backBtn,
+    )
+    this.open(root, onBack, onBack)
   }
 
   /**
@@ -978,8 +1042,11 @@ export class ScreenManager {
     title.id = "settings-dialog-title"
     title.style.marginBottom = "4px"
 
+    const { controls } = this.callbacks.getHelpState()
     const body = createSettingsBody(this.callbacks.getSettings(), {
-      touch: this.callbacks.getHelpState().touch,
+      device: controls.device,
+      padStyle: controls.padStyle,
+      capturePadButton: (onButton) => this.callbacks.capturePadButton(onButton),
       onChange: (patch) => this.callbacks.onUpdateSettings(patch),
     })
 
@@ -1009,7 +1076,7 @@ export class ScreenManager {
     this.enableArrowNav(buttons)
 
     content.append(title, body, buttons)
-    this.open(root, onBack)
+    this.open(root, onBack, onBack)
     this.settingsActive = true
     this.escapeAction = onBack
     this.overlay.setAttribute("aria-labelledby", title.id)
@@ -1298,6 +1365,8 @@ export class ScreenManager {
     // Confirmación en dos pasos para no perder la inmersión por un clic accidental.
     const secondary = (): HTMLElement[] =>
       [statsLine, buildPanel].filter((n): n is HTMLElement => n !== undefined)
+    // Con la confirmación abierta, "volver" en el mando la cancela.
+    let cancelConfirm: (() => void) | null = null
     const showConfirm = (): void => {
       title.textContent = "¿Abandonar la inmersión?"
       for (const n of secondary()) n.style.display = "none"
@@ -1310,15 +1379,17 @@ export class ScreenManager {
       )
       confirmBtn.style.flex = "35 1 0"
       confirmBtn.style.width = "auto"
+      cancelConfirm = () => {
+        cancelConfirm = null
+        title.textContent = "Pausa"
+        for (const n of secondary()) n.style.display = ""
+        if (lossWarning) lossWarning.style.display = "none"
+        buttons.replaceChildren(abandonBtn, settingsBtn, resumeBtn)
+        resumeBtn.focus()
+      }
       const cancelBtn = this.makeGhostAction(
         "Seguir buceando",
-        () => {
-          title.textContent = "Pausa"
-          for (const n of secondary()) n.style.display = ""
-          if (lossWarning) lossWarning.style.display = "none"
-          buttons.replaceChildren(abandonBtn, settingsBtn, resumeBtn)
-          resumeBtn.focus()
-        },
+        cancelConfirm,
         "primary",
         true,
       )
@@ -1339,7 +1410,9 @@ export class ScreenManager {
       buildPanel = this.makeBuildPanel(runInfo)
       content.append(buildPanel)
     }
-    this.open(root, onResume)
+    this.open(root, onResume, () =>
+      cancelConfirm ? cancelConfirm() : onResume(),
+    )
     ;(focus === "settings" ? settingsBtn : resumeBtn).focus()
   }
 
@@ -1388,27 +1461,13 @@ export class ScreenManager {
         const current = document.activeElement
         if (!(current instanceof HTMLButtonElement)) return
         if (!items.includes(current)) return
-        const from = current.getBoundingClientRect()
-        const fx = from.left + from.width / 2
-        const fy = from.top + from.height / 2
-        let best: HTMLButtonElement | undefined
-        let bestScore = Infinity
-        for (const item of items) {
-          if (item === current) continue
-          const r = item.getBoundingClientRect()
-          const dx = r.left + r.width / 2 - fx
-          const dy = r.top + r.height / 2 - fy
-          // Distancia en la dirección pedida; la desviación lateral pesa más
-          // para preferir el vecino alineado.
-          const along = dx * dir.x + dy * dir.y
-          if (along <= 1) continue
-          const across = Math.abs(dx * dir.y) + Math.abs(dy * dir.x)
-          const score = along + across * 2
-          if (score < bestScore) {
-            bestScore = score
-            best = item
-          }
-        }
+        const best = pickNeighbor(
+          current.getBoundingClientRect(),
+          items
+            .filter((item) => item !== current)
+            .map((item) => ({ item, rect: item.getBoundingClientRect() })),
+          dir,
+        )
         event.preventDefault()
         best?.focus()
       })
@@ -2045,13 +2104,23 @@ export class ScreenManager {
     return layer
   }
 
-  private open(container: HTMLElement, primary: () => void): void {
+  /**
+   * @param primary Acción de Enter sin un control enfocado.
+   * @param back Acción del botón "volver" del mando, si la pantalla la tiene.
+   */
+  private open(
+    container: HTMLElement,
+    primary: () => void,
+    back?: () => void,
+  ): void {
+    cancelKeyCapture()
     this.eventActive = false
     this.eventChoiceHandler = null
     this.cardChoiceActive = false
     this.cardChoiceHandler = null
     this.settingsActive = false
     this.escapeAction = null
+    this.backAction = back ?? null
     this.overlay.removeAttribute("aria-labelledby")
     this.overlay.removeAttribute("aria-describedby")
     this.overlay.replaceChildren(this.makeCornerBubbles(), container)

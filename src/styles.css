@@ -525,9 +525,102 @@ legend.settings-label {
   outline-offset: 3px;
 }
 
+/* Reasignación de teclas: una fila por acción con su tecla como botón. */
+.settings-keys {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-key-row .settings-label {
+  font-weight: 600;
+}
+
+.settings-key,
+.settings-key-reset {
+  flex: none;
+  min-height: 40px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  border: 1.5px solid rgba(132, 179, 195, 0.45);
+  background: rgba(245, 238, 221, 0.06);
+  color: #f5eedd;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.settings-key {
+  min-width: 96px;
+  padding: 8px 12px;
+}
+
+.settings-key-symbol {
+  font-family: system-ui, sans-serif;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.settings-key-reset {
+  align-self: flex-start;
+  padding: 8px 16px;
+  color: rgba(245, 238, 221, 0.8);
+}
+
+.settings-key:hover,
+.settings-key-reset:hover {
+  border-color: rgba(132, 179, 195, 0.8);
+}
+
+.settings-key-capturing {
+  color: #16587b;
+  background: #84b3c3;
+  border-color: #84b3c3;
+}
+
+.settings-key-status:empty {
+  display: none;
+}
+
+.settings-key:focus-visible,
+.settings-key-reset:focus-visible {
+  outline: 2px solid #f5eedd;
+  outline-offset: 3px;
+}
+
+/* Con mando el foco se mueve por programa y el navegador no siempre pinta
+   :focus-visible: se marca cualquier control enfocado. */
+:root[data-input="gamepad"]
+  .settings-segment
+  input:focus
+  + .settings-segment-text,
+:root[data-input="gamepad"] .settings-range:focus,
+:root[data-input="gamepad"] .settings-toggle:focus,
+:root[data-input="gamepad"] .settings-key:focus,
+:root[data-input="gamepad"] .settings-key-reset:focus {
+  outline: 2px solid #f5eedd;
+  outline-offset: 3px;
+}
+
+:root[data-input="gamepad"] .event-option:focus {
+  outline: 2px solid #7dd3fc;
+  outline-offset: 3px;
+}
+
+:root[data-input="gamepad"] .card-choice:focus {
+  outline: 3px solid #f5eedd;
+  outline-offset: 5px;
+}
+
 .reduce-motion .settings-segment-text,
 .reduce-motion .settings-toggle,
-.reduce-motion .settings-toggle::after {
+.reduce-motion .settings-toggle::after,
+.reduce-motion .settings-key,
+.reduce-motion .settings-key-reset {
   transition: none;
 }
 
@@ -701,7 +794,8 @@ button.build-chip[aria-pressed="true"] {
   background: color-mix(in srgb, var(--chip-color) 18%, transparent);
 }
 
-button.build-chip:focus-visible {
+button.build-chip:focus-visible,
+:root[data-input="gamepad"] button.build-chip:focus {
   outline: 2px solid var(--chip-color);
   outline-offset: 3px;
 }
