@@ -47,6 +47,7 @@ function makeSummary(overrides: Partial<RunSummary> = {}): RunSummary {
     outcome: "died",
     biomeIndex: 0,
     biomeName: "Epipelágico Superior",
+    zoneProgress: 0,
     debrisCollected: 0,
     ecoBase: 0,
     ecoBonus: 0,

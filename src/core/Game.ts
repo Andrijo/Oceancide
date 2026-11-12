@@ -28,6 +28,7 @@ import {
   type Settings,
 } from "@core/settings"
 import { TouchControls } from "@ui/TouchControls"
+import { DeathVeil } from "@ui/DeathVeil"
 import { setColorVisionMode } from "@ui/colorVision"
 import { CardManager } from "@cards/CardManager"
 import { createRunState, type RunState } from "@cards/Card"
@@ -101,6 +102,11 @@ import {
   computeTimePressure,
   computeZoneProgress,
 } from "@core/systems/progression"
+import {
+  deathFade,
+  deathProgress,
+  deathTimeScale,
+} from "@core/systems/deathSequence"
 import { UpgradeManager } from "@/tycoon/UpgradeManager"
 import { ACT_EVENTS } from "@/events/EventPool"
 import { RELICS, pickRelic, type Relic } from "@/relics/RelicPool"
@@ -183,6 +189,13 @@ export class Game {
   private revivesUsed = 0
   private toxicityScaleMult = 1
 
+  /** Momento de derrota en curso: entre la muerte y el resumen. */
+  private dying = false
+  private deathElapsed = 0
+  /** Reloj del mundo durante la cámara lenta (avanza con el tiempo escalado). */
+  private deathWorldTime = 0
+  private deathVeil: DeathVeil
+
   private saveManager = new SaveManager()
   private meta: MetaState
   private screens: ScreenManager
@@ -252,6 +265,7 @@ export class Game {
       document.getElementById("game-container")!,
     )
     this.boundaryWalls = new BoundaryWalls(this.scene)
+    this.deathVeil = new DeathVeil(document.getElementById("game-container")!)
     this.uiManager.createPauseButton(() => this.togglePause())
     this.transition = new BiomeTransition()
 
@@ -326,7 +340,7 @@ export class Game {
           this.screens.isSettingsActive(),
         isPaused: () => this.paused,
         isPlaying: () => this.screen === "run",
-        blocksGameplay: () => this.transition.blocksGameplay,
+        blocksGameplay: () => this.transition.blocksGameplay || this.dying,
         togglePause: () => this.togglePause(),
         setPaused: (paused) => this.setPaused(paused),
         backflip: () => this.turtle.triggerBackflip(),
@@ -350,6 +364,7 @@ export class Game {
           if (
             this.screen === "run" &&
             !this.paused &&
+            !this.dying &&
             !this.transition.blocksGameplay
           ) {
             return "gameplay"
@@ -769,6 +784,7 @@ export class Game {
   private tryDash(direction: "left" | "right"): void {
     if (
       this.screen !== "run" ||
+      this.dying ||
       this.transition.blocksGameplay ||
       this.screens.isCardChoiceActive() ||
       this.screens.isEventActive()
@@ -786,6 +802,7 @@ export class Game {
   private tryBuild(key: StructureKey): void {
     if (
       this.screen !== "run" ||
+      this.dying ||
       this.transition.blocksGameplay ||
       this.screens.isCardChoiceActive() ||
       this.screens.isEventActive()
@@ -948,6 +965,7 @@ export class Game {
     if (paused) {
       if (
         this.screen !== "run" ||
+        this.dying ||
         this.transition.isActive() ||
         this.screens.isCardChoiceActive()
       ) {
@@ -989,6 +1007,7 @@ export class Game {
   }
 
   private showHub(): void {
+    this.cancelDeath()
     this.transition.cancel()
     this.pendingAdvance = false
     this.paused = false
@@ -1010,6 +1029,7 @@ export class Game {
   private startRun(endless = false): void {
     this.endlessMode = endless
     this.endlessBankedEco = 0
+    this.cancelDeath()
     this.transition.cancel()
     this.pendingAdvance = false
     this.paused = false
@@ -1045,6 +1065,7 @@ export class Game {
   private endRun(outcome: RunOutcome): void {
     if (this.screen !== "run") return
 
+    this.cancelDeath()
     this.transition.cancel()
     this.pendingAdvance = false
     this.screen = "summary"
@@ -1060,6 +1081,11 @@ export class Game {
       outcome,
       biomeIndex: this.biomeIndex,
       biomeName: this.biomeGenerator.getBiomeName(),
+      // Recalculado: el estado puede ir un frame por detrás al morir.
+      zoneProgress: computeZoneProgress(
+        this.collectedInZone,
+        this.biomeGenerator.getInitialDebrisCount(),
+      ),
       debrisCollected: this.state.debrisCollected,
       ecoBase: base,
       ecoBonus: bonus,
@@ -1124,6 +1150,7 @@ export class Game {
   private goToBiome(index: number): void {
     if (index < 0 || index >= BIOME_ORDER.length) return
 
+    this.cancelDeath()
     this.transition.cancel()
     this.pendingAdvance = false
     this.paused = false
@@ -1182,6 +1209,10 @@ export class Game {
 
   private update(deltaTime: number, time: number): void {
     if (!this.state.isRunning) return
+    if (this.dying) {
+      this.updateDeath(deltaTime)
+      return
+    }
     if (this.transition.blocksGameplay) return
     if (this.paused) return
     if (this.screens.isCardChoiceActive()) return
@@ -1459,8 +1490,74 @@ export class Game {
       return true
     }
 
-    this.endRun("died")
+    this.startDeath()
     return false
+  }
+
+  /**
+   * Momento de derrota antes del resumen (regla de fin de pico): cámara lenta,
+   * velo tóxico y la tortuga que se hunde. El resumen sale al terminar, desde
+   * `updateDeath`. Con movimiento reducido, solo un fundido breve.
+   */
+  private startDeath(): void {
+    if (this.dying || this.screen !== "run") return
+
+    this.dying = true
+    this.deathElapsed = 0
+    this.deathWorldTime = this.timer.getElapsed()
+    this.state.toxicity = 100
+    this.inputController.clear()
+    this.cameraRig.setLookBack(false)
+    this.tips.clear()
+
+    if (!prefersReducedMotion()) this.turtle.playHurt()
+    if (this.settings.vibration) navigator.vibrate?.([60, 40, 160])
+    this.uiManager.updateUI(this.state, 0)
+    this.uiManager.announce("La toxicidad ha llegado al máximo")
+  }
+
+  private updateDeath(deltaTime: number): void {
+    const reduced = prefersReducedMotion()
+    this.deathElapsed += deltaTime
+    const progress = deathProgress(this.deathElapsed, reduced)
+    const worldDelta = deltaTime * deathTimeScale(progress, reduced)
+    const bounds = this.biomeGenerator.getBounds()
+
+    // La tortuga, el foco, se hunde en tiempo real; el resto, a cámara lenta.
+    if (!reduced) {
+      this.turtle.updateSinking(deltaTime, bounds)
+      this.cameraRig.update(
+        deltaTime,
+        this.turtle.mesh.position,
+        this.turtle.mesh.rotation.y,
+      )
+    }
+    if (worldDelta > 0) {
+      this.deathWorldTime += worldDelta
+      this.enemyManager.update(
+        worldDelta,
+        this.deathWorldTime,
+        this.turtle.mesh.position,
+        bounds,
+      )
+      this.biomeGenerator.updateVisuals(worldDelta)
+    }
+
+    this.deathVeil.setOpacity(deathFade(progress))
+    if (progress >= 1) this.endRun("died")
+  }
+
+  /** Escala del tiempo del mundo (cámara lenta durante el momento de derrota). */
+  private worldTimeScale(): number {
+    if (!this.dying) return 1
+    const reduced = prefersReducedMotion()
+    return deathTimeScale(deathProgress(this.deathElapsed, reduced), reduced)
+  }
+
+  private cancelDeath(): void {
+    if (!this.dying) return
+    this.dying = false
+    this.deathVeil.hide()
   }
 
   private animate(timestamp: number = 0): void {
@@ -1493,13 +1590,14 @@ export class Game {
       this.pendingAdvance &&
       !this.transition.isActive() &&
       !this.paused &&
+      !this.dying &&
       this.screen === "run"
     ) {
       this.pendingAdvance = false
       this.advanceBiome()
     }
 
-    const simDelta = this.paused ? 0 : deltaTime
+    const simDelta = this.paused ? 0 : deltaTime * this.worldTimeScale()
 
     const spinIntensity = this.turtle.isSpinBoosting()
       ? Math.min(
@@ -1510,6 +1608,7 @@ export class Game {
 
     const boosting =
       this.state.isRunning &&
+      !this.dying &&
       !this.transition.blocksGameplay &&
       (this.turtle.isBoosting() || this.turtle.isSpinBoosting()) &&
       this.turtle.getSpeed() > 1

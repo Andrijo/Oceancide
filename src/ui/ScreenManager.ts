@@ -43,13 +43,14 @@ import {
 } from "@ui/focusNav"
 import { createDefaultSettings, type Settings } from "@core/settings"
 import { SEMANTIC, tint } from "@ui/colorVision"
+import { buildNextGoals, type NextGoalsView } from "@ui/nextGoals"
 
 /** Clase que añade ▲ o ▼ con el modo para daltonismo (ver styles.css). */
 function toneMarkClass(tone: "positive" | "negative"): string {
   return tone === "positive" ? "tone-mark-good" : "tone-mark-bad"
 }
 import { UPGRADES } from "@/tycoon/Upgrades"
-import { UpgradeManager } from "@/tycoon/UpgradeManager"
+import { UpgradeManager, affordableUpgrades } from "@/tycoon/UpgradeManager"
 import { type GameEvent, type EventOption } from "@/events/EventPool"
 import type { EventPreview } from "@/events/EventEffects"
 
@@ -631,6 +632,7 @@ export class ScreenManager {
     )
     upgradesBtn.style.flex = "1 1 0"
     upgradesBtn.style.width = "auto"
+    this.markAffordable(upgradesBtn, affordableUpgrades(meta).length)
 
     const helpBtn = this.makeGhostAction(
       "Cómo jugar",
@@ -854,6 +856,7 @@ export class ScreenManager {
     meta: MetaState,
     onClose: () => void,
     focusId?: string,
+    backLabel = "Volver al inicio",
   ): void {
     const { root, content } = this.makeWindowFrame()
     const manager = new UpgradeManager()
@@ -924,7 +927,7 @@ export class ScreenManager {
         () => {
           if (manager.buy(meta, upgrade.id)) {
             this.callbacks.onSaveMeta() // Guardar en localStorage
-            this.showUpgrades(meta, onClose, upgrade.id) // Redibujar
+            this.showUpgrades(meta, onClose, upgrade.id, backLabel) // Redibujar
           }
         },
         isMax ? "upgrade" : canBuy ? "primary" : "neutral",
@@ -945,12 +948,7 @@ export class ScreenManager {
       grid.append(card)
     })
 
-    const backBtn = this.makeGhostAction(
-      "Volver al inicio",
-      onClose,
-      "neutral",
-      true,
-    )
+    const backBtn = this.makeGhostAction(backLabel, onClose, "neutral", true)
     backBtn.style.maxWidth = "400px"
 
     this.enableArrowNav(grid, "grid")
@@ -1103,7 +1101,15 @@ export class ScreenManager {
     ;(focus === "reset" ? resetBtn : (first ?? backBtn)).focus()
   }
 
-  public showSummary(summary: RunSummary, meta: MetaState): void {
+  /**
+   * @param focus "upgrades" al volver de la pantalla de mejoras abierta desde
+   *   el resumen, para no perder la posición al navegar con teclado.
+   */
+  public showSummary(
+    summary: RunSummary,
+    meta: MetaState,
+    focus?: "upgrades",
+  ): void {
     const again = () => this.callbacks.onStartRun()
     const { root, content } = this.makeWindowFrame()
 
@@ -1200,8 +1206,26 @@ export class ScreenManager {
     hubBtn.style.width = "auto"
 
     buttons.append(againBtn, hubBtn)
-    this.enableArrowNav(buttons)
-    content.append(buttons)
+
+    // Objetivos pendientes y botones van en un mismo grupo de flechas (en
+    // cuadrícula), para llegar también al botón de mejoras del panel.
+    const actionArea = el(
+      "div",
+      `width: 100%; max-width: 640px; display: flex; flex-direction: column;
+      align-items: stretch; gap: clamp(14px, 2.4vh, 22px);`,
+    )
+    const goals = this.makeNextGoals(buildNextGoals(summary, meta), () =>
+      this.showUpgrades(
+        meta,
+        () => this.showSummary(summary, meta, "upgrades"),
+        undefined,
+        "Volver al resumen",
+      ),
+    )
+    if (goals) actionArea.append(goals.panel)
+    actionArea.append(buttons)
+    this.enableArrowNav(actionArea, "grid")
+    content.append(actionArea)
 
     content.append(
       el(
@@ -1213,7 +1237,112 @@ export class ScreenManager {
     )
 
     this.open(root, again)
-    againBtn.focus()
+    const upgradesBtn = goals?.upgradesButton
+    ;(focus === "upgrades" && upgradesBtn ? upgradesBtn : againBtn).focus()
+  }
+
+  /**
+   * Panel "Siguiente objetivo" del resumen: lo que faltó de la zona, la mejora
+   * a tiro y el siguiente bioma. Si hay mejoras comprables, ofrece ir a ellas.
+   */
+  private makeNextGoals(
+    view: NextGoalsView,
+    onUpgrades: () => void,
+  ): { panel: HTMLElement; upgradesButton: HTMLButtonElement | null } | null {
+    if (view.goals.length === 0) return null
+
+    const panel = el(
+      "section",
+      `box-sizing: border-box; width: 100%; display: flex; flex-direction: column;
+      gap: 10px; padding: 14px 16px; text-align: left; border-radius: 14px;
+      background: rgba(245, 238, 221, 0.045);
+      border: 1px solid rgba(132, 179, 195, 0.3); backdrop-filter: blur(6px);`,
+    )
+
+    const heading = el(
+      "h2",
+      `margin: 0; font: 700 12px ${PARAGRAPH_FONT}; letter-spacing: 0.14em;
+      text-transform: uppercase; color: ${HUB_ACCENT};`,
+      view.goals.length === 1 ? "Siguiente objetivo" : "Próximos objetivos",
+    )
+    heading.id = "next-goals-title"
+    panel.setAttribute("aria-labelledby", heading.id)
+
+    const list = el(
+      "ul",
+      `margin: 0; padding: 0; list-style: none; display: flex;
+      flex-direction: column; gap: 10px;`,
+    )
+    for (const goal of view.goals) {
+      const item = el(
+        "li",
+        `display: flex; flex-direction: column; gap: 6px;
+        font: 14px/1.4 ${PARAGRAPH_FONT}; color: #f5eedd;`,
+      )
+      item.append(el("span", "", goal.text))
+
+      if (goal.progress !== undefined) {
+        // El texto ya dice cuánto falta: la barra es solo un refuerzo visual.
+        const track = el(
+          "div",
+          `height: 4px; border-radius: 999px; overflow: hidden;
+          background: rgba(245, 238, 221, 0.12);`,
+        )
+        track.setAttribute("aria-hidden", "true")
+        const percent = Math.round(
+          Math.max(0, Math.min(1, goal.progress)) * 100,
+        )
+        track.append(
+          el(
+            "div",
+            `height: 100%; width: ${percent}%; border-radius: inherit;
+            background: ${HUB_ACCENT};`,
+          ),
+        )
+        item.append(track)
+      }
+      list.append(item)
+    }
+    panel.append(heading, list)
+
+    let upgradesButton: HTMLButtonElement | null = null
+    if (view.affordableCount > 0) {
+      upgradesButton = this.makeGhostAction(
+        "Ir a Mejoras",
+        onUpgrades,
+        "upgrade",
+        true,
+      )
+      upgradesButton.style.minHeight = "44px"
+      this.markAffordable(upgradesButton, view.affordableCount)
+      panel.append(upgradesButton)
+    }
+
+    return { panel, upgradesButton }
+  }
+
+  /**
+   * Contador de mejoras comprables en un botón de "Mejoras" (en el hub y en el
+   * resumen). Sin nada comprable no añade nada.
+   */
+  private markAffordable(button: HTMLButtonElement, count: number): void {
+    if (count <= 0) return
+
+    const label = button.textContent?.trim() ?? ""
+    const badge = el(
+      "span",
+      `display: inline-flex; align-items: center; justify-content: center;
+      min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box;
+      border-radius: 999px; background: ${HUB_ACCENT}; color: #06202e;
+      font: 700 12px ${PARAGRAPH_FONT};`,
+      String(count),
+    )
+    badge.setAttribute("aria-hidden", "true")
+    button.append(badge)
+    button.setAttribute(
+      "aria-label",
+      `${label}, ${count === 1 ? "1 disponible" : `${count} disponibles`}`,
+    )
   }
 
   public showCardChoice(

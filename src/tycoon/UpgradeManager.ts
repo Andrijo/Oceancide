@@ -1,6 +1,33 @@
 import type { MetaState } from "@core/MetaState"
 import type { TurtleStats } from "@core/types"
-import { UPGRADES } from "./Upgrades"
+import { UPGRADES, type Upgrade } from "./Upgrades"
+
+/** Siguiente nivel de una mejora que aún no está al máximo. */
+export interface NextUpgrade {
+  upgrade: Upgrade
+  /** Nivel que se compraría (1 = el primero). */
+  level: number
+  cost: number
+}
+
+/** Siguiente nivel de cada mejora que aún se puede subir, del más barato al más caro. */
+export function nextUpgrades(meta: Pick<MetaState, "upgrades">): NextUpgrade[] {
+  const next: NextUpgrade[] = []
+  for (const upgrade of UPGRADES) {
+    const level = meta.upgrades[upgrade.id] || 0
+    if (level >= upgrade.maxLevel) continue
+    next.push({ upgrade, level: level + 1, cost: upgrade.costs[level] })
+  }
+  // sort es estable: a igual coste se mantiene el orden de UPGRADES.
+  return next.sort((a, b) => a.cost - b.cost)
+}
+
+/** Mejoras que se pueden comprar ahora mismo con el Eco disponible. */
+export function affordableUpgrades(
+  meta: Pick<MetaState, "upgrades" | "ecoPoints">,
+): NextUpgrade[] {
+  return nextUpgrades(meta).filter((next) => next.cost <= meta.ecoPoints)
+}
 
 export class UpgradeManager {
   public canBuy(meta: MetaState, upgradeId: string): boolean {
