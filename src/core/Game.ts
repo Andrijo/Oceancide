@@ -4,6 +4,8 @@ import { BiomeGenerator } from "@world/BiomeGenerator"
 import { EnemyManager } from "@world/EnemyManager"
 import { SUN_DIRECTION } from "@world/WaterEffects"
 import { UIManager } from "@ui/UIManager"
+import { EdgeIndicators } from "@ui/EdgeIndicators"
+import { BoundaryWalls } from "@world/BoundaryWalls"
 import { DevMenu } from "@ui/DevMenu"
 import { PerfOverlay } from "@ui/PerfOverlay"
 import {
@@ -158,6 +160,8 @@ export class Game {
   private runTime = 0
 
   private readonly tmpProjected = new THREE.Vector3()
+  private edgeIndicators!: EdgeIndicators
+  private boundaryWalls!: BoundaryWalls
 
   constructor() {
     this.scene = new THREE.Scene()
@@ -201,6 +205,10 @@ export class Game {
     this.biomeGenerator.setQuality(this.quality)
     this.enemyManager = new EnemyManager(this.scene)
     this.uiManager = new UIManager()
+    this.edgeIndicators = new EdgeIndicators(
+      document.getElementById("game-container")!,
+    )
+    this.boundaryWalls = new BoundaryWalls(this.scene)
     this.uiManager.createPauseButton(() => this.togglePause())
     this.transition = new BiomeTransition()
 
@@ -475,6 +483,11 @@ export class Game {
     const rng = new Rng(deriveSeed(this.runSeed, index))
     this.biomeGenerator.generateBiome(biomeKey, rng, this.loop)
     this.hideRelic(index)
+    this.boundaryWalls.setBounds(
+      this.biomeGenerator.getBounds(),
+      this.biomeGenerator.getBiome().waterColor,
+    )
+    this.edgeIndicators.clear()
     // La carga del bioma no debe contar como bajo rendimiento.
     this.adaptiveQuality.reset()
 
@@ -978,6 +991,22 @@ export class Game {
       deltaTime,
       this.turtle.mesh.position,
       this.turtle.mesh.rotation.y,
+    )
+
+    // --- Ayudas de orientación ---
+    this.boundaryWalls.update(this.turtle.mesh.position)
+    const debrisList = this.biomeGenerator.getDebrisList()
+    this.camera.updateMatrixWorld()
+    this.edgeIndicators.update(
+      debrisList,
+      this.turtle.mesh.position,
+      this.camera,
+      this.biomeTimeLimit > 0
+        ? this.biomeTimeRemaining / this.biomeTimeLimit
+        : 1,
+    )
+    this.uiManager.updateLeaks(
+      debrisList.reduce((n, d) => n + (d.hazard === "lixivia" ? 1 : 0), 0),
     )
 
     // --- Recolección ---

@@ -71,6 +71,8 @@ export class UIManager {
   private lastSpinBoostVisible = false
   private lastBoostVisible = false
   private lastBiomeTimerText = ""
+  private leaksEl: HTMLElement
+  private lastLeaks = -1
 
   private lastToxicityLevel: string | null = null
   private lastToxicityVisible = false
@@ -119,6 +121,23 @@ export class UIManager {
       transition: color 0.3s ease, border-color 0.3s ease;
     `
     this.dangerClusterEl.appendChild(this.biomeTimerEl)
+
+    // Fugas pendientes: solo visible mientras quede alguna.
+    this.leaksEl = document.createElement("div")
+    this.leaksEl.id = "leaks-hud"
+    this.leaksEl.style.cssText = `
+      display: none;
+      padding: 2px 10px;
+      font-family: ${PARAGRAPH_FONT};
+      font-size: 14px;
+      font-weight: bold;
+      color: #facc15;
+      background: rgba(0, 0, 0, 0.55);
+      border: 2px solid rgba(250, 204, 21, 0.6);
+      border-radius: 10px;
+      pointer-events: none;
+    `
+    this.dangerClusterEl.appendChild(this.leaksEl)
 
     this.dangerClusterEl.appendChild(this.toxicitySkullEl)
 
@@ -330,6 +349,13 @@ export class UIManager {
     this.reviveCountEl.textContent = `×${count}`
     this.reviveEl.setAttribute("aria-label", `Revivir disponibles: ${count}`)
     this.reviveEl.classList.toggle("visible", count > 0)
+  }
+
+  public updateLeaks(count: number): void {
+    if (count === this.lastLeaks) return
+    this.lastLeaks = count
+    this.leaksEl.style.display = count > 0 ? "block" : "none"
+    this.leaksEl.textContent = `Fugas: ${count}`
   }
 
   public updateBiomeTimer(remaining: number, limit: number): void {
