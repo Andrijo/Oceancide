@@ -47,8 +47,8 @@ export function tipText(id: TipId, ctx: TipTextContext): string {
       return "Queda poco tiempo. Al llegar a cero, la presión dispara la toxicidad: limpia la zona cuanto antes."
     case "filter_affordable":
       return ctx.touch
-        ? `Tienes ${ctx.filterCost} de eco: toca el botón del embudo para colocar una esfera filtradora que recoge desechos por ti.`
-        : `Tienes ${ctx.filterCost} de eco: pulsa B para colocar una esfera filtradora que recoge desechos por ti.`
+        ? `Tienes ${ctx.filterCost} de Eco: toca el botón del embudo para colocar una esfera filtradora que recoge desechos por ti.`
+        : `Tienes ${ctx.filterCost} de Eco: pulsa B para colocar una esfera filtradora que recoge desechos por ti.`
   }
 }
 

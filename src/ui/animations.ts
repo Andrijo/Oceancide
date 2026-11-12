@@ -26,7 +26,7 @@ export function setAnimationsPaused(paused: boolean): void {
 }
 
 /**
- * Revelado escalonado de las cartas de mejora.
+ * Revelado escalonado de las cartas a elegir.
  *
  * Desactiva la `transition` de CSS durante el tween (si no, la transición
  * suaviza cada fotograma de GSAP y el efecto se ve con retraso) y la restaura

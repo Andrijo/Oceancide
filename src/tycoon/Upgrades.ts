@@ -60,7 +60,7 @@ export const UPGRADES: Upgrade[] = [
   {
     id: "eco",
     name: "Tanque de Eco",
-    description: "+10% de eco ganado por nivel.",
+    description: "+10% de Eco ganado por nivel.",
     maxLevel: 5,
     costs: [1000, 2000, 4000, 8000, 16000],
     apply: () => {},

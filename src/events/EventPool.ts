@@ -117,7 +117,7 @@ export const ACT_EVENTS: GameEvent[] = [
         id: "cut_net",
         label: "Cortar la red",
         description:
-          "Obtienes 100 Eco y +1 de radio, pero te enredas (-25% velocidad por el resto de la run).",
+          "Obtienes 100 Eco y +1 de radio, pero te enredas (-25% velocidad por el resto de la inmersión).",
         effects: {
           eco: 100,
           collectionRadius: 1,

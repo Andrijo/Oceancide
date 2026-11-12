@@ -229,7 +229,7 @@ describe("buildStatLines", () => {
 })
 
 describe("STAT_INFO", () => {
-  it("usa las mismas abreviaturas que muestran las cartas", () => {
+  it("usa los mismos nombres que muestran las cartas", () => {
     const text = describeCardEffects({
       speed: 1.1,
       resistance: 0.05,
@@ -246,7 +246,13 @@ describe("STAT_INFO", () => {
     }).map((part) => part.text)
 
     STAT_KEYS.forEach((key, index) => {
-      expect(text[index], key).toContain(STAT_INFO[key].short)
+      expect(text[index], key).toContain(STAT_INFO[key].term)
     })
+  })
+
+  it("no usa abreviaturas en los valores de las cartas", () => {
+    for (const key of STAT_KEYS) {
+      expect(STAT_INFO[key].term, key).not.toMatch(/\b(VEL|RES|TOX)\b|\/S\b/)
+    }
   })
 })

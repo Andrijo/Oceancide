@@ -153,7 +153,7 @@ export class DevMenu {
       ),
       this.makeButton("Limpiar toxicidad", () => this.api.clearToxicity()),
       this.makeButton("Completar zona", () => this.api.completeZone()),
-      this.makeButton("Reiniciar run", () => this.api.restartRun()),
+      this.makeButton("Reiniciar inmersión", () => this.api.restartRun()),
     )
     this.panel.append(tools)
 

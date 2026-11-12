@@ -33,7 +33,7 @@ export const CARD_POOL: Card[] = [
   {
     id: "short_fins",
     name: "Aletas Cortas",
-    description: "Pequeñas mejoras en las aletas traseras.",
+    description: "Pequeños ajustes en las aletas traseras.",
     rarity: "common",
     effects: { speed: 1.06 },
   },
@@ -132,7 +132,7 @@ export const CARD_POOL: Card[] = [
   {
     id: "symbiosis",
     name: "Simbiosis",
-    description: "Cada filtro activo genera eco por segundo.",
+    description: "Cada filtro activo genera Eco por segundo.",
     rarity: "rare",
     effects: { ecoPerSecond: 1 },
   },
@@ -160,14 +160,14 @@ export const CARD_POOL: Card[] = [
   {
     id: "filter_colony",
     name: "Colonia de Filtros",
-    description: "Los filtros generan más eco por segundo.",
+    description: "Los filtros generan más Eco por segundo.",
     rarity: "rare",
     effects: { ecoPerSecond: 1.5 },
   },
   {
     id: "greater_echo",
     name: "Eco Mayor",
-    description: "El eco resuena con fuerza.",
+    description: "El Eco resuena con fuerza.",
     rarity: "rare",
     effects: { eco: 1.35 },
   },
@@ -218,7 +218,7 @@ export const CARD_POOL: Card[] = [
     id: "bioluminescence",
     name: "Bioluminiscencia",
     description:
-      "Brillas en la oscuridad, nadas algo más rápido y ganas más eco.",
+      "Brillas en la oscuridad, nadas algo más rápido y ganas más Eco.",
     rarity: "epic",
     effects: { eco: 1.3, speed: 1.05, glow: 0.5 },
   },
@@ -253,7 +253,7 @@ export const CARD_POOL: Card[] = [
   {
     id: "greater_symbiosis",
     name: "Simbiosis Mayor",
-    description: "Los filtros generan más eco y tienes uno extra.",
+    description: "Los filtros generan más Eco y tienes uno extra.",
     rarity: "epic",
     effects: { ecoPerSecond: 2, filters: 1 },
   },
@@ -267,7 +267,7 @@ export const CARD_POOL: Card[] = [
   {
     id: "eco_cargo",
     name: "Carga Ecológica",
-    description: "El eco se acumula rápidamente.",
+    description: "El Eco se acumula rápidamente.",
     rarity: "epic",
     effects: { eco: 1.5 },
   },
@@ -303,7 +303,7 @@ export const CARD_POOL: Card[] = [
   {
     id: "amplifier",
     name: "Amplificador",
-    description: "Todo el eco que generas se multiplica.",
+    description: "Todo el Eco que generas se multiplica.",
     rarity: "legendary",
     effects: { eco: 1.75 },
   },
@@ -311,7 +311,7 @@ export const CARD_POOL: Card[] = [
   {
     id: "greed",
     name: "Avaricia",
-    description: "Más eco, pero la tortuga se vuelve lenta.",
+    description: "Más Eco, pero la tortuga se vuelve lenta.",
     rarity: "curse",
     effects: { eco: 1.5, speed: 0.8 },
   },
@@ -325,7 +325,7 @@ export const CARD_POOL: Card[] = [
   {
     id: "extreme_greed",
     name: "Codicia Extrema",
-    description: "Mucho más eco, pero nadar cansa.",
+    description: "Mucho más Eco, pero nadar cansa.",
     rarity: "curse",
     effects: { eco: 2, speed: 0.7 },
   },
@@ -348,7 +348,7 @@ export const CARD_POOL: Card[] = [
   {
     id: "ocean_heart",
     name: "Corazón del Océano",
-    description: "Sientes el pulso del mar. El eco fluye hacia ti.",
+    description: "Sientes el pulso del mar. El Eco fluye hacia ti.",
     rarity: "ultra_legendary",
     effects: { eco: 2, ecoPerSecond: 3 },
   },
@@ -375,7 +375,7 @@ export const CARD_POOL: Card[] = [
       apply: ({ turtle, run, rng }) => {
         const traits = [
           {
-            label: "VEL",
+            label: "VELOCIDAD",
             buff: () => {
               turtle.stats.speed *= 1.5
             },
@@ -408,7 +408,7 @@ export const CARD_POOL: Card[] = [
             },
           },
           {
-            label: "RES",
+            label: "RESISTENCIA",
             buff: () => {
               turtle.addToxicityResistance(0.2)
             },
@@ -441,7 +441,7 @@ export const CARD_POOL: Card[] = [
   {
     id: "double_or_nothing",
     name: "Doble o Nada",
-    description: "La marea decide: el eco se duplica o se parte en dos.",
+    description: "La marea decide: el Eco se duplica o se parte en dos.",
     rarity: "chaos",
     random: {
       value: [
@@ -452,11 +452,11 @@ export const CARD_POOL: Card[] = [
       apply: ({ run, rng }) => {
         if (rng.next() < 0.5) {
           run.ecoMultiplier *= 2
-          return "¡El eco se duplica!"
+          return "¡El Eco se duplica!"
         }
 
         run.ecoMultiplier *= 0.5
-        return "El eco se parte en dos"
+        return "El Eco se parte en dos"
       },
     },
   },
@@ -472,7 +472,7 @@ export const CARD_POOL: Card[] = [
     id: "unstable_eco",
     name: "Eco Inestable",
     description:
-      "El eco grita tan fuerte que el agua se vuelve más tóxica a tu alrededor.",
+      "El Eco grita tan fuerte que el agua se vuelve más tóxica a tu alrededor.",
     rarity: "chaos",
     effects: { eco: 2, passiveToxicity: 1.5 },
   },

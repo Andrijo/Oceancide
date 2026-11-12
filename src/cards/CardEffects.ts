@@ -17,7 +17,7 @@ export interface CardEffects {
   radius?: number
   /** Filtros activos simultáneos sumados. */
   filters?: number
-  /** Multiplicador del eco ganado. */
+  /** Multiplicador del Eco ganado. */
   eco?: number
   /** Fuerza del dash (impulso del giro) sumada. */
   dash?: number
@@ -63,8 +63,11 @@ function tone(delta: number, goodWhenPositive = true): CardTone {
 type EffectKey = keyof CardEffects
 
 const DESCRIBERS: Record<EffectKey, (value: number) => CardValuePart> = {
-  speed: (v) => ({ text: `${percent(v)} VEL`, tone: tone(v - 1) }),
-  resistance: (v) => ({ text: `${signed(v * 100)}% RES`, tone: tone(v) }),
+  speed: (v) => ({ text: `${percent(v)} VELOCIDAD`, tone: tone(v - 1) }),
+  resistance: (v) => ({
+    text: `${signed(v * 100)}% RESISTENCIA`,
+    tone: tone(v),
+  }),
   radius: (v) => ({ text: `${signed(v, 1)} RADIO`, tone: tone(v) }),
   filters: (v) => ({
     text: `${signed(v)} ${Math.abs(v) === 1 ? "FILTRO" : "FILTROS"}`,
@@ -72,7 +75,10 @@ const DESCRIBERS: Record<EffectKey, (value: number) => CardValuePart> = {
   }),
   eco: (v) => ({ text: `${percent(v)} ECO`, tone: tone(v - 1) }),
   dash: (v) => ({ text: `${signed(v, 1)} DASH`, tone: tone(v) }),
-  ecoPerSecond: (v) => ({ text: `${signed(v, 1)} ECO/S`, tone: tone(v) }),
+  ecoPerSecond: (v) => ({
+    text: `${signed(v, 1)} ECO POR FILTRO`,
+    tone: tone(v),
+  }),
   revives: (v) => ({ text: `${signed(v)} REVIVIR`, tone: tone(v) }),
   glow: (v) => ({ text: `${signed(v * 100)}% BRILLO`, tone: tone(v) }),
   enemies: (v) => ({
@@ -80,10 +86,10 @@ const DESCRIBERS: Record<EffectKey, (value: number) => CardValuePart> = {
     tone: tone(v, false),
   }),
   passiveToxicity: (v) => ({
-    text: `${percent(v)} TOX PASIVA`,
+    text: `${percent(v)} TOXICIDAD PASIVA`,
     tone: tone(v - 1, false),
   }),
-  toxicity: (v) => ({ text: `${signed(v)} TOX`, tone: tone(v, false) }),
+  toxicity: (v) => ({ text: `${signed(v)} TOXICIDAD`, tone: tone(v, false) }),
 }
 
 const APPLIERS: Record<EffectKey, (value: number, ctx: CardContext) => void> = {

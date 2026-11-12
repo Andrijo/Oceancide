@@ -597,10 +597,7 @@ export class Game {
       return
     }
     if (this.state.ecoAwareness < config.cost) {
-      this.uiManager.showMessage(
-        `Necesitas ${config.cost} de Conciencia Ecológica`,
-        1200,
-      )
+      this.uiManager.showMessage(`Necesitas ${config.cost} de Eco`, 1200)
       return
     }
 
