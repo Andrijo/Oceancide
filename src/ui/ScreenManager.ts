@@ -19,6 +19,7 @@ import {
   type CardPreviewLine,
 } from "@cards/BuildStats"
 import { revealCards } from "@ui/animations"
+import { ChoiceGuard, isRepeatedActivation } from "@ui/choiceGuard"
 import { PARAGRAPH_FONT, TITLE_FONT, TITULO_FONT } from "@ui/fonts"
 import { MIST } from "@ui/palette"
 import { createHowToPlayBody } from "@ui/HowToPlay"
@@ -204,6 +205,8 @@ export class ScreenManager {
   private cardChoiceHandler: ((index: number) => void) | null = null
   private eventActive = false
   private eventChoiceHandler: ((index: number) => void) | null = null
+  /** Bloqueo breve al abrir cartas o eventos contra elecciones accidentales. */
+  private choiceGuard = new ChoiceGuard()
 
   constructor(callbacks: ScreenCallbacks) {
     this.callbacks = callbacks
@@ -249,6 +252,21 @@ export class ScreenManager {
     this.overlay.setAttribute("aria-modal", "true")
 
     document.getElementById("game-container")!.appendChild(this.overlay)
+
+    // En cartas y eventos, Enter o Espacio mantenidos no activan el botón
+    // enfocado: una tecla que viniera pulsada elegiría sin leer.
+    this.overlay.addEventListener(
+      "keydown",
+      (event) => {
+        if (
+          (this.cardChoiceActive || this.eventActive) &&
+          isRepeatedActivation(event)
+        ) {
+          event.preventDefault()
+        }
+      },
+      true,
+    )
 
     // Mantener el foco dentro del diálogo mientras haya una elección abierta.
     this.overlay.addEventListener("keydown", (event) => {
@@ -545,7 +563,7 @@ export class ScreenManager {
     const optionButtons: HTMLButtonElement[] = []
 
     const choose = (index: number): void => {
-      if (!this.eventActive) return
+      if (!this.eventActive || !this.choiceGuard.canChoose()) return
       const opt = event.options[index]
       if (!opt) return
       this.hide()
@@ -673,6 +691,7 @@ export class ScreenManager {
     this.open(root, () => {})
     this.eventActive = true
     this.eventChoiceHandler = choose
+    this.choiceGuard.open()
     this.overlay.setAttribute("aria-labelledby", title.id)
     this.overlay.setAttribute("aria-describedby", desc.id)
     optionButtons[0]?.focus()
@@ -986,7 +1005,7 @@ export class ScreenManager {
     getPreview?: (card: Card) => CardPreviewLine[],
   ): void {
     const pick = (index: number) => {
-      if (!this.cardChoiceActive) return
+      if (!this.cardChoiceActive || !this.choiceGuard.canChoose()) return
       const card = cards[index]
       if (!card) return
       this.hide()
@@ -1035,6 +1054,7 @@ export class ScreenManager {
     this.open(root, () => {})
     this.cardChoiceActive = true
     this.cardChoiceHandler = pick
+    this.choiceGuard.open()
     // La animación de entrada limpia el transform al acabar: se vuelve a
     // aplicar el realce a la carta que tenga el foco.
     void revealCards(cardButtons).then(() => {
