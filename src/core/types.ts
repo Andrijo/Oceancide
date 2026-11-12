@@ -15,6 +15,7 @@ export interface RunSummary {
   outcome: RunOutcome
   biomeIndex: number // índice en BIOME_ORDER del último bioma alcanzado
   biomeName: string
+  zoneProgress: number // % de limpieza (0..100) de la zona en la que terminó
   debrisCollected: number
   ecoBase: number // Conciencia Ecológica recolectada
   ecoBonus: number // bono por completar la run

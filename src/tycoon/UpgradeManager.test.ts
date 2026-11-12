@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest"
 import { createDefaultMeta, type MetaState } from "@core/MetaState"
 import type { TurtleStats } from "@core/types"
-import { UpgradeManager } from "@/tycoon/UpgradeManager"
+import {
+  UpgradeManager,
+  affordableUpgrades,
+  nextUpgrades,
+} from "@/tycoon/UpgradeManager"
 
 function makeMeta(overrides: Partial<MetaState> = {}): MetaState {
   return { ...createDefaultMeta(), ecoPoints: 10_000, ...overrides }
@@ -56,6 +60,28 @@ describe("UpgradeManager.buy", () => {
     expect(manager.buy(meta, "speed")).toBe(false)
     expect(meta.ecoPoints).toBe(0)
     expect(meta.upgrades.speed).toBeUndefined()
+  })
+})
+
+describe("nextUpgrades / affordableUpgrades", () => {
+  it("ordena el siguiente nivel de cada mejora de más barato a más caro", () => {
+    const next = nextUpgrades(makeMeta({ upgrades: { speed: 2, magnet: 3 } }))
+    const costs = next.map((n) => n.cost)
+
+    expect(next.find((n) => n.upgrade.id === "magnet")).toBeUndefined()
+    expect(next.find((n) => n.upgrade.id === "speed")).toMatchObject({
+      level: 3,
+      cost: 2000,
+    })
+    expect(costs).toEqual([...costs].sort((a, b) => a - b))
+  })
+
+  it("solo devuelve las que alcanza el Eco disponible", () => {
+    const ids = affordableUpgrades(makeMeta({ ecoPoints: 600 })).map(
+      (n) => n.upgrade.id,
+    )
+
+    expect(ids).toEqual(["speed", "resistance"])
   })
 })
 

@@ -14,6 +14,13 @@ const HURT_COLOR = new THREE.Color(0xff3b7a)
 const HURT_DURATION = 0.42
 const HURT_FLASH_INTENSITY = 2.2
 
+/** Hundimiento al morir (ver `updateSinking`). */
+const SINK_SPEED = 2.4 // unidades/s hacia el fondo
+const SINK_DRAG = 3 // frenado de la inercia horizontal
+const SINK_EASE = 2.5 // rapidez con la que se ladea
+const SINK_ROLL = Math.PI * 0.75 // casi panza arriba
+const SINK_PITCH = 0.35 // cabeza hacia abajo
+
 /** Curva de respuesta del stick: más resolución cerca del centro, lineal en el teclado. */
 function inputCurve(v: number): number {
   return Math.sign(v) * Math.pow(Math.abs(v), 1.6)
@@ -479,6 +486,51 @@ export class Turtle {
     this.updateHurt(deltaTime)
     // Pasamos extraPitch a la animación
     this.animateSwimming(deltaTime, steer, vertical, extraRollAngle, extraPitch)
+  }
+
+  /**
+   * Momento de derrota: la tortuga deja de nadar, conserva un poco de inercia,
+   * se ladea panza arriba y se hunde despacio hasta el fondo de la zona.
+   */
+  public updateSinking(deltaTime: number, bounds: WorldBounds): void {
+    this.time += deltaTime
+    this.speed *= Math.exp(-SINK_DRAG * deltaTime)
+    this.spinBoost = 0
+    this.isSpinning = false
+    this.isBackflipping = false
+
+    const position = this.mesh.position
+    const yaw = this.mesh.rotation.y
+    position.x = THREE.MathUtils.clamp(
+      position.x + Math.sin(yaw) * this.speed * deltaTime,
+      -bounds.halfSize,
+      bounds.halfSize,
+    )
+    position.z = THREE.MathUtils.clamp(
+      position.z + Math.cos(yaw) * this.speed * deltaTime,
+      -bounds.halfSize,
+      bounds.halfSize,
+    )
+    position.y = Math.max(bounds.minY, position.y - SINK_SPEED * deltaTime)
+
+    const ease = 1 - Math.exp(-SINK_EASE * deltaTime)
+    this.model.rotation.z +=
+      (this.completedRoll + SINK_ROLL - this.model.rotation.z) * ease
+    this.model.rotation.x +=
+      (this.completedPitch + SINK_PITCH - this.model.rotation.x) * ease
+    // Aletas y cola se quedan quietas.
+    for (const limb of [
+      this.leftFrontFlipper,
+      this.rightFrontFlipper,
+      this.leftBackFlipper,
+      this.rightBackFlipper,
+    ]) {
+      limb.rotation.x *= 1 - ease
+    }
+    this.tail.rotation.y *= 1 - ease
+
+    this.updateGlow(deltaTime)
+    this.updateHurt(deltaTime)
   }
 
   public getSpeed(): number {

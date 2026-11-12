@@ -142,6 +142,32 @@
   text-wrap: balance;
 }
 
+/* Momento de derrota (ver src/ui/DeathVeil.ts): velo verde tóxico entre la
+   muerte y el resumen. Va sobre el HUD y bajo las pantallas (z-index 400). La
+   opacidad la fija el juego en cada frame; al quitar .active se funde. */
+.death-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 350;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  background: radial-gradient(
+    ellipse at 50% 55%,
+    rgba(120, 190, 40, 0.18) 0%,
+    rgba(52, 104, 16, 0.72) 55%,
+    rgba(10, 28, 4, 0.96) 100%
+  );
+  transition:
+    opacity 0.45s ease,
+    visibility 0s linear 0.45s;
+}
+
+.death-veil.active {
+  visibility: visible;
+  transition: none;
+}
+
 /* Movimiento reducido: la clase la pone src/ui/animations.ts según el ajuste
    "Reducir movimiento" (o prefers-reduced-motion si sigue al sistema). */
 .reduce-motion .tip-toast {
