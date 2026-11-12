@@ -49,6 +49,7 @@ import {
   applyRunToMeta,
   computeEco,
   computeEndlessEco,
+  isEndlessUnlocked,
   type MetaState,
 } from "@core/MetaState"
 import { Rng, deriveSeed, randomSeed } from "@core/rng"
@@ -258,7 +259,9 @@ export class Game {
 
     this.screens = new ScreenManager({
       onStartRun: () => this.startRun(false),
-      onStartEndless: () => this.startRun(true),
+      onStartEndless: () => {
+        if (isEndlessUnlocked(this.meta)) this.startRun(true)
+      },
       onReturnToHub: () => this.showHub(),
       onResetProgress: () => {
         this.meta = this.saveManager.reset()

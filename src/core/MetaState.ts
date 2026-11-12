@@ -93,6 +93,17 @@ export function computeEndlessEco(
   return { base: safe + kept, bonus: 0, lost: atRisk - kept }
 }
 
+/**
+ * La inmersión sin fin se desbloquea al completar el modo normal una vez: antes
+ * el jugador aún no conoce el recorrido de biomas ni el Eco que se asegura al
+ * cerrar cada vuelta. Las inmersiones sin fin nunca cuentan como completadas.
+ */
+export function isEndlessUnlocked(
+  meta: Pick<MetaState, "runsCompleted">,
+): boolean {
+  return meta.runsCompleted > 0
+}
+
 /** Suma el resultado de una run al progreso persistente (modifica `meta`). */
 export function applyRunToMeta(meta: MetaState, summary: RunSummary): void {
   const earned = summary.ecoBase + summary.ecoBonus
