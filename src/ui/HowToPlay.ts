@@ -44,7 +44,7 @@ const TOUCH_CONTROLS: ControlRow[] = [
   { keys: ["Deslizar rápido"], action: "Dash, moviendo el joystick de lado" },
 ]
 
-/** Primer desecho de la run que cumple la condición, como ejemplo de la ficha. */
+/** Primer desecho de la inmersión que cumple la condición, como ejemplo de la ficha. */
 function exampleOf(
   match: (item: OceanDebrisType) => boolean,
 ): string | undefined {
@@ -89,7 +89,7 @@ function debrisCards(): HelpCard[] {
       tag: "Peligro",
       tone: "warn",
       name: "Frágil",
-      text: "Si lo tocas con el impulso activo se rompe en 3 pedacitos y no da eco. Suelta el impulso antes de llegar.",
+      text: "Si lo tocas con el impulso activo se rompe en 3 pedacitos y no da Eco. Suelta el impulso antes de llegar.",
       example: exampleOf((d) => d.hazard === "fragil"),
     },
     {
@@ -141,7 +141,7 @@ function dangerCards(): HelpCard[] {
       tag: "Herramienta",
       tone: "good",
       name: filter.name,
-      text: `Cuesta ${filter.cost} de conciencia ecológica. Se coloca delante de ti, atrae los desechos más contaminantes y absorbe hasta ${filter.capacity} antes de desaparecer.`,
+      text: `Cuesta ${filter.cost} de Eco. Se coloca delante de ti, atrae los desechos más contaminantes y absorbe hasta ${filter.capacity} antes de desaparecer.`,
     },
     {
       tag: "Herramienta",
@@ -197,7 +197,7 @@ function controlList(
   return panel
 }
 
-/** Glosario de las abreviaturas que usan las cartas ("VEL", "RES"...). */
+/** Glosario de los atributos que muestran las cartas ("VELOCIDAD", "RADIO"...). */
 function statGlossary(): HTMLElement {
   const panel = node("div", "help-panel")
   const list = node("dl", "help-controls")
@@ -205,7 +205,7 @@ function statGlossary(): HTMLElement {
   for (const key of STAT_KEYS) {
     const info = STAT_INFO[key]
     const term = node("dt", "help-keys")
-    term.append(node("kbd", "help-key", info.short))
+    term.append(node("kbd", "help-key", info.term))
     list.append(
       term,
       node("dd", "help-action", `${info.label}. ${info.description}`),
@@ -249,7 +249,13 @@ export function createHowToPlayBody(touch: boolean): HTMLElement {
   const goal = node(
     "p",
     "help-lead",
-    "Limpia cada zona hasta que el progreso llegue al 100 % (basta con recoger el 60 % de sus desechos) y desciende a la siguiente. Vigila la calavera: si la toxicidad se llena, la inmersión termina.",
+    "Cumple el objetivo de cada zona (recoger el 60 % de sus desechos: el contador llega al 100 %) y desciende a la siguiente. Vigila la calavera: si la toxicidad se llena, la inmersión termina.",
+  )
+
+  const currency = node(
+    "p",
+    "help-lead",
+    "Cada desecho te da Eco (conciencia ecológica). Con él colocas esferas filtradoras durante la inmersión y, al volver al inicio, compras mejoras permanentes. Las cartas, en cambio, son gratis y solo duran una inmersión.",
   )
 
   const controls = node("div", "help-columns")
@@ -259,7 +265,7 @@ export function createHowToPlayBody(touch: boolean): HTMLElement {
   controls.append(...(touch ? [touchList, keyboard] : [keyboard, touchList]))
 
   body.append(
-    section("Objetivo", goal),
+    section("Objetivo", goal, currency),
     section("Controles", controls),
     section("Desechos", cardGrid(debrisCards())),
     section("Peligros y herramientas", cardGrid(dangerCards())),

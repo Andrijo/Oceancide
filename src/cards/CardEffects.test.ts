@@ -46,13 +46,13 @@ describe("describeCardEffects", () => {
     })
 
     expect(parts.map((part) => part.text)).toEqual([
-      "+10% VEL",
-      "+5% RES",
+      "+10% VELOCIDAD",
+      "+5% RESISTENCIA",
       "+0.5 RADIO",
       "+1 FILTRO",
       "+8% ECO",
       "+0.2 DASH",
-      "+1.5 ECO/S",
+      "+1.5 ECO POR FILTRO",
       "+1 REVIVIR",
       "+50% BRILLO",
     ])
@@ -76,18 +76,18 @@ describe("describeCardEffects", () => {
         toxicity: 20,
       }),
     ).toEqual([
-      { text: "-20% VEL", tone: "negative" },
-      { text: "-50% RES", tone: "negative" },
+      { text: "-20% VELOCIDAD", tone: "negative" },
+      { text: "-50% RESISTENCIA", tone: "negative" },
       { text: "+2 MEDUSAS", tone: "negative" },
-      { text: "+50% TOX PASIVA", tone: "negative" },
-      { text: "+20 TOX", tone: "negative" },
+      { text: "+50% TOXICIDAD PASIVA", tone: "negative" },
+      { text: "+20 TOXICIDAD", tone: "negative" },
     ])
   })
 
   it("bajar la toxicidad es positivo y un efecto nulo es neutro", () => {
     expect(describeCardEffects({ toxicity: -10, speed: 1 })).toEqual([
-      { text: "-10 TOX", tone: "positive" },
-      { text: "0% VEL", tone: "neutral" },
+      { text: "-10 TOXICIDAD", tone: "positive" },
+      { text: "0% VELOCIDAD", tone: "neutral" },
     ])
   })
 })
@@ -175,7 +175,7 @@ describe("mazo: texto y efectos coherentes", () => {
     const ctx = makeContext()
     const speed = ctx.turtle.stats.speed
 
-    expect(cardValueText(card)).toBe("+30% ECO / +5% VEL / +50% BRILLO")
+    expect(cardValueText(card)).toBe("+30% ECO / +5% VELOCIDAD / +50% BRILLO")
 
     expect(applyCard(card, ctx)).toBeUndefined()
     expect(ctx.run.ecoMultiplier).toBeCloseTo(1.3)
@@ -195,7 +195,7 @@ describe("mazo: texto y efectos coherentes", () => {
 
     expect(cardValueParts(getCard("greed"))).toEqual([
       { text: "+50% ECO", tone: "positive" },
-      { text: "-20% VEL", tone: "negative" },
+      { text: "-20% VELOCIDAD", tone: "negative" },
     ])
   })
 

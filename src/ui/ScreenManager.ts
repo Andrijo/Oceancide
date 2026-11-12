@@ -207,6 +207,11 @@ export class ScreenManager {
   private eventChoiceHandler: ((index: number) => void) | null = null
   /** Bloqueo breve al abrir cartas o eventos contra elecciones accidentales. */
   private choiceGuard = new ChoiceGuard()
+  /**
+   * Durante el keyup de un Espacio/Enter "viejo" (pulsado antes de abrir la
+   * elección o durante el bloqueo): el clic que genera el navegador no elige.
+   */
+  private suppressActivation = false
 
   constructor(callbacks: ScreenCallbacks) {
     this.callbacks = callbacks
@@ -254,16 +259,30 @@ export class ScreenManager {
     document.getElementById("game-container")!.appendChild(this.overlay)
 
     // En cartas y eventos, Enter o Espacio mantenidos no activan el botón
-    // enfocado: una tecla que viniera pulsada elegiría sin leer.
-    this.overlay.addEventListener(
+    // enfocado: una tecla que viniera pulsada elegiría sin leer. En captura,
+    // para registrar la tecla antes de que el botón reaccione.
+    window.addEventListener(
       "keydown",
       (event) => {
-        if (
-          (this.cardChoiceActive || this.eventActive) &&
-          isRepeatedActivation(event)
-        ) {
-          event.preventDefault()
-        }
+        if (!this.cardChoiceActive && !this.eventActive) return
+        this.choiceGuard.keyDown(event.key, event.repeat)
+        if (isRepeatedActivation(event)) event.preventDefault()
+      },
+      true,
+    )
+
+    // El Espacio activa el botón al soltarse: si se pulsó antes de abrir la
+    // elección (backflip) o durante el bloqueo, ese clic no cuenta.
+    window.addEventListener(
+      "keyup",
+      (event) => {
+        if (!this.cardChoiceActive && !this.eventActive) return
+        if (!this.choiceGuard.keyUp(event.key)) return
+        event.preventDefault()
+        this.suppressActivation = true
+        setTimeout(() => {
+          this.suppressActivation = false
+        }, 0)
       },
       true,
     )
@@ -362,7 +381,7 @@ export class ScreenManager {
     const reset = () => {
       if (
         window.confirm(
-          "¿Está seguro de que desea eliminar todo el progreso guardado?",
+          "¿Seguro que quieres eliminar todo el progreso guardado?",
         )
       ) {
         this.callbacks.onResetProgress()
@@ -439,13 +458,13 @@ export class ScreenManager {
     const stats = this.makeBentoGrid(
       [
         {
-          label: "Conciencia ecológica",
+          label: "Eco",
           value: meta.ecoPoints.toLocaleString("es"),
           highlight: true,
         },
         { label: "Mejor zona", value: bestBiome },
         {
-          label: "Runs jugadas",
+          label: "Inmersiones jugadas",
           value: String(meta.runsPlayed),
           sub: `${meta.runsCompleted} completadas`,
         },
@@ -563,7 +582,7 @@ export class ScreenManager {
     const optionButtons: HTMLButtonElement[] = []
 
     const choose = (index: number): void => {
-      if (!this.eventActive || !this.choiceGuard.canChoose()) return
+      if (!this.eventActive || !this.canActivateChoice()) return
       const opt = event.options[index]
       if (!opt) return
       this.hide()
@@ -692,6 +711,7 @@ export class ScreenManager {
     this.eventActive = true
     this.eventChoiceHandler = choose
     this.choiceGuard.open()
+    this.showChoiceLock(optionButtons, content)
     this.overlay.setAttribute("aria-labelledby", title.id)
     this.overlay.setAttribute("aria-describedby", desc.id)
     optionButtons[0]?.focus()
@@ -710,7 +730,7 @@ export class ScreenManager {
     const manager = new UpgradeManager()
     const buyButtons = new Map<string, HTMLButtonElement>()
 
-    const title = this.makeScreenTitle("Mejoras")
+    const title = this.makeScreenTitle("Mejoras permanentes")
     const subtitle = el(
       "div",
       `font-size: 16px; color: ${UPGRADE_TEXT}; margin-bottom: 20px; font-family: ${TITLE_FONT}; font-weight: bold;`,
@@ -841,8 +861,8 @@ export class ScreenManager {
 
     const tipsToggle = this.makeGhostAction(
       help.tipsEnabled
-        ? "Avisos en partida: activados"
-        : "Avisos en partida: desactivados",
+        ? "Avisos durante la inmersión: activados"
+        : "Avisos durante la inmersión: desactivados",
       () => {
         this.callbacks.onSetTipsEnabled(!help.tipsEnabled)
         reopen()
@@ -896,7 +916,7 @@ export class ScreenManager {
     const title = this.makeScreenTitle(titleText, titleColor)
 
     const zoneLabel = summary.endless
-      ? `Bioma ${summary.biomeIndex + 1} (loop ${summary.loopsCompleted + 1})`
+      ? `Bioma ${summary.biomeIndex + 1} (vuelta ${summary.loopsCompleted + 1})`
       : `${summary.biomeIndex + 1}. ${summary.biomeName}`
 
     const bentoItems: Array<{
@@ -922,14 +942,14 @@ export class ScreenManager {
         value: String(summary.cardsPicked.length),
       },
       {
-        label: "Conciencia ecológica total",
+        label: "Eco total",
         value: meta.ecoPoints.toLocaleString("es"),
       },
     ]
 
     const totalEarned = summary.ecoBase + summary.ecoBonus
     bentoItems.push({
-      label: "Eco ganado",
+      label: "Eco de esta inmersión",
       value: `+${totalEarned.toLocaleString("es")}`,
       sub:
         summary.ecoBonus > 0
@@ -1005,7 +1025,7 @@ export class ScreenManager {
     getPreview?: (card: Card) => CardPreviewLine[],
   ): void {
     const pick = (index: number) => {
-      if (!this.cardChoiceActive || !this.choiceGuard.canChoose()) return
+      if (!this.cardChoiceActive || !this.canActivateChoice()) return
       const card = cards[index]
       if (!card) return
       this.hide()
@@ -1014,7 +1034,7 @@ export class ScreenManager {
 
     const { root, content } = this.makeWindowFrame()
 
-    const title = this.makeScreenTitle("Elige una mejora")
+    const title = this.makeScreenTitle("Elige una carta")
 
     const row = el(
       "div",
@@ -1055,6 +1075,7 @@ export class ScreenManager {
     this.cardChoiceActive = true
     this.cardChoiceHandler = pick
     this.choiceGuard.open()
+    this.showChoiceLock(cardButtons, content)
     // La animación de entrada limpia el transform al acabar: se vuelve a
     // aplicar el realce a la carta que tenga el foco.
     void revealCards(cardButtons).then(() => {
@@ -1139,7 +1160,7 @@ export class ScreenManager {
     abandonBtn.style.flex = "35 1 0"
     abandonBtn.style.width = "auto"
 
-    // Confirmación en dos pasos para no perder la run por un clic accidental.
+    // Confirmación en dos pasos para no perder la inmersión por un clic accidental.
     const secondary = (): HTMLElement[] =>
       [statsLine, buildPanel].filter((n): n is HTMLElement => n !== undefined)
     const showConfirm = (): void => {
@@ -1185,6 +1206,31 @@ export class ScreenManager {
     }
     this.open(root, onResume)
     resumeBtn.focus()
+  }
+
+  /** Pasado el bloqueo y sin un Espacio/Enter "viejo" de por medio. */
+  private canActivateChoice(): boolean {
+    return this.choiceGuard.canChoose() && !this.suppressActivation
+  }
+
+  /**
+   * Indica el bloqueo de la elección: las opciones se ven apagadas y una barra
+   * se llena hasta que se puede elegir.
+   */
+  private showChoiceLock(buttons: HTMLElement[], container: HTMLElement): void {
+    const lockMs = this.choiceGuard.lockMs
+    for (const btn of buttons) btn.classList.add("choice-locked")
+
+    const bar = el("div", "")
+    bar.className = "choice-lock-bar"
+    bar.style.setProperty("--choice-lock-ms", `${lockMs}ms`)
+    bar.setAttribute("aria-hidden", "true")
+    container.append(bar)
+
+    setTimeout(() => {
+      for (const btn of buttons) btn.classList.remove("choice-locked")
+      bar.remove()
+    }, lockMs)
   }
 
   /**
@@ -1608,6 +1654,31 @@ export class ScreenManager {
     .card-choice:focus:not(:focus-visible) {
       outline: none;
     }
+    /* Bloqueo breve al abrir cartas o eventos (ChoiceGuard). */
+    .choice-locked {
+      filter: saturate(0.45) brightness(0.75) !important;
+      cursor: progress !important;
+    }
+    .choice-lock-bar {
+      width: min(320px, 70%);
+      height: 4px;
+      flex: none;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(245, 238, 221, 0.12);
+    }
+    .choice-lock-bar::after {
+      content: "";
+      display: block;
+      height: 100%;
+      background: #7dd3fc;
+      transform-origin: left center;
+      animation: choiceLockFill var(--choice-lock-ms, 1200ms) linear forwards;
+    }
+    @keyframes choiceLockFill {
+      from { transform: scaleX(0); }
+      to { transform: scaleX(1); }
+    }
   `
     document.head.appendChild(style)
   }
@@ -1775,7 +1846,7 @@ export class ScreenManager {
     )
 
     header.append(
-      el("span", "", "Progreso de zonas"),
+      el("span", "", "Zonas alcanzadas"),
       el(
         "span",
         `color: ${HUB_ACCENT}; font-weight: bold;`,
@@ -1965,7 +2036,10 @@ export class ScreenManager {
     }
     const value = el(
       "div",
-      `font-family: ${TITLE_FONT}; font-size: 23px; font-weight: 900; color: ${neutralColor};`,
+      // Palabras completas ("RESISTENCIA"...): algo más pequeño que el nombre
+      // para que quepan sin partirse en las cartas estrechas.
+      `font-family: ${TITLE_FONT}; font-size: clamp(16px, 1.7vw, 20px); font-weight: 900;
+      line-height: 1.25; color: ${neutralColor};`,
     )
     const separator = cardValueSeparator(card)
     cardValueParts(card).forEach((part, i) => {

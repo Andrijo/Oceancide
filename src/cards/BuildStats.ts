@@ -1,5 +1,5 @@
 // src/cards/BuildStats.ts
-// La "build" de la run en números: qué significa cada atributo de las cartas,
+// La "build" de la inmersión en números: qué significa cada atributo de las cartas,
 // cuánto tiene ahora la tortuga y cómo quedaría al elegir una carta.
 
 import { addToxicityResistance } from "@core/systems/toxicity"
@@ -12,8 +12,8 @@ export type StatKey = keyof CardEffects
 export type BuildSnapshot = Record<StatKey, number>
 
 export interface StatInfo {
-  /** Abreviatura que usan las cartas ("VEL", "RES"...). */
-  short: string
+  /** Nombre que usan las cartas en su valor ("VELOCIDAD", "RADIO"...). */
+  term: string
   label: string
   description: string
   /** `false` en los atributos que perjudican al subir (toxicidad, medusas). */
@@ -32,14 +32,14 @@ function percent(value: number): string {
 /** En el orden en que se enseñan en el panel "Tu tortuga". */
 export const STAT_INFO: Record<StatKey, StatInfo> = {
   speed: {
-    short: "VEL",
+    term: "VELOCIDAD",
     label: "Velocidad",
     description: "Lo rápido que nadas.",
     goodWhenHigher: true,
     format: (v) => fixed(v, 1),
   },
   resistance: {
-    short: "RES",
+    term: "RESISTENCIA",
     label: "Resistencia",
     description:
       "Frena la toxicidad que sube sola. Cada punto extra rinde menos (tope 90%).",
@@ -47,70 +47,70 @@ export const STAT_INFO: Record<StatKey, StatInfo> = {
     format: percent,
   },
   radius: {
-    short: "RADIO",
+    term: "RADIO",
     label: "Radio de recogida",
     description: "Distancia a la que recoges un desecho.",
     goodWhenHigher: true,
     format: (v) => fixed(v, 1),
   },
   filters: {
-    short: "FILTRO",
+    term: "FILTRO",
     label: "Filtros",
     description: "Esferas filtradoras que puedes tener activas a la vez.",
     goodWhenHigher: true,
     format: (v) => String(Math.round(v)),
   },
   eco: {
-    short: "ECO",
+    term: "ECO",
     label: "Eco por desecho",
-    description: "Multiplica el eco que da cada desecho.",
+    description: "Multiplica el Eco que da cada desecho.",
     goodWhenHigher: true,
     format: (v) => `×${fixed(v, 2)}`,
   },
   dash: {
-    short: "DASH",
+    term: "DASH",
     label: "Fuerza del dash",
     description: "Empujón de velocidad del giro de 360°.",
     goodWhenHigher: true,
     format: (v) => `×${fixed(v, 1)}`,
   },
   ecoPerSecond: {
-    short: "ECO/S",
+    term: "ECO POR FILTRO",
     label: "Eco por filtro",
     description: "Eco por segundo que genera cada esfera activa.",
     goodWhenHigher: true,
     format: (v) => `${fixed(v, 1)}/s`,
   },
   revives: {
-    short: "REVIVIR",
+    term: "REVIVIR",
     label: "Revivir",
     description: "Veces que vuelves si la toxicidad se llena.",
     goodWhenHigher: true,
     format: (v) => String(Math.round(v)),
   },
   glow: {
-    short: "BRILLO",
+    term: "BRILLO",
     label: "Brillo",
     description: "Luz propia de la tortuga en las zonas oscuras.",
     goodWhenHigher: true,
     format: percent,
   },
   enemies: {
-    short: "MEDUSAS",
+    term: "MEDUSAS",
     label: "Medusas extra",
     description: "Medusas añadidas a cada zona.",
     goodWhenHigher: false,
     format: (v) => `+${Math.round(v)}`,
   },
   passiveToxicity: {
-    short: "TOX PASIVA",
+    term: "TOXICIDAD PASIVA",
     label: "Toxicidad pasiva",
     description: "Multiplica lo rápido que sube sola la toxicidad.",
     goodWhenHigher: false,
     format: (v) => `×${fixed(v, 2)}`,
   },
   toxicity: {
-    short: "TOX",
+    term: "TOXICIDAD",
     label: "Toxicidad",
     description: "Cambio inmediato en la calavera de toxicidad.",
     goodWhenHigher: false,
@@ -128,7 +128,7 @@ const NEUTRAL: Partial<Record<StatKey, number>> = {
 
 export type BuildSource = Pick<CardContext, "turtle" | "run" | "state">
 
-/** Lee los valores actuales de la partida. */
+/** Lee los valores actuales de la inmersión. */
 export function readBuild({ turtle, run, state }: BuildSource): BuildSnapshot {
   return {
     speed: turtle.stats.speed,
