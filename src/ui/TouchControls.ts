@@ -146,7 +146,8 @@ export class TouchControls {
   /** Tamaño (1 = original) y opacidad (0..1) de los controles, al momento. */
   public setAppearance(scale: number, opacity: number): void {
     this.scale = scale
-    this.root.style.setProperty("--touch-scale", String(scale))
+    // En <html>: el HUD inferior también la usa para no pisar los botones.
+    document.documentElement.style.setProperty("--touch-scale", String(scale))
     this.root.style.opacity = String(opacity)
   }
 

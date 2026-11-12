@@ -13,6 +13,7 @@ import {
   QUALITY_LABELS,
   QUALITY_PRESETS,
   effectivePixelRatio,
+  isTouchDevice,
   lowerPreset,
   qualityChoiceFromUrl,
   rememberAutoPreset,
@@ -60,6 +61,7 @@ import {
   type ControlDevice,
   type InputDevice,
 } from "@ui/controlLabels"
+import { buildHudView } from "@ui/buildHud"
 import {
   HELD_CONTROLS,
   hintActions,
@@ -467,6 +469,13 @@ export class Game {
   }
 
   private setupEventListeners(): void {
+    // Antes del primer toque o tecla: en un móvil no hay teclas que enseñar
+    // (el hub y el HUD ocultan las teclas con data-input, ver styles.css).
+    const initial: InputDevice = isTouchDevice() ? "touch" : "keyboard"
+    this.controlDevice = { ...this.controlDevice, device: initial }
+    document.documentElement.dataset.input = initial
+    this.refreshControlsHint()
+
     window.addEventListener("keydown", (e) =>
       this.inputController.handleKeyDown(e),
     )
@@ -802,15 +811,15 @@ export class Game {
     const config = STRUCTURES.filter
     const active = this.structures.getActiveCount()
     const max = this.turtle.stats.filterCapacity
-    const available = this.state.ecoAwareness >= config.cost && active < max
-    const control = buildControlLabel(
-      this.controlDevice,
-      this.controlBindings(),
-    )
-    const name = control ? `${config.name} (${control})` : config.name
     this.uiManager.updateBuildHud(
-      `${name} · cuesta ${config.cost} · activos ${active}/${max}`,
-      available,
+      buildHudView({
+        name: config.name,
+        control: buildControlLabel(this.controlDevice, this.controlBindings()),
+        cost: config.cost,
+        eco: this.state.ecoAwareness,
+        active,
+        max,
+      }),
     )
   }
 

@@ -3,6 +3,7 @@ import type { GameState } from "@core/types"
 import { PARAGRAPH_FONT, TITLE_FONT } from "@ui/fonts"
 import { CenterNotices, messageTopBelow } from "@ui/centerNotices"
 import { SEMANTIC, tint } from "@ui/colorVision"
+import type { BuildHudView } from "@ui/buildHud"
 
 const TIMER_NORMAL = { color: "#f5eedd", border: "rgba(245, 238, 221, 0.35)" }
 const TIMER_LOW = { color: SEMANTIC.warn, border: tint(SEMANTIC.warn, 70) }
@@ -72,7 +73,11 @@ export class UIManager {
   private boostBarEl: HTMLElement
   private boostBarFillEl: HTMLElement
 
+  private bottomStackEl: HTMLElement
   private buildHudEl: HTMLElement
+  private buildKeyEl: HTMLElement
+  private buildCostEl: HTMLElement
+  private buildCountEl: HTMLElement
   private spinBoostHudEl: HTMLElement
   private lastBuildHud = ""
   private lastSpinBoostVisible = false
@@ -119,7 +124,7 @@ export class UIManager {
       font-size: 17px;
       font-weight: bold;
       color: #f5eedd;
-      background: rgba(0, 0, 0, 0.55);
+      background: var(--hud-panel);
       border: 2px solid rgba(245, 238, 221, 0.35);
       border-radius: 10px;
       pointer-events: none;
@@ -138,7 +143,7 @@ export class UIManager {
       font-size: 14px;
       font-weight: bold;
       color: ${SEMANTIC.leak};
-      background: rgba(0, 0, 0, 0.55);
+      background: var(--hud-panel);
       border: 2px solid ${tint(SEMANTIC.leak, 60)};
       border-radius: 10px;
       pointer-events: none;
@@ -169,76 +174,53 @@ export class UIManager {
 
     document.getElementById("game-container")!.appendChild(this.dangerClusterEl)
 
+    // Indicadores inferiores (impulso, dash y filtro) apilados en un
+    // contenedor flex que respeta las safe areas (estilos en styles.css).
+    this.bottomStackEl = document.createElement("div")
+    this.bottomStackEl.id = "hud-bottom"
+    document.getElementById("game-container")!.appendChild(this.bottomStackEl)
+
     // Barra de energía del boost
     this.boostBarEl = document.createElement("div")
     this.boostBarEl.id = "boost-energy-bar"
-    this.boostBarEl.style.cssText = `
-      position: absolute;
-      bottom: 130px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 180px;
-      height: 8px;
-      background: rgba(0, 0, 0, 0.55);
-      border: 1px solid rgba(245, 238, 221, 0.28);
-      border-radius: 4px;
-      overflow: hidden;
-      pointer-events: none;
-      z-index: 100;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-    `
     this.boostBarFillEl = document.createElement("div")
-    this.boostBarFillEl.style.cssText = `
-      height: 100%;
-      width: 100%;
-      background: linear-gradient(90deg, #84b3c3, #f5eedd);
-      transition: width 0.08s linear, background 0.2s ease;
-    `
+    this.boostBarFillEl.className = "boost-energy-fill"
     this.boostBarEl.appendChild(this.boostBarFillEl)
-    document.getElementById("game-container")!.appendChild(this.boostBarEl)
-
-    // HUD de construcción
-    this.buildHudEl = document.createElement("div")
-    this.buildHudEl.id = "build-hud"
-    this.buildHudEl.style.cssText = `
-      position: absolute;
-      bottom: 70px;
-      left: 50%;
-      transform: translateX(-50%);
-      padding: 6px 14px;
-      font-family: ${PARAGRAPH_FONT};
-      font-size: 15px;
-      white-space: nowrap;
-      color: #f5eedd;
-      background: rgba(0, 0, 0, 0.45);
-      border-radius: 8px;
-      pointer-events: none;
-      z-index: 100;
-    `
-    document.getElementById("game-container")!.appendChild(this.buildHudEl)
 
     // HUD del boost de giro
     this.spinBoostHudEl = document.createElement("div")
     this.spinBoostHudEl.id = "spin-boost-hud"
-    this.spinBoostHudEl.style.cssText = `
-      position: absolute;
-      bottom: 100px;
-      left: 50%;
-      transform: translateX(-50%);
-      padding: 6px 18px;
-      font-family: ${PARAGRAPH_FONT};
-      font-size: 14px;
-      color: #f5eedd;
-      background: rgba(22, 88, 123, 0.78);
-      border: 1px solid rgba(132, 179, 195, 0.75);
-      border-radius: 8px;
-      pointer-events: none;
-      z-index: 100;
-      display: none;
-      text-shadow: 0 0 8px rgba(132, 179, 195, 0.6);
+
+    // HUD de construcción: icono del filtro, tecla, coste y activas.
+    this.buildHudEl = document.createElement("div")
+    this.buildHudEl.id = "build-hud"
+    this.buildHudEl.setAttribute("role", "img")
+    this.buildHudEl.innerHTML = `
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 5h16l-6 7.5V19l-4 1.5v-8z" />
+      </svg>
     `
-    document.getElementById("game-container")!.appendChild(this.spinBoostHudEl)
+    const part = (className: string): HTMLElement => {
+      const span = document.createElement("span")
+      span.className = className
+      span.setAttribute("aria-hidden", "true")
+      return span
+    }
+    this.buildKeyEl = part("build-hud-key")
+    this.buildCostEl = part("build-hud-part")
+    this.buildCountEl = part("build-hud-part")
+    this.buildHudEl.append(this.buildKeyEl, this.buildCostEl, this.buildCountEl)
+
+    this.bottomStackEl.append(
+      this.boostBarEl,
+      this.spinBoostHudEl,
+      this.buildHudEl,
+    )
+    // La pista de controles va debajo de todo, en la misma pila: aunque ocupe
+    // dos líneas no tapa al resto.
+    const hint = document.getElementById("controls-hint")
+    if (hint) this.bottomStackEl.append(hint)
 
     // Región viva para anunciar resultados de eventos sin tapar la interfaz.
     this.liveRegion = document.createElement("div")
@@ -309,14 +291,19 @@ export class UIManager {
     document.getElementById("game-container")!.appendChild(btn)
   }
 
-  public updateBuildHud(text: string, available: boolean): void {
-    const key = `${available}|${text}`
-    if (key === this.lastBuildHud) return
-    this.lastBuildHud = key
-    this.buildHudEl.textContent = text
-    this.buildHudEl.style.color = available ? "#f5eedd" : SEMANTIC.bad
-    // Sin depender del color: el filtro no disponible se ve atenuado.
-    this.buildHudEl.style.opacity = available ? "1" : "0.75"
+  public updateBuildHud(view: BuildHudView): void {
+    if (view.label === this.lastBuildHud) return
+    this.lastBuildHud = view.label
+
+    this.buildHudEl.setAttribute("aria-label", view.label)
+    this.buildKeyEl.textContent = view.control ?? ""
+    this.buildKeyEl.hidden = view.control === null
+    this.buildCostEl.textContent = `${view.cost} Eco`
+    this.buildCountEl.textContent = view.count
+    // Sin depender del color: lo que bloquea lleva además un recuadro
+    // discontinuo (ver .build-hud-part.blocked en styles.css).
+    this.buildCostEl.classList.toggle("blocked", view.blocker === "eco")
+    this.buildCountEl.classList.toggle("blocked", view.blocker === "capacity")
   }
 
   public updateSpinBoostHud(boost: number, active: boolean): void {
@@ -669,9 +656,10 @@ export class UIManager {
     window.clearTimeout(this.cleansingTimeout)
 
     this.centerNotices.clear()
-    this.buildHudEl.remove()
-    this.spinBoostHudEl.remove()
-    this.boostBarEl.remove()
+    // La pista vive en index.html: vuelve a su sitio antes de quitar la pila.
+    const hint = document.getElementById("controls-hint")
+    if (hint) document.getElementById("game-container")?.appendChild(hint)
+    this.bottomStackEl.remove()
     this.dangerClusterEl.remove()
     this.liveRegion.remove()
     this.tipEl.remove()

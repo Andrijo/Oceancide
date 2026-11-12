@@ -31,6 +31,12 @@
   --c-warn: #f97316;
   --c-leak: #facc15;
   --c-debris: #7dd3fc;
+
+  /* Fondos de los paneles del HUD. Tienen que dar contraste AA al texto
+     crema y a los colores de arriba sobre el agua y el suelo de cualquier
+     bioma (lo comprueba src/ui/contrast.test.ts leyendo este archivo). */
+  --hud-panel: rgba(2, 8, 12, 0.85);
+  --hud-panel-accent: rgba(22, 88, 123, 0.92);
 }
 
 :root[data-color-vision="protanopia"],
@@ -123,7 +129,7 @@
 }
 
 .tip-toast-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -293,7 +299,7 @@
 }
 
 .help-tag {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -704,7 +710,7 @@ legend.settings-label {
 
 .build-subheading {
   margin-top: 4px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -734,7 +740,7 @@ legend.settings-label {
 }
 
 .build-stat-label {
-  font-size: 11px;
+  font-size: 12px;
   color: rgba(245, 238, 221, 0.8);
 }
 
@@ -754,7 +760,7 @@ legend.settings-label {
 }
 
 .build-stat-description {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
   color: rgba(245, 238, 221, 0.55);
 }
@@ -815,7 +821,7 @@ button.build-chip:focus-visible,
 }
 
 .build-chip-value {
-  font-size: 11px;
+  font-size: 12px;
   color: rgba(245, 238, 221, 0.7);
 }
 
@@ -838,12 +844,133 @@ button.build-chip:focus-visible,
     Verdana,
     sans-serif;
   color: #ffd0dc;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--hud-panel);
   border: 1.5px solid rgba(255, 120, 160, 0.7);
 }
 
 .revive-hud.visible {
   display: flex;
+}
+
+/* Indicadores inferiores (ver UIManager): barra de impulso, dash y filtro.
+   Un contenedor flex que crece hacia arriba, así nada se pisa aunque aparezca
+   o desaparezca el dash. La pista de controles del teclado va la última. */
+#hud-bottom {
+  position: absolute;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(
+    100vw - 32px - env(safe-area-inset-left, 0px) -
+      env(safe-area-inset-right, 0px)
+  );
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* En táctil no hay pista de controles: baja hasta la línea de los sticks,
+   en el hueco central que dejan libre en horizontal. */
+:root[data-input="touch"] #hud-bottom {
+  bottom: var(--touch-bottom);
+}
+
+/* En vertical ese hueco es demasiado estrecho: sube por encima de la fila
+   de botones táctiles (dash, mirar atrás e impulso, a +180px y 64px de alto;
+   ver TouchControls.ts). */
+@media (orientation: portrait) {
+  :root[data-input="touch"] #hud-bottom {
+    bottom: calc(var(--touch-bottom) + 252px * var(--touch-scale, 1));
+  }
+}
+
+#boost-energy-bar {
+  width: min(180px, 100%);
+  height: 8px;
+  background: var(--hud-panel);
+  border: 1px solid rgba(245, 238, 221, 0.28);
+  border-radius: 4px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.boost-energy-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #84b3c3, #f5eedd);
+  transition:
+    width 0.08s linear,
+    background 0.2s ease;
+}
+
+#spin-boost-hud {
+  display: none;
+  padding: 6px 18px;
+  font:
+    14px "DMSans",
+    Tahoma,
+    Geneva,
+    Verdana,
+    sans-serif;
+  color: #f5eedd;
+  background: var(--hud-panel-accent);
+  border: 1px solid rgba(132, 179, 195, 0.75);
+  border-radius: 8px;
+  text-shadow: 0 0 8px rgba(132, 179, 195, 0.6);
+}
+
+/* Filtro: icono + tecla (solo con teclado o mando) + coste + activas. */
+#build-hud {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  font:
+    15px "DMSans",
+    Tahoma,
+    Geneva,
+    Verdana,
+    sans-serif;
+  white-space: nowrap;
+  color: #f5eedd;
+  background: var(--hud-panel);
+  border-radius: 8px;
+}
+
+#build-hud svg {
+  flex: none;
+}
+
+.build-hud-key {
+  min-width: 22px;
+  padding: 1px 6px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  border: 1px solid rgba(245, 238, 221, 0.55);
+  border-radius: 5px;
+}
+
+.build-hud-part {
+  padding: 0 4px;
+  border-radius: 4px;
+}
+
+/* Lo que impide colocar el filtro: color de peligro y, sin depender del
+   color, un recuadro discontinuo. */
+.build-hud-part.blocked {
+  color: var(--c-bad);
+  outline: 1.5px dashed currentColor;
+  outline-offset: 1px;
+}
+
+/* Teclas que solo tienen sentido con teclado (p. ej. "Enter" en el hub). */
+:root:not([data-input="keyboard"]) .keyboard-only {
+  display: none !important;
 }
 
 /* Caja translúcida teñida con el bioma, con un racimo de burbujas: la comparten el aviso de reliquia

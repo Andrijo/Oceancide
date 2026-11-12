@@ -127,10 +127,9 @@ const HUD_IDS = [
   "ui-overlay",
   "toxicity-skull",
   "biome-timer",
-  "boost-energy-bar",
+  "hud-bottom", // impulso, dash y filtro
   "controls-hint",
   "touch-controls",
-  "build-hud",
   "pause-btn",
   "tip-toast",
   "revive-hud",
@@ -724,10 +723,11 @@ export class ScreenManager {
          border: 1px solid rgba(132, 179, 195, 0.38);
          background: rgba(245, 238, 221, 0.08);
          color: rgba(245, 238, 221, 0.75);
-         font-family: ${PARAGRAPH_FONT}; font-size: 11px; font-weight: bold;`,
+         font-family: ${PARAGRAPH_FONT}; font-size: 12px; font-weight: bold;`,
         String(index + 1),
       )
       keyHint.setAttribute("aria-hidden", "true")
+      keyHint.className = "keyboard-only" // las teclas 1-3 no existen en táctil
 
       const btnTitle = el(
         "div",
@@ -775,7 +775,7 @@ export class ScreenManager {
             `display: inline-flex; align-items: center; gap: 4px;
              padding: 3px 8px; border-radius: 999px; border: 1px solid ${palette.border};
              background: ${palette.background}; color: ${palette.color};
-             font-family: ${PARAGRAPH_FONT}; font-size: 11px; line-height: 1.3;
+             font-family: ${PARAGRAPH_FONT}; font-size: 12px; line-height: 1.3;
              ${line.noEffect ? "opacity: 0.55;" : ""}`,
             `${line.label}: ${line.value}`,
           )
@@ -1193,7 +1193,7 @@ export class ScreenManager {
     content.append(
       el(
         "div",
-        `font-size: 11px; opacity: 0.55;
+        `font-size: 12px; opacity: 0.7;
         text-align: center; color: #bcebf6; font-family: ${PARAGRAPH_FONT};`,
         `Semilla · ${summary.seed}`,
       ),
@@ -1734,7 +1734,7 @@ export class ScreenManager {
     card.append(
       el(
         "div",
-        `min-width: 0; font-size: 10px; margin-bottom: 2px; color: rgba(245, 238, 221, 0.8);`,
+        `min-width: 0; font-size: 12px; margin-bottom: 2px; color: rgba(245, 238, 221, 0.8);`,
         label,
       ),
       el(
@@ -1746,7 +1746,7 @@ export class ScreenManager {
 
     if (sub) {
       card.append(
-        el("div", `font-size: 11px; color: rgba(245, 238, 221, 0.55);`, sub),
+        el("div", `font-size: 12px; color: rgba(245, 238, 221, 0.7);`, sub),
       )
     }
     return card
@@ -1955,11 +1955,13 @@ export class ScreenManager {
 
     const keycap = el(
       "span",
-      `font: 700 10px ${PARAGRAPH_FONT}; padding: 3px 8px;
-      border-radius: 6px; border: 1px solid rgba(132, 179, 195, 0.42); color: rgba(245, 238, 221, 0.55);`,
+      `font: 700 12px ${PARAGRAPH_FONT}; padding: 3px 8px;
+      border-radius: 6px; border: 1px solid rgba(132, 179, 195, 0.42); color: rgba(245, 238, 221, 0.7);`,
       "Enter",
     )
     keycap.setAttribute("aria-hidden", "true")
+    // Solo con teclado: en táctil o con mando no hay Enter que pulsar.
+    keycap.className = "keyboard-only"
 
     btn.append(document.createTextNode(label), keycap)
 
@@ -2033,7 +2035,7 @@ export class ScreenManager {
     const header = el(
       "div",
       `display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
-      font-size: 11px; color: rgba(245, 238, 221, 0.62);`,
+      font-size: 12px; color: rgba(245, 238, 221, 0.72);`,
     )
 
     header.append(
