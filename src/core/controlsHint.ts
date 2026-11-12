@@ -67,6 +67,34 @@ export function hintActions(
   return BASIC_CONTROLS.filter((action) => !learned.includes(action))
 }
 
+/**
+ * Controles táctiles que llevan etiqueta: el impulso (empujar el joystick
+ * más allá del borde) y los tres botones, en ese orden.
+ */
+export const TOUCH_LABEL_ACTIONS = [
+  "boost",
+  "dash",
+  "build",
+  "lookBack",
+] as const satisfies readonly HintAction[]
+
+export type TouchLabelAction = (typeof TOUCH_LABEL_ACTIONS)[number]
+
+/**
+ * Etiquetas táctiles visibles con el modo de la pista: en táctil la pista de
+ * texto no se muestra y este mismo ajuste decide las etiquetas. En automático
+ * cada una se quita al usar su control (mirar atrás incluido: en pantalla es
+ * un botón más).
+ */
+export function touchLabelActions(
+  mode: ControlsHintMode,
+  learned: readonly HintAction[],
+): TouchLabelAction[] {
+  if (mode === "off") return []
+  if (mode === "always") return [...TOUCH_LABEL_ACTIONS]
+  return TOUCH_LABEL_ACTIONS.filter((action) => !learned.includes(action))
+}
+
 /** Controles de mantener que se leen del estado de entrada. */
 export const HELD_CONTROLS = [
   "move",

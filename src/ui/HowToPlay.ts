@@ -26,11 +26,14 @@ interface HelpCard {
 const TOUCH_CONTROLS: ControlRow[] = [
   { keys: ["Mitad izquierda"], action: "Joystick: avanzar y girar" },
   { keys: ["Mitad derecha"], action: "Stick vertical: subir y bajar" },
-  { keys: ["Velocímetro"], action: "Impulso (mantener)" },
-  { keys: ["Embudo"], action: "Colocar esfera filtradora" },
-  { keys: ["Flecha de vuelta"], action: "Mirar atrás (mantener)" },
-  { keys: ["Reloj"], action: "Giro de 360° con dash" },
+  {
+    keys: ["Joystick al borde"],
+    action: "Impulso: empuja más allá del borde (mientras subes o bajas)",
+  },
   { keys: ["Deslizar rápido"], action: "Dash, moviendo el joystick de lado" },
+  { keys: ["Botón Dash"], action: "Giro de 360° con dash" },
+  { keys: ["Botón Filtro"], action: "Colocar esfera filtradora" },
+  { keys: ["Botón Mirar atrás"], action: "Mirar atrás (mantener)" },
 ]
 
 /** Primer desecho de la inmersión que cumple la condición, como ejemplo de la ficha. */

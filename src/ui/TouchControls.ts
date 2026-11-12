@@ -1,6 +1,8 @@
-// src/TouchControls.ts
+// src/ui/TouchControls.ts
 
+import type { TouchLabelAction } from "@core/controlsHint"
 import type { InputState } from "@core/types"
+import { EDGE_BOOST_ON, edgeBoostActive } from "@ui/touchGestures"
 
 const EDGE_MARGIN = 10
 
@@ -28,6 +30,9 @@ const scaled = (px: number): string => `${px}px * var(--touch-scale, 1)`
 /** Dirección del giro de 360°. */
 export type DashDirection = "left" | "right"
 
+/** Controles cuyo uso táctil se registra (para no enseñar lo ya descubierto). */
+export type TouchControl = "move" | "depth" | "boost" | "dash"
+
 /** Acciones puntuales (no mantenidas) que dispara la interfaz táctil. */
 export interface TouchActions {
   onBuild(): void
@@ -50,6 +55,8 @@ export class TouchControls {
   private moveCenter = { x: 0, y: 0 }
   private moveStart = { x: 0, y: 0, time: 0 }
   private moveFlicked = false
+  /** Impulso por empujar el joystick más allá del borde. */
+  private edgeBoosting = false
 
   // Stick derecho
   private depthZone: HTMLElement
@@ -64,6 +71,12 @@ export class TouchControls {
   /** Escala elegida en los ajustes (1 = tamaño original). */
   private scale = 1
 
+  /** Controles usados con la pantalla táctil en esta sesión. */
+  private used = new Set<TouchControl>()
+
+  /** Etiqueta de cada control con nombre en pantalla. */
+  private labels: Record<TouchLabelAction, HTMLElement>
+
   constructor(input: InputState, actions: TouchActions) {
     this.input = input
     this.actions = actions
@@ -71,48 +84,47 @@ export class TouchControls {
 
     this.root = document.createElement("div")
     this.root.id = "touch-controls"
+    // El pulgar izquierdo nada (y se impulsa empujando el joystick más allá
+    // del borde); los botones rodean el stick de profundidad, al alcance del
+    // pulgar derecho: dash encima, mirar atrás en diagonal y el filtro abajo.
     this.root.innerHTML = `
       <div id="joystick-zone"></div>
-      <div id="joystick-base"><div id="joystick-knob"></div></div>
+      <div id="joystick-base">
+        <div id="joystick-knob"></div>
+        <span class="touch-label" data-label="boost">Al borde: impulso</span>
+      </div>
 
       <div id="depth-zone"></div>
       <div id="depth-base"><div id="depth-knob"></div></div>
 
-      <button id="boost-btn" class="touch-btn" aria-label="Impulso">
-        <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3.5 17a9 9 0 1 1 17 0" />
-          <path d="M12 15l4.5-6" />
-          <circle cx="12" cy="15" r="1.4" fill="currentColor" />
-          <path d="M5.2 12.2l1.2.7M8 8.4l.7 1.2M12 6.5v1.4M16 8.4l-.7 1.2M18.8 12.2l-1.2.7" />
-        </svg>
-      </button>
-
-      <button id="build-btn" class="touch-btn" aria-label="Construir filtro"
-        style="position: absolute; right: calc(${scaled(36)} + env(safe-area-inset-right, 0px)); bottom: calc(var(--touch-bottom, 50px) + ${scaled(256)});">
-        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 5h16l-6 7.5V19l-4 1.5v-8z" />
-        </svg>
-      </button>
-
-      <button id="lookback-btn" class="touch-btn" aria-label="Ver hacia atrás"
-        style="position: absolute; right: calc(${scaled(112)} + env(safe-area-inset-right, 0px)); bottom: calc(var(--touch-bottom, 50px) + ${scaled(180)});">
-        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M9 14L4 9l5-5" />
-          <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
-        </svg>
-      </button>
-
       <button id="dash-btn" class="touch-btn" aria-label="Giro de 360° (dash)"
-        style="position: absolute; left: calc(${scaled(36)} + env(safe-area-inset-left, 0px)); bottom: calc(var(--touch-bottom, 50px) + ${scaled(180)});">
+        style="position: absolute; right: calc(${scaled(36)} + env(safe-area-inset-right, 0px)); bottom: calc(var(--touch-bottom, 50px) + ${scaled(186)});">
         <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M20 12a8 8 0 1 1-2.34-5.66" />
           <path d="M20 4.5V9h-4.5" />
           <path d="M12 8v4l2.5 1.5" />
         </svg>
+        <span class="touch-label" data-label="dash">Dash</span>
+      </button>
+
+      <button id="lookback-btn" class="touch-btn" aria-label="Mirar atrás"
+        style="position: absolute; right: calc(${scaled(116)} + env(safe-area-inset-right, 0px)); bottom: calc(var(--touch-bottom, 50px) + ${scaled(128)});">
+        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 14L4 9l5-5" />
+          <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+        </svg>
+        <span class="touch-label" data-label="lookBack">Mirar atrás</span>
+      </button>
+
+      <button id="build-btn" class="touch-btn" aria-label="Colocar esfera filtradora"
+        style="position: absolute; right: calc(${scaled(124)} + env(safe-area-inset-right, 0px)); bottom: calc(var(--touch-bottom, 50px) + ${scaled(36)});">
+        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 5h16l-6 7.5V19l-4 1.5v-8z" />
+        </svg>
+        <span class="touch-label" data-label="build">Filtro</span>
       </button>
     `
     container.appendChild(this.root)
@@ -123,10 +135,17 @@ export class TouchControls {
     this.depthZone = this.root.querySelector("#depth-zone")!
     this.depthBase = this.root.querySelector("#depth-base")!
     this.depthKnob = this.root.querySelector("#depth-knob")!
+    const label = (action: TouchLabelAction): HTMLElement =>
+      this.root.querySelector(`[data-label="${action}"]`)!
+    this.labels = {
+      boost: label("boost"),
+      dash: label("dash"),
+      build: label("build"),
+      lookBack: label("lookBack"),
+    }
 
     this.setupMoveStick()
     this.setupDepthStick()
-    this.setupBoostButton()
     this.setupBuildButton()
     this.setupLookBackButton()
     this.setupDashButton()
@@ -151,6 +170,18 @@ export class TouchControls {
     this.root.style.opacity = String(opacity)
   }
 
+  /** Muestra la etiqueta de estos controles y oculta la del resto. */
+  public setLabels(actions: readonly TouchLabelAction[]): void {
+    for (const [action, el] of Object.entries(this.labels)) {
+      el.hidden = !actions.includes(action as TouchLabelAction)
+    }
+  }
+
+  /** `true` si el jugador ya usó este control con la pantalla táctil. */
+  public hasUsed(control: TouchControl): boolean {
+    return this.used.has(control)
+  }
+
   private show(): void {
     if (this.visible) return
     this.visible = true
@@ -170,15 +201,19 @@ export class TouchControls {
       this.moveZone.setPointerCapture(e.pointerId)
 
       const half = (BASE_SIZE * this.scale) / 2
+      // Hacia los bordes de la pantalla debe caber el gesto de impulso, que
+      // llega más lejos que la base.
+      const reach =
+        Math.max(half, STICK_RADIUS * this.scale * EDGE_BOOST_ON) + EDGE_MARGIN
       this.moveCenter.x = this.clamp(
         e.clientX,
-        half + EDGE_MARGIN,
+        reach,
         window.innerWidth * 0.5 - half,
       )
       this.moveCenter.y = this.clamp(
         e.clientY,
         half + EDGE_MARGIN,
-        window.innerHeight - half - EDGE_MARGIN,
+        window.innerHeight - reach,
       )
 
       this.moveBase.style.left = `${this.moveCenter.x - half}px`
@@ -205,6 +240,7 @@ export class TouchControls {
       this.moveBase.style.bottom = ""
       this.moveBase.classList.remove("active")
       this.moveKnob.style.transform = "translate(-50%, -50%)"
+      this.setEdgeBoost(false)
 
       this.input.forward = false
       this.input.backward = false
@@ -223,6 +259,7 @@ export class TouchControls {
 
     const radius = STICK_RADIUS * this.scale
     const dist = Math.hypot(dx, dy)
+    this.setEdgeBoost(edgeBoostActive(dist / radius, this.edgeBoosting))
     if (dist > radius) {
       dx = (dx / dist) * radius
       dy = (dy / dist) * radius
@@ -249,8 +286,18 @@ export class TouchControls {
     this.input.backward = ay < 0
     this.input.left = ax < 0
     this.input.right = ax > 0
+    if (ax !== 0 || ay !== 0) this.used.add("move")
 
     this.detectFlick(e)
+  }
+
+  /** Activa o suelta el impulso del joystick (y su aviso visual en la base). */
+  private setEdgeBoost(active: boolean): void {
+    if (active === this.edgeBoosting) return
+    this.edgeBoosting = active
+    this.input.boost = active
+    this.moveBase.classList.toggle("boosting", active)
+    if (active) this.used.add("boost")
   }
 
   /** Deslizamiento rápido en horizontal = giro de 360° (una vez por apoyo). */
@@ -267,6 +314,7 @@ export class TouchControls {
       Math.abs(dx) > Math.abs(dy) * 1.5
     ) {
       this.moveFlicked = true
+      this.used.add("dash")
       this.actions.onDash(dx > 0 ? "right" : "left")
     }
   }
@@ -341,6 +389,7 @@ export class TouchControls {
     this.input.vertical = v
     this.input.up = v > 0
     this.input.down = v < 0
+    if (v !== 0) this.used.add("depth")
   }
 
   // ---------- Botón de construir ----------
@@ -376,24 +425,6 @@ export class TouchControls {
     btn.addEventListener("pointercancel", release)
   }
 
-  // ---------- Botón de impulso ----------
-
-  private setupBoostButton(): void {
-    const btn = this.root.querySelector<HTMLButtonElement>("#boost-btn")!
-
-    btn.addEventListener("pointerdown", (e) => {
-      btn.setPointerCapture(e.pointerId)
-      btn.classList.add("active")
-      this.input.boost = true
-    })
-    const release = () => {
-      btn.classList.remove("active")
-      this.input.boost = false
-    }
-    btn.addEventListener("pointerup", release)
-    btn.addEventListener("pointercancel", release)
-  }
-
   // ---------- Botón de dash (giro de 360°) ----------
 
   private setupDashButton(): void {
@@ -404,6 +435,7 @@ export class TouchControls {
       btn.classList.add("active")
       const direction = this.dashFlip ? "left" : "right"
       this.dashFlip = !this.dashFlip
+      this.used.add("dash")
       this.actions.onDash(direction)
     })
     const release = () => btn.classList.remove("active")
