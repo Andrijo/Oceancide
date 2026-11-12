@@ -1086,7 +1086,8 @@ export class ScreenManager {
     backBtn.style.flex = "1 1 200px"
     backBtn.style.width = "auto"
 
-    buttons.append(resetBtn, backBtn)
+    // La acción principal va primero (a la izquierda), como en el resto.
+    buttons.append(backBtn, resetBtn)
     this.enableArrowNav(buttons)
 
     content.append(title, body, buttons)
@@ -1198,7 +1199,7 @@ export class ScreenManager {
     hubBtn.style.flex = "35 1 0"
     hubBtn.style.width = "auto"
 
-    buttons.append(hubBtn, againBtn)
+    buttons.append(againBtn, hubBtn)
     this.enableArrowNav(buttons)
     content.append(buttons)
 
@@ -1391,7 +1392,7 @@ export class ScreenManager {
         title.textContent = "Pausa"
         for (const n of secondary()) n.style.display = ""
         if (lossWarning) lossWarning.style.display = "none"
-        buttons.replaceChildren(abandonBtn, settingsBtn, resumeBtn)
+        buttons.replaceChildren(resumeBtn, settingsBtn, abandonBtn)
         resumeBtn.focus()
       }
       const cancelBtn = this.makeGhostAction(
@@ -1402,13 +1403,16 @@ export class ScreenManager {
       )
       cancelBtn.style.flex = "65 1 0"
       cancelBtn.style.width = "auto"
-      // "Seguir buceando" ocupa el sitio donde estaba "Abandonar": un doble
-      // clic accidental cancela en vez de confirmar.
-      buttons.replaceChildren(cancelBtn, confirmBtn)
+      // "Seguir buceando" ocupa el sitio donde estaba "Abandonar" (a la
+      // derecha): un doble clic accidental cancela en vez de confirmar. Por
+      // eso aquí la acción segura queda a la derecha, al revés que en el resto.
+      buttons.replaceChildren(confirmBtn, cancelBtn)
       cancelBtn.focus()
     }
 
-    buttons.append(abandonBtn, settingsBtn, resumeBtn)
+    // La acción principal va primero (a la izquierda), como en el hub y el
+    // resumen; "Abandonar", la destructiva, en el otro extremo.
+    buttons.append(resumeBtn, settingsBtn, abandonBtn)
 
     this.enableArrowNav(buttons)
 
