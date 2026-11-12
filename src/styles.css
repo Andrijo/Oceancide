@@ -1,6 +1,9 @@
+/* Fuentes en woff2 con subconjunto latino (latín-1, puntuación, flechas y
+   formas geométricas). DM Sans tiene su negrita propia: sin ella el navegador
+   sintetiza una falsa en cada `bold`. */
 @font-face {
   font-family: "Pogonia";
-  src: url("/fonts/pogonia-bold.woff") format("woff");
+  src: url("/fonts/pogonia-bold.woff2") format("woff2");
   font-weight: 400 900;
   font-display: swap;
 }
@@ -14,9 +17,72 @@
 
 @font-face {
   font-family: "DMSans";
-  src: url("/fonts/dm-sans-regular.woff") format("woff");
-  font-weight: 500;
+  src: url("/fonts/dm-sans-regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
   font-display: swap;
+}
+
+@font-face {
+  font-family: "DMSans";
+  src: url("/fonts/dm-sans-bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Tokens de diseño de la interfaz. Los colores base están también en
+   src/ui/palette.ts (los usa el canvas y el test de contraste). */
+:root {
+  --color-cream: #f5eedd;
+  --color-mist: #84b3c3;
+  --color-deep: #16587b;
+  --color-deep-hover: #1d6a92;
+  --color-ink: #06202e;
+  --color-danger: rgba(255, 150, 150, 0.9);
+  --color-danger-soft: #ffbaba;
+
+  --text-strong: var(--color-cream);
+  --text-body: rgba(245, 238, 221, 0.85);
+  --text-soft: rgba(245, 238, 221, 0.8);
+  --text-muted: rgba(245, 238, 221, 0.7);
+  --text-link: #bcebf6;
+
+  --surface-ghost: rgba(245, 238, 221, 0.02);
+  --surface-1: rgba(245, 238, 221, 0.045);
+  --surface-2: rgba(245, 238, 221, 0.08);
+  --border-subtle: rgba(245, 238, 221, 0.1);
+  --border-mist: rgba(132, 179, 195, 0.3);
+  --border-mist-strong: rgba(132, 179, 195, 0.63);
+
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+
+  --font-title: "Pogonia", Tahoma, Geneva, Verdana, sans-serif;
+  --font-body: "DMSans", Tahoma, Geneva, Verdana, sans-serif;
+  --font-display: "Tanbuster", "Pogonia", Geneva, Verdana, sans-serif;
+
+  --ease-ui: 160ms ease;
+
+  /* Rarezas de carta: borde/acento y fondo. Cada una lleva además un icono
+     con forma propia (src/ui/rarity.ts). */
+  --rarity-common: #94a3b8;
+  --rarity-common-bg: #2b3542;
+  --rarity-rare: #38bdf8;
+  --rarity-rare-bg: #17456b;
+  --rarity-epic: #a855f7;
+  --rarity-epic-bg: #4a1f6e;
+  --rarity-legendary: #fbbf24;
+  --rarity-legendary-bg: #6e4a10;
+  --rarity-curse: #ef4444;
+  --rarity-curse-bg: #6e1c1c;
+  --rarity-ultra-legendary: #0a9396;
+  --rarity-ultra-legendary-bg: #003d4d;
+  --rarity-chaos: #fb923c;
+  --rarity-chaos-bg: #2a1008;
 }
 
 /* Colores con significado (ver src/ui/colorVision.ts). El modo para
@@ -180,8 +246,7 @@
 .reduce-motion .menu-bubble,
 .reduce-motion .card-ultra-legendary,
 .reduce-motion .card-chaos,
-.reduce-motion [data-hub-anim],
-.reduce-motion [data-hub-cta] {
+.reduce-motion .hub-enter {
   animation: none !important;
 }
 
@@ -636,16 +701,6 @@ legend.settings-label {
 :root[data-input="gamepad"] .settings-key-reset:focus {
   outline: 2px solid #f5eedd;
   outline-offset: 3px;
-}
-
-:root[data-input="gamepad"] .event-option:focus {
-  outline: 2px solid #7dd3fc;
-  outline-offset: 3px;
-}
-
-:root[data-input="gamepad"] .card-choice:focus {
-  outline: 3px solid #f5eedd;
-  outline-offset: 5px;
 }
 
 .reduce-motion .settings-segment-text,
@@ -1147,4 +1202,1328 @@ button.build-chip:focus-visible,
   color: color-mix(in srgb, rgb(var(--bubble-water)) 45%, #04121c);
   background: #f5eedd;
   text-shadow: none;
+}
+
+/* ==========================================================================
+   Pantallas (ver src/ui/ScreenManager.ts): hub, pausa, resumen, mejoras,
+   cartas, eventos y el diálogo de confirmación. El hover va siempre dentro de
+   @media (hover: hover) para que no se quede pegado en pantallas táctiles, y
+   el foco se marca con :focus-visible (y con cualquier foco al usar mando).
+   ========================================================================== */
+
+.screen-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 12, 30, 0.55);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  font-family: var(--font-body);
+  color: var(--text-strong);
+}
+
+.screen-overlay[hidden] {
+  display: none;
+}
+
+.screen-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: linear-gradient(
+    180deg,
+    rgba(9, 38, 54, 0.8),
+    rgba(5, 22, 33, 0.86)
+  );
+}
+
+/* Cuadrícula tenue que se desvanece hacia los bordes. */
+.screen-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(245, 238, 221, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245, 238, 221, 0.04) 1px, transparent 1px);
+  background-size: 46px 46px;
+  -webkit-mask-image: radial-gradient(
+    ellipse at 50% 38%,
+    #000 18%,
+    transparent 74%
+  );
+  mask-image: radial-gradient(ellipse at 50% 38%, #000 18%, transparent 74%);
+}
+
+.screen-content {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(14px, 2.4vh, 28px);
+  padding: clamp(10px, 2vh, 24px) clamp(18px, 4vw, 56px) clamp(22px, 4vh, 44px);
+  text-align: center;
+}
+
+/* Contenido largo: empieza arriba para que el scroll llegue al título. */
+.screen-content--top {
+  justify-content: flex-start;
+}
+
+/* Centrado solo si cabe (pausa con la build). */
+.screen-content--safe {
+  justify-content: safe center;
+}
+
+.screen-title {
+  --title-color: var(--color-cream);
+  width: 100%;
+  max-width: 900px;
+  margin: 0 0 40px;
+  overflow: visible;
+  font-family: var(--font-title);
+  font-size: clamp(30px, 4.7vw, 60px);
+  font-weight: 900;
+  font-stretch: condensed;
+  line-height: 1;
+  text-align: center;
+  color: var(--title-color);
+  text-shadow:
+    0 3px 0 rgba(0, 44, 70, 0.6),
+    0 6px 14px rgba(0, 5, 18, 0.5),
+    0 0 12px color-mix(in srgb, var(--title-color) 27%, transparent);
+}
+
+.screen-title--tight {
+  margin-bottom: 4px;
+}
+
+.screen-title--compact {
+  margin-bottom: 8px;
+}
+
+.screen-title--died {
+  --title-color: #ff7a6b;
+}
+
+.screen-title--completed {
+  --title-color: #7cf7d4;
+}
+
+/* --- Burbujas decorativas del fondo --- */
+
+.menu-bubbles {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.menu-bubble {
+  position: absolute;
+  width: var(--size);
+  height: var(--size);
+  box-sizing: border-box;
+  border-radius: 50%;
+  opacity: 0.55;
+  background: radial-gradient(
+    circle at 30% 25%,
+    rgba(245, 238, 221, 0.95) 0%,
+    rgba(23, 75, 164, 0.28) 18%,
+    rgba(71, 211, 238, 0.12) 48%,
+    rgba(6, 107, 144, 0.05) 72%,
+    transparent 73%
+  );
+  border: 1px solid rgba(196, 250, 255, 0.72);
+  box-shadow:
+    inset -3px -4px 7px rgba(0, 77, 110, 0.22),
+    inset 2px 2px 5px rgba(245, 238, 221, 0.35),
+    0 0 12px rgba(91, 236, 255, 0.28);
+  animation: menuBubbleFloat var(--duration) ease-in-out var(--delay) infinite;
+}
+
+@keyframes menuBubbleFloat {
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.92);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.55;
+  }
+  80% {
+    opacity: 0.42;
+  }
+  100% {
+    transform: translate3d(18px, -170px, 0) scale(1.12);
+    opacity: 0;
+  }
+}
+
+/* --- Botones --- */
+
+.btn {
+  --btn-color: var(--text-body);
+  --btn-bg: var(--surface-ghost);
+  --btn-border: var(--border-mist);
+  --btn-hover-color: var(--color-cream);
+  --btn-hover-bg: var(--surface-2);
+  --btn-hover-border: var(--border-mist-strong);
+  --btn-focus: rgba(245, 238, 221, 0.6);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 54px;
+  padding: 12px 22px;
+  box-sizing: border-box;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--btn-border);
+  background: var(--btn-bg);
+  color: var(--btn-color);
+  font: 700 clamp(15px, 1.9vw, 20px) var(--font-title);
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform var(--ease-ui),
+    background var(--ease-ui),
+    border-color var(--ease-ui),
+    color var(--ease-ui);
+}
+
+/* La acción principal de cada pantalla va rellena; el resto, solo borde. */
+.btn--primary {
+  --btn-color: rgba(245, 238, 221, 0.92);
+  --btn-bg: var(--color-deep);
+  --btn-border: rgba(132, 179, 195, 0.42);
+  --btn-hover-bg: var(--color-deep-hover);
+  --btn-hover-border: rgba(132, 179, 195, 0.83);
+  --btn-focus: var(--color-mist);
+}
+
+.btn--upgrade {
+  --btn-color: var(--color-mist);
+  --btn-border: rgba(132, 179, 195, 0.45);
+  --btn-hover-bg: rgba(132, 179, 195, 0.16);
+  --btn-hover-border: rgba(245, 238, 221, 0.8);
+  --btn-focus: var(--color-mist);
+}
+
+.btn--danger {
+  --btn-color: var(--color-danger);
+  --btn-border: rgba(255, 120, 120, 0.28);
+  --btn-hover-color: var(--color-danger-soft);
+  --btn-hover-bg: rgba(255, 90, 90, 0.14);
+  --btn-hover-border: rgba(255, 120, 120, 0.6);
+  --btn-focus: var(--color-danger);
+}
+
+.btn--narrow {
+  max-width: 400px;
+  flex: none;
+}
+
+.btn--compact {
+  min-height: 44px;
+}
+
+@media (hover: hover) {
+  .btn:hover:not(:disabled, [aria-disabled="true"]) {
+    transform: translateY(-2px);
+    background: var(--btn-hover-bg);
+    border-color: var(--btn-hover-border);
+    color: var(--btn-hover-color);
+  }
+}
+
+.btn:active:not(:disabled, [aria-disabled="true"]) {
+  background: var(--btn-hover-bg);
+  border-color: var(--btn-hover-border);
+}
+
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn:focus-visible,
+:root[data-input="gamepad"] .btn:focus {
+  outline: 2px solid var(--btn-focus);
+  outline-offset: 4px;
+}
+
+/* Filas de botones. La acción principal ocupa más (.is-main) que las demás
+   (.is-side); sin clase, todas a partes iguales. */
+.action-row {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  width: 100%;
+  max-width: 640px;
+}
+
+.action-row > * {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+
+.action-row > .is-main {
+  flex-grow: 65;
+}
+
+.action-row > .is-side {
+  flex-grow: 35;
+}
+
+.action-row--top {
+  margin-top: 4px;
+}
+
+.action-row--spaced {
+  margin-top: 8px;
+}
+
+.action-row--wrap {
+  flex-wrap: wrap;
+}
+
+.action-row--wrap > * {
+  flex-basis: 200px;
+}
+
+.action-row--wide {
+  max-width: 960px;
+}
+
+.action-row--wide > * {
+  flex-basis: 260px;
+}
+
+/* Tecla al lado de una acción ("Enter") y número de opción (1-3). */
+.keycap {
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(132, 179, 195, 0.42);
+  color: var(--text-muted);
+  font: 700 12px var(--font-body);
+}
+
+.key-hint {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(132, 179, 195, 0.38);
+  background: var(--surface-2);
+  color: rgba(245, 238, 221, 0.75);
+  font: 700 12px var(--font-body);
+}
+
+/* Cuántas mejoras se pueden comprar (botones "Mejoras"). */
+.count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  border-radius: var(--radius-pill);
+  background: var(--color-mist);
+  color: var(--color-ink);
+  font: 700 12px var(--font-body);
+}
+
+.ui-icon {
+  display: inline-flex;
+  flex: none;
+  width: var(--icon-size, 20px);
+  height: var(--icon-size, 20px);
+}
+
+.ui-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.btn-trash {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 120, 120, 0.28);
+  background: transparent;
+  color: var(--color-danger);
+  font: 13px var(--font-body);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease;
+}
+
+@media (hover: hover) {
+  .btn-trash:hover {
+    background: rgba(255, 90, 90, 0.12);
+    border-color: rgba(255, 120, 120, 0.6);
+  }
+}
+
+.btn-trash:focus-visible,
+:root[data-input="gamepad"] .btn-trash:focus {
+  outline: 2px solid rgba(255, 150, 150, 0.8);
+  outline-offset: 3px;
+}
+
+/* Modo aún no disponible: no es un botón, solo dice qué hace falta. */
+.locked-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 8px 16px;
+  box-sizing: border-box;
+  border-radius: var(--radius-md);
+  border: 1.5px dashed var(--border-mist);
+  background: var(--surface-ghost);
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.locked-action-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.locked-action-label {
+  font: 700 clamp(14px, 1.6vw, 17px) var(--font-title);
+}
+
+.locked-action-req {
+  font: 12px/1.3 var(--font-body);
+  text-align: left;
+}
+
+/* --- Hub --- */
+
+.hub-topbar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 3;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 18px 20px;
+}
+
+.hub-title {
+  width: 100%;
+  margin: 0;
+  overflow: visible;
+  font-family: var(--font-display);
+  font-size: clamp(28px, 8vw, 112px);
+  font-weight: 500;
+  font-stretch: condensed;
+  letter-spacing: 0.25rem;
+  line-height: 0.8;
+  white-space: nowrap;
+}
+
+.hub-title-ocean {
+  color: var(--color-cream);
+  text-shadow:
+    0 5px 0 rgba(0, 44, 70, 0.72),
+    0 11px 18px rgba(0, 5, 18, 0.65),
+    0 0 14px rgba(220, 252, 255, 0.35);
+}
+
+.hub-title-cide {
+  color: var(--color-cream);
+  background: linear-gradient(
+    180deg,
+    #f5eedd 0%,
+    #d8fbff 25%,
+    #7cecff 55%,
+    #129ec5 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow:
+    0 5px 0 rgba(0, 62, 94, 0.92),
+    0 10px 0 rgba(0, 40, 65, 0.72),
+    0 16px 20px rgba(7, 26, 73, 0.68),
+    0 0 20px rgba(102, 241, 255, 0.42);
+}
+
+.hub-enter {
+  animation: hubFadeUp 640ms cubic-bezier(0.2, 0.7, 0.2, 1)
+    var(--hub-delay, 0ms) both;
+}
+
+@keyframes hubFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Casillas de estadísticas (hub y resumen). */
+.bento-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  width: 100%;
+  max-width: 960px;
+}
+
+.bento-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 780px;
+}
+
+.bento-line {
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  gap: 14px;
+  width: 100%;
+}
+
+.bento-line > .bento-stat {
+  flex: 0 1 var(--bento-basis, 40%);
+}
+
+.bento-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 14px;
+  text-align: left;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(245, 238, 221, 0.09);
+  background: var(--surface-1);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+.bento-label {
+  min-width: 0;
+  margin-bottom: 2px;
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.bento-value {
+  font-family: var(--font-title);
+  font-size: clamp(17px, 1.7vw, 23px);
+  font-weight: 900;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  color: var(--color-cream);
+}
+
+.bento-value--accent {
+  color: var(--color-mist);
+}
+
+.bento-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.zone-progress {
+  width: 100%;
+  max-width: 960px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.zone-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 12px;
+  color: rgba(245, 238, 221, 0.72);
+}
+
+.zone-progress-count {
+  font-weight: 700;
+  color: var(--color-mist);
+}
+
+.zone-progress-bar {
+  display: flex;
+  gap: 6px;
+}
+
+.zone-progress-seg {
+  flex: 1 1 0;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--border-subtle);
+}
+
+.zone-progress-seg.is-lit {
+  background: var(--color-mist);
+}
+
+/* --- Mejoras --- */
+
+.upgrade-subtitle {
+  margin-bottom: 20px;
+  font: 700 16px var(--font-title);
+  color: var(--color-mist);
+}
+
+.upgrade-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  width: 100%;
+  max-width: 960px;
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.upgrade-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  background: rgba(245, 238, 221, 0.03);
+}
+
+.upgrade-card.is-max {
+  border-color: var(--color-mist);
+}
+
+.upgrade-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.upgrade-name {
+  margin: 0;
+  font-family: var(--font-title);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-cream);
+}
+
+.upgrade-level {
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--border-subtle);
+  color: #ddd;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.upgrade-desc {
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.upgrade-status {
+  margin-top: -4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.upgrade-status:empty {
+  display: none;
+}
+
+/* --- Eventos --- */
+
+.event-desc {
+  max-width: 600px;
+  margin-bottom: 20px;
+  font-size: 16px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--color-cream);
+}
+
+.event-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 600px;
+}
+
+.event-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 16px 20px;
+  box-sizing: border-box;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  background: rgba(245, 238, 221, 0.03);
+  border: 1px solid rgba(245, 238, 221, 0.15);
+  border-radius: var(--radius-md);
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background var(--ease-ui),
+    border-color var(--ease-ui);
+}
+
+@media (hover: hover) {
+  .event-option:hover {
+    background: rgba(245, 238, 221, 0.1);
+    border-color: rgba(132, 179, 195, 0.83);
+  }
+}
+
+.event-option:focus-visible,
+:root[data-input="gamepad"] .event-option:focus {
+  background: rgba(245, 238, 221, 0.1);
+  border-color: rgba(132, 179, 195, 0.83);
+  outline: 2px solid #7dd3fc;
+  outline-offset: 3px;
+}
+
+.event-option-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.event-option-title {
+  flex: 1;
+  font-family: var(--font-title);
+  font-size: 20px;
+  color: var(--color-cream);
+}
+
+.event-option-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.event-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.event-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(132, 179, 195, 0.27);
+  background: rgba(245, 238, 221, 0.04);
+  color: rgba(245, 238, 221, 0.72);
+  font: 12px/1.3 var(--font-body);
+}
+
+.event-chip--positive {
+  --chip-tone: var(--c-good);
+}
+
+.event-chip--negative {
+  --chip-tone: var(--c-bad);
+}
+
+/* Texto aclarado hacia el crema para que se lea sobre el fondo oscuro. */
+.event-chip--positive,
+.event-chip--negative {
+  color: color-mix(in srgb, var(--chip-tone) 70%, var(--color-cream));
+  border-color: color-mix(in srgb, var(--chip-tone) 35%, transparent);
+  background: color-mix(in srgb, var(--chip-tone) 10%, transparent);
+}
+
+.event-chip.is-noeffect {
+  opacity: 0.55;
+}
+
+.event-warning {
+  width: 100%;
+  font-size: 12px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--c-bad) 45%, var(--color-cream));
+}
+
+.event-notice {
+  max-width: 640px;
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(132, 179, 195, 0.28);
+  background: rgba(132, 179, 195, 0.08);
+  color: #bae6fd;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* Bloqueo breve al abrir cartas o eventos (ChoiceGuard). */
+.choice-locked {
+  filter: saturate(0.45) brightness(0.75) !important;
+  cursor: progress !important;
+}
+
+.choice-lock-bar {
+  width: min(320px, 70%);
+  height: 4px;
+  flex: none;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: rgba(245, 238, 221, 0.12);
+}
+
+.choice-lock-bar::after {
+  content: "";
+  display: block;
+  height: 100%;
+  background: #7dd3fc;
+  transform-origin: left center;
+  animation: choiceLockFill var(--choice-lock-ms, 1200ms) linear forwards;
+}
+
+@keyframes choiceLockFill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* --- Cartas --- */
+
+.rarity-common {
+  --rarity: var(--rarity-common);
+  --rarity-bg: var(--rarity-common-bg);
+}
+
+.rarity-rare {
+  --rarity: var(--rarity-rare);
+  --rarity-bg: var(--rarity-rare-bg);
+}
+
+.rarity-epic {
+  --rarity: var(--rarity-epic);
+  --rarity-bg: var(--rarity-epic-bg);
+}
+
+.rarity-legendary {
+  --rarity: var(--rarity-legendary);
+  --rarity-bg: var(--rarity-legendary-bg);
+}
+
+.rarity-curse {
+  --rarity: var(--rarity-curse);
+  --rarity-bg: var(--rarity-curse-bg);
+}
+
+.rarity-ultra-legendary {
+  --rarity: var(--rarity-ultra-legendary);
+  --rarity-bg: var(--rarity-ultra-legendary-bg);
+}
+
+.rarity-chaos {
+  --rarity: var(--rarity-chaos);
+  --rarity-bg: var(--rarity-chaos-bg);
+}
+
+.rarity-icon {
+  flex: none;
+  width: 1em;
+  height: 1em;
+}
+
+.card-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 18px;
+  width: 100%;
+}
+
+.card-choice {
+  position: relative;
+  flex: 0 1 clamp(170px, 26vw, 240px);
+  min-height: clamp(260px, 38vw, 320px);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  cursor: pointer;
+  font: inherit;
+  color: var(--color-cream);
+  background: var(--rarity-bg);
+  border: 6px solid var(--rarity);
+  border-radius: var(--radius-xl);
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.55),
+    inset 0 0 0 1px rgba(245, 238, 221, 0.06);
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform var(--ease-ui),
+    filter var(--ease-ui),
+    box-shadow var(--ease-ui);
+}
+
+/* El mismo realce con ratón y con teclado: la carta se levanta. */
+.card-choice:focus-visible,
+:root[data-input="gamepad"] .card-choice:focus {
+  transform: translateY(-6px) scale(1.02);
+  filter: brightness(1.15);
+  box-shadow:
+    0 14px 32px rgba(0, 0, 0, 0.65),
+    inset 0 0 0 1px rgba(245, 238, 221, 0.12),
+    0 0 24px color-mix(in srgb, var(--rarity) 40%, transparent);
+  outline: 3px solid var(--color-cream);
+  outline-offset: 5px;
+}
+
+@media (hover: hover) {
+  .card-choice:hover {
+    transform: translateY(-6px) scale(1.02);
+    filter: brightness(1.15);
+    box-shadow:
+      0 14px 32px rgba(0, 0, 0, 0.65),
+      inset 0 0 0 1px rgba(245, 238, 221, 0.12),
+      0 0 24px color-mix(in srgb, var(--rarity) 40%, transparent);
+  }
+}
+
+.card-choice.card-ultra-legendary {
+  background: #0f0f14;
+  border-color: #94a3b8;
+  animation: ultraGlow 3s infinite ease-in-out;
+}
+
+.card-choice.card-chaos {
+  animation: chaosGlitch 2.6s infinite steps(2, end);
+}
+
+.card-key {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  width: 26px;
+  height: 26px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--rarity);
+  border-radius: var(--radius-sm);
+  color: var(--rarity);
+  font: 900 12px var(--font-title);
+}
+
+.card-rarity {
+  padding: 22px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.card-rarity-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 900 16px var(--font-title);
+  text-transform: uppercase;
+  color: var(--rarity);
+}
+
+.card-divider {
+  width: 60%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--rarity), transparent);
+}
+
+.card-ultra-legendary .card-key {
+  color: var(--color-cream);
+  background: rgba(0, 0, 0, 0.5);
+  border-color: var(--color-cream);
+}
+
+.card-ultra-legendary .card-rarity-label {
+  color: var(--color-cream);
+}
+
+.card-ultra-legendary .card-divider {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-cream),
+    transparent
+  );
+}
+
+.card-body {
+  flex: 1 1 auto;
+  padding: 0 18px 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.card-name {
+  font: 900 21px/1.1 var(--font-title);
+  text-transform: uppercase;
+  color: var(--color-cream);
+}
+
+/* Cada tramo del valor se pinta según su signo: las penalizaciones van en
+   rojo aunque la carta sea buena en conjunto (maldiciones, caos). Palabras
+   completas: algo más pequeño que el nombre para que quepan. */
+.card-value {
+  --tone-neutral: #e2e8f0;
+  --tone-positive: var(--c-good);
+  --tone-negative: var(--c-bad);
+  font: 900 clamp(16px, 1.7vw, 20px) / 1.25 var(--font-title);
+  color: var(--tone-neutral);
+}
+
+.card-ultra-legendary .card-value {
+  --tone-neutral: var(--color-cream);
+  --tone-positive: var(--color-cream);
+}
+
+.card-chaos .card-value {
+  --tone-neutral: #fb923c;
+}
+
+.card-tone-positive {
+  color: var(--tone-positive);
+}
+
+.card-tone-negative {
+  color: var(--tone-negative);
+}
+
+.card-tone-neutral {
+  color: var(--tone-neutral);
+}
+
+.card-desc {
+  margin-top: 4px;
+  font: 12px/1.45 var(--font-body);
+  color: rgba(245, 238, 221, 0.75);
+}
+
+/* Fichas de cartas de la pausa: el color e icono de su rareza. */
+.build-chip[class*="rarity-"] {
+  --chip-color: var(--rarity);
+}
+
+.build-chip .rarity-icon {
+  align-self: center;
+  color: var(--chip-color);
+}
+
+@keyframes ultraGlow {
+  0%,
+  100% {
+    border-color: #94a3b8;
+    box-shadow:
+      0 0 14px rgba(148, 163, 184, 0.7),
+      inset 0 0 12px rgba(148, 163, 184, 0.3);
+  }
+  17% {
+    border-color: #38bdf8;
+    box-shadow:
+      0 0 18px rgba(56, 189, 248, 0.85),
+      inset 0 0 14px rgba(56, 189, 248, 0.4);
+  }
+  33% {
+    border-color: #a855f7;
+    box-shadow:
+      0 0 22px rgba(132, 179, 195, 0.9),
+      inset 0 0 16px rgba(132, 179, 195, 0.45);
+  }
+  50% {
+    border-color: #fbbf24;
+    box-shadow:
+      0 0 26px rgba(251, 191, 36, 1),
+      inset 0 0 18px rgba(251, 191, 36, 0.5);
+  }
+  67% {
+    border-color: #ef4444;
+    box-shadow:
+      0 0 22px rgba(239, 68, 68, 0.9),
+      inset 0 0 16px rgba(239, 68, 68, 0.45);
+  }
+  83% {
+    border-color: #0a9396;
+    box-shadow:
+      0 0 20px rgba(10, 147, 150, 0.9),
+      inset 0 0 14px rgba(10, 147, 150, 0.4);
+  }
+}
+
+@keyframes chaosGlitch {
+  0%,
+  100% {
+    border-color: #fb923c;
+    box-shadow:
+      0 0 12px rgba(251, 146, 60, 0.55),
+      inset 0 0 10px rgba(251, 146, 60, 0.2);
+  }
+  20% {
+    border-color: #22d3ee;
+    box-shadow:
+      0 0 18px rgba(34, 211, 238, 0.7),
+      inset 0 0 12px rgba(34, 211, 238, 0.28);
+  }
+  40% {
+    border-color: #c084fc;
+    box-shadow:
+      0 0 24px rgba(132, 179, 195, 0.75),
+      inset 0 0 15px rgba(132, 179, 195, 0.32);
+  }
+  60% {
+    border-color: #ef4444;
+    box-shadow:
+      0 0 18px rgba(239, 68, 68, 0.7),
+      inset 0 0 12px rgba(239, 68, 68, 0.28);
+  }
+  80% {
+    border-color: #facc15;
+    box-shadow:
+      0 0 20px rgba(250, 204, 21, 0.72),
+      inset 0 0 13px rgba(250, 204, 21, 0.3);
+  }
+}
+
+/* --- Resumen y pausa --- */
+
+.summary-cards {
+  max-width: 720px;
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+  color: var(--text-link);
+  opacity: 0.85;
+}
+
+.summary-actions {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: clamp(14px, 2.4vh, 22px);
+}
+
+.summary-seed {
+  font-size: 12px;
+  text-align: center;
+  color: var(--text-link);
+  opacity: 0.7;
+}
+
+.goals-panel {
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  text-align: left;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-mist);
+  background: var(--surface-1);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+.goals-heading {
+  margin: 0;
+  font: 700 12px var(--font-body);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-mist);
+}
+
+.goals-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.goals-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font: 14px/1.4 var(--font-body);
+  color: var(--color-cream);
+}
+
+.goals-track {
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: rgba(245, 238, 221, 0.12);
+}
+
+.goals-fill {
+  width: var(--progress, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-mist);
+}
+
+.pause-stats {
+  max-width: 640px;
+  font-size: 14px;
+  line-height: 1.4;
+  text-align: center;
+  color: #bae6fd;
+}
+
+/* --- Diálogo de confirmación (ver src/ui/ConfirmDialog.ts) --- */
+
+.confirm-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+  background: rgba(0, 8, 16, 0.6);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  animation: confirmIn 160ms ease both;
+}
+
+.confirm-box {
+  width: min(480px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  box-sizing: border-box;
+  text-align: center;
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(132, 179, 195, 0.45);
+  background: linear-gradient(
+    180deg,
+    rgba(14, 52, 72, 0.97),
+    rgba(6, 26, 38, 0.97)
+  );
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+
+.confirm-title {
+  margin: 0;
+  font: 900 clamp(22px, 3vw, 30px) / 1.1 var(--font-title);
+  color: var(--color-cream);
+}
+
+.confirm-message {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--text-body);
+}
+
+.confirm-warning {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--color-danger-soft);
+}
+
+.confirm-actions {
+  max-width: none;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+/* Mitad y mitad (sin que la etiqueta de confirmar se parta); en pantallas
+   estrechas bajan una debajo de otra. */
+.confirm-actions > .is-main,
+.confirm-actions > .is-side {
+  flex: 1 1 160px;
+}
+
+@keyframes confirmIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Movimiento reducido: cambios de estado al instante, sin transiciones. */
+.reduce-motion .btn,
+.reduce-motion .btn-trash,
+.reduce-motion .card-choice,
+.reduce-motion .event-option {
+  transition: none;
+}
+
+.reduce-motion .confirm-layer {
+  animation: none;
 }

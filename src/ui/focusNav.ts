@@ -54,13 +54,40 @@ export function pickNeighbor<T>(
 const FOCUSABLE =
   "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
 
-function focusables(root: HTMLElement): HTMLElement[] {
+/**
+ * Controles enfocables y visibles de `root`, en orden de documento. Salta lo
+ * que esté bajo un `inert` (la pantalla tapada por un diálogo de confirmación).
+ */
+export function focusables(root: HTMLElement): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
     (el) => {
+      if (el.closest("[inert]")) return false
       const rect = el.getBoundingClientRect()
       return rect.width > 0 && rect.height > 0
     },
   )
+}
+
+/**
+ * A dónde lleva Tab (o Mayús+Tab con `backwards`) para que el foco no salga de
+ * un diálogo: al pasar del último vuelve al primero y al revés, y si el foco
+ * está fuera, entra por el principio (o el final). `null` cuando el navegador
+ * puede moverlo él solo.
+ */
+export function trapTabTarget<T>(
+  items: readonly T[],
+  active: T | null,
+  backwards: boolean,
+): T | null {
+  const first = items[0]
+  const last = items[items.length - 1]
+  if (first === undefined || last === undefined) return null
+  if (active === null || !items.includes(active)) {
+    return backwards ? last : first
+  }
+  if (backwards && active === first) return last
+  if (!backwards && active === last) return first
+  return null
 }
 
 function focusedIn(root: HTMLElement): HTMLElement | null {
