@@ -39,7 +39,7 @@ export const CREATURE_NAMES: Record<CreatureKind, string> = {
   eel: "Anguila",
   pufferfish: "Pez globo",
   barracuda: "Barracuda",
-  anglerfish: "Rape abisal",
+  anglerfish: "Pez pescador abisal",
   octopus: "Pulpo",
   squid: "Calamar",
   scrapCrab: "Cangrejo de chatarra",

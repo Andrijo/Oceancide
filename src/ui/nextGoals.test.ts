@@ -22,16 +22,16 @@ function goal(view: ReturnType<typeof buildNextGoals>, kind: string) {
 describe("buildNextGoals: zona", () => {
   it("dice cuánto faltaba de la zona en la que se murió", () => {
     const zone = goal(buildNextGoals(died, makeMeta()), "zone")
-    expect(zone?.text).toBe("Te quedó un 35 % del Subfótico por limpiar")
+    expect(zone?.text).toBe("Te quedó un 35% del Subfótico por limpiar")
     expect(zone?.progress).toBeCloseTo(0.65)
   })
 
-  it("nunca dice 0 % si la zona no estaba limpia", () => {
+  it("nunca dice 0% si la zona no estaba limpia", () => {
     const zone = goal(
       buildNextGoals({ ...died, zoneProgress: 99.8 }, makeMeta()),
       "zone",
     )
-    expect(zone?.text).toContain("un 1 %")
+    expect(zone?.text).toContain("un 1%")
   })
 
   it("también sale al abandonar, pero no al completar la run", () => {
@@ -92,7 +92,7 @@ describe("buildNextGoals: biomas", () => {
   it("nombra el siguiente bioma sin descubrir", () => {
     const biome = goal(buildNextGoals(died, makeMeta()), "biome")
     expect(biome?.text).toBe(
-      "Siguiente bioma por descubrir: Mesopelágico Profundo · 1000 m",
+      "Siguiente bioma por descubrir: Mesopelágico Profundo · 1,000 m",
     )
   })
 

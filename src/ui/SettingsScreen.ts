@@ -279,7 +279,7 @@ function bindingField<A extends string, V>(
       )
       button.setAttribute(
         "aria-label",
-        `${config.labels[action]}: ${value}. Pulsa para cambiarlo.`,
+        `${config.labels[action]}: ${value}. Presiona para cambiarlo.`,
       )
     }
   }
@@ -373,7 +373,7 @@ function listenForKey(
     if (event.code === "Escape") done({ cancelled: true })
     else if (isReservedKey(event.code)) {
       done({
-        rejected: `${keyLabel(event.code)} está reservada: elige otra o pulsa Esc.`,
+        rejected: `${keyLabel(event.code)} está reservada: elige otra o presiona Esc.`,
       })
     } else done({ value: event.code })
   }
@@ -397,8 +397,8 @@ function keyBindingsField(
     defaults: createDefaultKeyBindings,
     format: keyLabel,
     rebind: rebindKey,
-    waiting: "Pulsa una tecla…",
-    prompt: (label) => `Pulsa la nueva tecla para «${label}». Esc cancela.`,
+    waiting: "Presiona una tecla…",
+    prompt: (label) => `Presiona la nueva tecla para «${label}». Esc cancela.`,
     resetLabel: "Restablecer teclas",
     resetDone: "Teclas por defecto restablecidas.",
     listen: listenForKey,
@@ -413,7 +413,7 @@ function padBindingsField(
   onChange: (bindings: PadBindings) => void,
 ): HTMLElement {
   return bindingField<PadAction, number>({
-    title: "Botones del mando",
+    title: "Botones del control",
     note: "El stick izquierdo mueve y el derecho sube y baja. La cruceta, A y B sirven para los menús.",
     actions: PAD_ACTIONS,
     labels: PAD_ACTION_LABELS,
@@ -421,9 +421,9 @@ function padBindingsField(
     defaults: createDefaultPadBindings,
     format: (button) => padButtonLabel(padStyle, button),
     rebind: rebindPadButton,
-    waiting: "Pulsa un botón…",
+    waiting: "Presiona un botón…",
     prompt: (label) =>
-      `Pulsa en el mando el nuevo botón para «${label}». La cruceta o Esc cancelan.`,
+      `Presiona en el control el nuevo botón para «${label}». La cruceta o Esc cancelan.`,
     resetLabel: "Restablecer botones",
     resetDone: "Botones por defecto restablecidos.",
     listen: (done) => {
@@ -440,7 +440,7 @@ function padBindingsField(
         () =>
           done({
             cancelled: true,
-            message: "No se ha pulsado ningún botón del mando. Sin cambios.",
+            message: "No presionaste ningún botón del control. Sin cambios.",
           }),
         PAD_CAPTURE_TIMEOUT_MS,
       )
@@ -455,7 +455,7 @@ function padBindingsField(
   })
 }
 
-const percent = (value: number): string => `${Math.round(value * 100)} %`
+const percent = (value: number): string => `${Math.round(value * 100)}%`
 
 export interface SettingsBodyOptions {
   /** Dispositivo en uso: sus controles van primero. */
@@ -563,7 +563,7 @@ export function createSettingsBody(
     CONTROLS_HINT_CHOICES,
     settings.controlsHint,
     (controlsHint) => onChange({ controlsHint }),
-    "La línea con los controles del teclado o del mando en la parte de abajo; en táctil, las etiquetas bajo los botones. «Hasta usarlos» quita cada control básico en cuanto lo usas; «Siempre» los muestra todos.",
+    "La línea con las teclas o los botones del control en la parte de abajo; en táctil, las etiquetas bajo los botones. «Hasta usarlos» quita cada control básico en cuanto lo usas; «Siempre» los muestra todos.",
   )
   const keyboardFields = [
     keyBindingsField(settings.keyBindings, (keyBindings) =>

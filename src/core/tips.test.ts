@@ -69,9 +69,9 @@ describe("tipText", () => {
       filterCost: 40,
     })
 
-    expect(keyboard).toContain("pulsa B")
+    expect(keyboard).toContain("presiona B")
     expect(keyboard).toContain("40")
-    expect(touch).not.toContain("pulsa B")
+    expect(touch).not.toContain("presiona B")
     expect(touch).toContain("botón")
   })
 
@@ -89,7 +89,7 @@ describe("tipText", () => {
       filterCost: 40,
     })
 
-    expect(gamepad).toContain("pulsa □")
+    expect(gamepad).toContain("presiona □")
   })
 })
 

@@ -47,6 +47,7 @@ import {
   type Direction,
 } from "@ui/focusNav"
 import { createDefaultSettings, type Settings } from "@core/settings"
+import { LOCALE } from "@core/locale"
 import { endlessBiomes, type RecordKind } from "@core/records"
 import { describeDeathCause } from "@core/systems/deathCause"
 import { visibleSegments } from "@core/systems/runTimeline"
@@ -494,7 +495,7 @@ export class ScreenManager {
       [
         {
           label: "Eco",
-          value: meta.ecoPoints.toLocaleString("es"),
+          value: meta.ecoPoints.toLocaleString(LOCALE),
           highlight: true,
         },
         { label: "Mejor zona", value: bestBiome },
@@ -505,7 +506,7 @@ export class ScreenManager {
         },
         {
           label: "Desechos recolectados",
-          value: meta.totalDebris.toLocaleString("es"),
+          value: meta.totalDebris.toLocaleString(LOCALE),
         },
       ],
       true,
@@ -543,7 +544,7 @@ export class ScreenManager {
       this.showHowToPlay("Volver al inicio", () => this.showHub(meta, "help")),
     )
 
-    const settingsBtn = makeButton("Ajustes", () =>
+    const settingsBtn = makeButton("Configuración", () =>
       this.showSettings("Volver al inicio", () =>
         this.showHub(meta, "settings"),
       ),
@@ -557,7 +558,7 @@ export class ScreenManager {
     const daily = meta.daily?.date === today ? meta.daily : null
     const dailyBtn = makeButton(
       daily
-        ? `Desafío diario · récord ${daily.bestEco.toLocaleString("es")} Eco`
+        ? `Desafío diario · récord ${daily.bestEco.toLocaleString(LOCALE)} Eco`
         : "Desafío diario",
       () => this.callbacks.onStartDaily(),
     )
@@ -712,7 +713,7 @@ export class ScreenManager {
     }
     if (summary.daily && meta.daily?.date === summary.daily) {
       lines.push(
-        `Desafío diario · récord de hoy: ${meta.daily.bestEco.toLocaleString("es")} Eco (${meta.daily.attempts} ${meta.daily.attempts === 1 ? "intento" : "intentos"})`,
+        `Desafío diario · récord de hoy: ${meta.daily.bestEco.toLocaleString(LOCALE)} Eco (${meta.daily.attempts} ${meta.daily.attempts === 1 ? "intento" : "intentos"})`,
       )
     }
     return lines
@@ -729,7 +730,7 @@ export class ScreenManager {
     const subtitle = el(
       "p",
       "upgrade-subtitle",
-      `${found} de ${total} registrados. Recoge un desecho para apuntarlo.`,
+      `${found} de ${total} registrados. Recoge un desecho para registrarlo.`,
     )
 
     const list = el("div", "codex-list")
@@ -860,7 +861,7 @@ export class ScreenManager {
     })
 
     const refresh = (): void => {
-      subtitle.textContent = `Eco disponible: ${meta.ecoPoints.toLocaleString("es")}`
+      subtitle.textContent = `Eco disponible: ${meta.ecoPoints.toLocaleString(LOCALE)}`
       for (const { upgrade, card, level, btn, status } of cards) {
         const view = upgradeView(meta, upgrade)
         const variant: ButtonVariant = view.isMax
@@ -959,7 +960,7 @@ export class ScreenManager {
     const { root, content } = this.makeWindowFrame()
     content.classList.add("screen-content--top")
 
-    const title = this.makeScreenTitle("Ajustes", "screen-title--tight")
+    const title = this.makeScreenTitle("Configuración", "screen-title--tight")
     title.id = "settings-dialog-title"
 
     const { controls } = this.callbacks.getHelpState()
@@ -972,7 +973,7 @@ export class ScreenManager {
 
     const buttons = el("div", "action-row action-row--wrap action-row--top")
 
-    const resetBtn = makeButton("Restablecer ajustes", () => {
+    const resetBtn = makeButton("Restablecer configuración", () => {
       this.callbacks.onUpdateSettings(createDefaultSettings())
       this.showSettings(backLabel, onBack, "reset")
     })
@@ -1045,7 +1046,7 @@ export class ScreenManager {
           },
       {
         label: "Desechos recolectados",
-        value: summary.debrisCollected.toLocaleString("es"),
+        value: summary.debrisCollected.toLocaleString(LOCALE),
         record: isRecord("debris"),
       },
       {
@@ -1055,12 +1056,12 @@ export class ScreenManager {
       },
       {
         label: "Eco de esta inmersión",
-        value: `+${totalEarned.toLocaleString("es")}`,
+        value: `+${totalEarned.toLocaleString(LOCALE)}`,
         sub:
           summary.ecoBonus > 0
             ? `Incluye +${summary.ecoBonus} de bono`
             : summary.ecoLost > 0
-              ? `${summary.ecoLost.toLocaleString("es")} perdido por no cerrar la vuelta`
+              ? `${summary.ecoLost.toLocaleString(LOCALE)} perdido por no cerrar la vuelta`
               : undefined,
         highlight: true,
         record: isRecord("eco"),
@@ -1170,12 +1171,12 @@ export class ScreenManager {
       },
       {
         label: RECORD_LABELS.debris,
-        value: records.bestDebris.toLocaleString("es"),
+        value: records.bestDebris.toLocaleString(LOCALE),
         record: isRecord("debris"),
       },
       {
         label: RECORD_LABELS.eco,
-        value: records.bestEco.toLocaleString("es"),
+        value: records.bestEco.toLocaleString(LOCALE),
         record: isRecord("eco"),
       },
       {
@@ -1201,7 +1202,7 @@ export class ScreenManager {
       el(
         "p",
         "details-eco",
-        `Eco acumulado: ${meta.ecoPoints.toLocaleString("es")}`,
+        `Eco acumulado: ${meta.ecoPoints.toLocaleString(LOCALE)}`,
       ),
     )
 
@@ -1273,8 +1274,8 @@ export class ScreenManager {
         : `${segment.biomeIndex + 1}. ${segment.biomeName}`
       const stats = [
         formatTime(segment.seconds),
-        `${segment.debris.toLocaleString("es")} desechos`,
-        `+${segment.eco.toLocaleString("es")} Eco`,
+        `${segment.debris.toLocaleString(LOCALE)} desechos`,
+        `+${segment.eco.toLocaleString(LOCALE)} Eco`,
       ].join(" · ")
 
       const item = el("li", "summary-timeline-item")
@@ -1522,16 +1523,16 @@ export class ScreenManager {
       title.classList.add("screen-title--compact")
 
       const zoneLabel = `${runInfo.biomeIndex + 1}. ${runInfo.biomeName}`
-      const eco = Math.floor(runInfo.ecoAwareness).toLocaleString("es")
+      const eco = Math.floor(runInfo.ecoAwareness).toLocaleString(LOCALE)
       const banked =
         runInfo.ecoBanked !== undefined
-          ? ` (${Math.round(runInfo.ecoBanked).toLocaleString("es")} asegurado)`
+          ? ` (${Math.round(runInfo.ecoBanked).toLocaleString(LOCALE)} asegurado)`
           : ""
       content.append(
         el(
           "p",
           "pause-stats",
-          `${zoneLabel} · ${runInfo.depth} m · Eco ${eco}${banked}`,
+          `${zoneLabel} · ${runInfo.depth.toLocaleString(LOCALE)} m · Eco ${eco}${banked}`,
         ),
       )
 
@@ -1541,7 +1542,7 @@ export class ScreenManager {
           runInfo.ecoBanked,
         )
         if (lost > 0) {
-          lossWarning = `Perderás ${lost.toLocaleString("es")} Eco de esta vuelta. Ciérrala para asegurarlo todo.`
+          lossWarning = `Perderás ${lost.toLocaleString(LOCALE)} Eco de esta vuelta. Ciérrala para asegurarlo todo.`
         }
       }
     }
@@ -1569,7 +1570,7 @@ export class ScreenManager {
     )
     abandonBtn.classList.add("is-side")
 
-    const settingsBtn = makeButton("Ajustes", () =>
+    const settingsBtn = makeButton("Configuración", () =>
       this.showSettings("Volver a la pausa", () =>
         this.showPause(onResume, onAbandon, runInfo, "settings"),
       ),

@@ -52,7 +52,7 @@ export const STAT_INFO: Record<StatKey, StatInfo> = {
   },
   radius: {
     term: "RADIO",
-    label: "Radio de recogida",
+    label: "Radio de recolección",
     description: "Distancia a la que recoges un desecho.",
     goodWhenHigher: true,
     format: (v) => fixed(v, 1),

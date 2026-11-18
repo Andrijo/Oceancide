@@ -62,5 +62,5 @@ export const RECORD_LABELS: Record<RecordKind, string> = {
   debris: "Más desechos",
   eco: "Más Eco",
   endless: "Más biomas sin fin",
-  fastest: "Run más rápida",
+  fastest: "Inmersión más rápida",
 }

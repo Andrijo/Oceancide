@@ -3,6 +3,7 @@
 // cada compra para actualizar las tarjetas sin volver a montar la pantalla.
 
 import type { MetaState } from "@core/MetaState"
+import { LOCALE } from "@core/locale"
 import type { Upgrade } from "@/tycoon/Upgrades"
 
 export interface UpgradeView {
@@ -35,8 +36,8 @@ export function upgradeView(
     canBuy,
     buttonLabel: isMax
       ? "Nivel máximo"
-      : `Comprar · ${cost.toLocaleString("es")} Eco`,
+      : `Comprar · ${cost.toLocaleString(LOCALE)} Eco`,
     status:
-      isMax || canBuy ? "" : `Te faltan ${missing.toLocaleString("es")} Eco`,
+      isMax || canBuy ? "" : `Te faltan ${missing.toLocaleString(LOCALE)} Eco`,
   }
 }

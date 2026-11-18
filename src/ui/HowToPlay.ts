@@ -53,7 +53,7 @@ function debrisCards(): HelpCard[] {
       tag: "Movimiento",
       tone: "calm",
       name: "Flotante",
-      text: "Se mece en el sitio. El más fácil de recoger: basta con pasar cerca.",
+      text: "Se mece en su lugar. El más fácil de recoger: basta con pasar cerca.",
       example: exampleOf((d) => !d.motion && !d.hazard),
     },
     {
@@ -67,7 +67,7 @@ function debrisCards(): HelpCard[] {
       tag: "Movimiento",
       tone: "calm",
       name: "Se hunde",
-      text: "Baja despacio hasta el fondo de la zona. Atrápalo antes o baja a por él.",
+      text: "Baja despacio hasta el fondo de la zona. Atrápalo antes o baja por él.",
       example: exampleOf((d) => d.motion === "hunde"),
     },
     {
@@ -247,7 +247,7 @@ export function createHowToPlayBody(
   const goal = node(
     "p",
     "help-lead",
-    "Cumple el objetivo de cada zona (recoger el 60 % de sus desechos: el contador llega al 100 %) y desciende a la siguiente. Vigila la calavera: si la toxicidad se llena, la inmersión termina.",
+    "Cumple el objetivo de cada zona (recoger el 60% de sus desechos: el contador llega al 100%) y desciende a la siguiente. Vigila la calavera: si la toxicidad se llena, la inmersión termina.",
   )
 
   const currency = node(
@@ -264,7 +264,7 @@ export function createHowToPlayBody(
       device === "keyboard",
     ),
     gamepad: controlList(
-      "Mando",
+      "Control",
       gamepadControlRows(padStyle, bindings.pad),
       device === "gamepad",
     ),
