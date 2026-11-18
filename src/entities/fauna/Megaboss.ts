@@ -9,8 +9,16 @@ import type {
   HostileKind,
 } from "../Creature"
 import { CREATURE_NAMES } from "../Creature"
-import { addFresnelRim } from "../fresnelRim"
-import { edgeAvoidance, turnToward } from "../steering"
+import { angleDelta, edgeAvoidance, turnToward } from "../steering"
+import { animateLook, type CreatureLook } from "./look"
+import {
+  leviathan,
+  netKraken,
+  scrapShark,
+  type BossModel,
+  type LeakAnchor,
+} from "./models/bosses"
+import { disposeTree } from "./models/kit"
 
 export type BossAttack = "shockwave" | "charge" | "spawn"
 
@@ -105,18 +113,17 @@ export class Megaboss implements Creature {
   public readonly mesh = new THREE.Group()
 
   private readonly spec: BossSpec
-  private readonly root = new THREE.Group()
-  private readonly geometries: THREE.BufferGeometry[] = []
-  private readonly materials: THREE.Material[] = []
+  /** Modelo del kraken y del tiburón (el leviatán va por segmentos). */
+  private readonly look: CreatureLook | null = null
   private readonly bodyMaterial: THREE.MeshStandardMaterial
-  private readonly accentMaterial: THREE.MeshStandardMaterial
   private readonly nodeMaterial: THREE.MeshStandardMaterial
   private readonly cleanMaterial: THREE.MeshStandardMaterial
+  private readonly nodeGeometry = new THREE.IcosahedronGeometry(1, 1)
   private readonly nodes: LeakNode[] = []
   /** Centros del cuerpo que hacen daño al tocarlos, y su radio. */
   private readonly cores: { object: THREE.Object3D; radius: number }[] = []
-  private readonly tentacles: THREE.Object3D[] = []
   private readonly segments: THREE.Object3D[] = []
+  private readonly serpentJaw: THREE.Group | null = null
   private readonly trail: THREE.Vector3[] = []
   private readonly wave: THREE.Mesh
   private readonly waveCenter = new THREE.Vector3()
@@ -124,6 +131,7 @@ export class Megaboss implements Creature {
 
   private readonly phaseOffset: number
   private heading: number
+  private lastHeading: number
   private state: Phase = "roam"
   private stateTimer = 0
   private attackTimer: number
@@ -142,72 +150,73 @@ export class Megaboss implements Creature {
     this.spec = BOSSES[kind]
     this.phaseOffset = rng.range(0, Math.PI * 2)
     this.heading = rng.range(0, Math.PI * 2)
+    this.lastHeading = this.heading
     this.attackTimer = this.spec.interval
     this.status = { kind, cleaned: 0, total: this.spec.nodes, defeated: false }
 
     this.mesh.name = kind
     this.mesh.userData.kind = kind
     this.mesh.position.copy(position)
-    this.mesh.add(this.root)
 
-    this.bodyMaterial = this.mat(
-      new THREE.MeshStandardMaterial({
-        color: this.spec.color,
-        roughness: 0.6,
-        metalness: 0.25,
-        emissive: 0x4a1f3a,
-        emissiveIntensity: 0.25,
-        flatShading: true,
-      }),
-    )
-    addFresnelRim(this.bodyMaterial, 0.7, 2)
-    this.accentMaterial = this.mat(
-      new THREE.MeshStandardMaterial({
-        color: this.spec.accent,
-        roughness: 0.7,
-        metalness: 0.3,
-        flatShading: true,
-        side: THREE.DoubleSide,
-      }),
-    )
-    this.nodeMaterial = this.mat(
-      new THREE.MeshStandardMaterial({
-        color: 0xb6ff3a,
-        emissive: 0x8cff1a,
-        emissiveIntensity: 2.2,
-        roughness: 0.3,
-      }),
-    )
-    this.cleanMaterial = this.mat(
-      new THREE.MeshStandardMaterial({
-        color: 0x9fe6ff,
-        emissive: 0x4fc3f7,
-        emissiveIntensity: 0.6,
-      }),
-    )
+    // Fugas: lodo tóxico facetado que brilla; limpias, se vuelven agua clara.
+    this.nodeMaterial = new THREE.MeshStandardMaterial({
+      color: 0xb6ff3a,
+      emissive: 0x8cff1a,
+      emissiveIntensity: 2.2,
+      roughness: 0.3,
+      flatShading: true,
+    })
+    this.cleanMaterial = new THREE.MeshStandardMaterial({
+      color: 0x9fe6ff,
+      emissive: 0x4fc3f7,
+      emissiveIntensity: 0.6,
+      flatShading: true,
+    })
 
-    switch (this.spec.variant) {
-      case "kraken":
-        this.buildKraken()
-        break
-      case "shark":
-        this.buildShark()
-        break
-      case "serpent":
-        this.buildSerpent(position)
-        break
+    let leaks: LeakAnchor[]
+    if (this.spec.variant === "serpent") {
+      const serpent = leviathan(SERPENT_SEGMENTS, this.spec.nodes)
+      this.bodyMaterial = serpent.bodyMaterial
+      this.serpentJaw = serpent.jaw
+      serpent.segments.forEach((segment, i) => {
+        this.mesh.add(segment)
+        this.segments.push(segment)
+        this.cores.push({ object: segment, radius: serpent.radii[i] })
+        this.trail.push(
+          position
+            .clone()
+            .add(
+              new THREE.Vector3(
+                -Math.sin(this.heading) * SERPENT_SPACING * i,
+                0,
+                -Math.cos(this.heading) * SERPENT_SPACING * i,
+              ),
+            ),
+        )
+      })
+      leaks = serpent.leaks
+    } else {
+      const model: BossModel =
+        this.spec.variant === "kraken"
+          ? netKraken(rng, this.spec.nodes)
+          : scrapShark(rng, this.spec.nodes)
+      this.look = model.look
+      this.bodyMaterial = model.look.bodyMaterial
+      this.cores.push(...model.cores)
+      this.mesh.add(model.look.root)
+      leaks = model.leaks
     }
+    for (const leak of leaks) this.addNode(leak.parent, leak.at)
+    if (this.spec.variant === "serpent") this.layoutSerpent(0)
 
     this.wave = new THREE.Mesh(
-      this.geo(new THREE.TorusGeometry(1, 0.12, 6, 64)),
-      this.mat(
-        new THREE.MeshBasicMaterial({
-          color: 0xc6ff4a,
-          transparent: true,
-          opacity: 0.7,
-          depthWrite: false,
-        }),
-      ),
+      new THREE.TorusGeometry(1, 0.12, 6, 64),
+      new THREE.MeshBasicMaterial({
+        color: 0xc6ff4a,
+        transparent: true,
+        opacity: 0.7,
+        depthWrite: false,
+      }),
     )
     this.wave.rotation.x = Math.PI / 2
     this.wave.visible = false
@@ -280,8 +289,7 @@ export class Megaboss implements Creature {
     if (this.bodyCooldown === 0) {
       for (const core of this.cores) {
         core.object.getWorldPosition(scratch)
-        const reach = core.radius * this.root.scale.x
-        if (scratch.distanceTo(target.position) < reach) {
+        if (scratch.distanceTo(target.position) < core.radius) {
           this.bodyCooldown = BODY_COOLDOWN
           effects.hit = {
             kind: this.kind,
@@ -299,8 +307,11 @@ export class Megaboss implements Creature {
 
   public dispose(): void {
     this.mesh.removeFromParent()
-    for (const g of this.geometries) g.dispose()
-    for (const m of this.materials) m.dispose()
+    disposeTree(this.mesh)
+    // Pueden no estar ya en ninguna malla (todas limpias / ninguna limpia).
+    this.nodeMaterial.dispose()
+    this.cleanMaterial.dispose()
+    this.nodeGeometry.dispose()
   }
 
   // ------------------------------------------------------------------ combate
@@ -483,253 +494,46 @@ export class Megaboss implements Creature {
       (glow - this.bodyMaterial.emissiveIntensity) * blend
     this.nodeMaterial.emissiveIntensity = 1.8 + Math.sin(t * 4) * 0.6
 
-    if (this.spec.variant === "serpent") {
+    // Abre la boca al avisar y al embestir.
+    const attacking =
+      !this.defeated && (this.state === "telegraph" || this.state === "charge")
+
+    if (this.serpentJaw) {
       this.layoutSerpent(t)
+      const open = attacking ? 0.6 : 0.08 + Math.sin(t * 1.3) * 0.04
+      this.serpentJaw.rotation.x += (open - this.serpentJaw.rotation.x) * blend
       return
     }
 
-    this.root.rotation.y = this.heading
-    for (const tentacle of this.tentacles) {
-      const angle = tentacle.userData.angle as number
-      tentacle.rotation.x =
-        (tentacle.userData.baseX as number) +
-        Math.sin(t * 1.5 + angle * 2) * 0.3
-      tentacle.rotation.z = Math.cos(t * 1.2 + angle * 3) * 0.3
-    }
-    const tail = this.root.getObjectByName("tail")
-    if (tail) {
-      const speed = this.state === "charge" ? 14 : 4
-      tail.rotation.y = Math.sin(t * speed) * 0.35
-    }
+    if (!this.look) return
+    this.look.root.rotation.y = this.heading
+    const turn =
+      deltaTime > 0 ? angleDelta(this.lastHeading, this.heading) / deltaTime : 0
+    this.lastHeading = this.heading
+    animateLook(this.look, {
+      deltaTime,
+      time,
+      phase: this.phaseOffset,
+      effort: this.state === "charge" ? 3 : attacking ? 1.6 : 1,
+      turn,
+      mouth: attacking ? 1 : 0,
+    })
   }
 
   // ------------------------------------------------------------------ aspecto
-
-  private geo<T extends THREE.BufferGeometry>(g: T): T {
-    this.geometries.push(g)
-    return g
-  }
-
-  private mat<T extends THREE.Material>(m: T): T {
-    this.materials.push(m)
-    return m
-  }
 
   private addNode(
     parent: THREE.Object3D,
     local: THREE.Vector3,
     size = 0.55,
   ): void {
-    const mesh = new THREE.Mesh(this.nodeGeometry(), this.nodeMaterial)
+    const mesh = new THREE.Mesh(this.nodeGeometry, this.nodeMaterial)
     mesh.position.copy(local)
     // Compensa la escala del padre para que todas las fugas midan lo mismo.
     const s = parent.scale
     mesh.scale.set(size / s.x, size / s.y, size / s.z)
     parent.add(mesh)
     this.nodes.push({ mesh, cleaned: false })
-  }
-
-  private sharedNodeGeometry: THREE.SphereGeometry | null = null
-
-  private nodeGeometry(): THREE.SphereGeometry {
-    if (!this.sharedNodeGeometry) {
-      this.sharedNodeGeometry = this.geo(new THREE.SphereGeometry(1, 10, 8))
-    }
-    return this.sharedNodeGeometry
-  }
-
-  /** Reparte las fugas sobre un elipsoide unidad (padre escalado). */
-  private spreadNodes(
-    parent: THREE.Object3D,
-    count: number,
-    topOnly = false,
-  ): void {
-    for (let i = 0; i < count; i++) {
-      const y = topOnly
-        ? 0.2 + (i / Math.max(1, count - 1)) * 0.7
-        : 1 - ((i + 0.5) / count) * 2
-      const r = Math.sqrt(Math.max(0, 1 - y * y))
-      const a = i * 2.39996 + 0.5
-      this.addNode(
-        parent,
-        new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r).multiplyScalar(
-          1.02,
-        ),
-      )
-    }
-  }
-
-  private buildKraken(): void {
-    const sphere = this.geo(new THREE.SphereGeometry(1, 14, 10))
-    const mantle = new THREE.Mesh(sphere, this.bodyMaterial)
-    mantle.scale.set(2.4, 2.9, 2.4)
-    mantle.position.y = 1.2
-    this.root.add(mantle)
-    this.cores.push({ object: mantle, radius: 2.3 })
-
-    const tentacleGeometry = this.geo(
-      new THREE.CylinderGeometry(0.12, 0.5, 6, 6),
-    )
-    tentacleGeometry.translate(0, -3, 0)
-    for (let i = 0; i < 8; i++) {
-      const angle = (i / 8) * Math.PI * 2
-      const pivot = new THREE.Group()
-      pivot.position.set(Math.cos(angle) * 1.5, -1.2, Math.sin(angle) * 1.5)
-      pivot.userData.angle = angle
-      pivot.userData.baseX = 0
-      pivot.add(new THREE.Mesh(tentacleGeometry, this.accentMaterial))
-      this.tentacles.push(pivot)
-      this.root.add(pivot)
-    }
-
-    // Redes enredadas sobre el manto.
-    const net = new THREE.Mesh(
-      this.geo(new THREE.IcosahedronGeometry(1.08, 1)),
-      this.mat(
-        new THREE.MeshBasicMaterial({
-          color: 0xd9d2b8,
-          wireframe: true,
-          transparent: true,
-          opacity: 0.6,
-        }),
-      ),
-    )
-    mantle.add(net)
-
-    for (const side of [-1, 1]) {
-      const eye = new THREE.Mesh(sphere, this.nodeMaterial)
-      eye.scale.set(0.12, 0.12, 0.06)
-      eye.position.set(side * 0.45, -0.1, 0.9)
-      mantle.add(eye)
-    }
-    this.spreadNodes(mantle, this.spec.nodes)
-  }
-
-  private buildShark(): void {
-    const sphere = this.geo(new THREE.SphereGeometry(1, 16, 10))
-    const body = new THREE.Mesh(sphere, this.bodyMaterial)
-    body.scale.set(1.6, 1.8, 5.2)
-    this.root.add(body)
-    this.cores.push({ object: body, radius: 1.8 })
-    const front = new THREE.Object3D()
-    front.position.z = 3
-    this.root.add(front)
-    this.cores.push({ object: front, radius: 1.6 })
-    const back = new THREE.Object3D()
-    back.position.z = -3
-    this.root.add(back)
-    this.cores.push({ object: back, radius: 1.3 })
-
-    const finShape = new THREE.Shape()
-    finShape.moveTo(0, 0)
-    finShape.lineTo(1.2, 2.4)
-    finShape.lineTo(2.4, 0)
-    finShape.closePath()
-    const finGeometry = this.geo(new THREE.ShapeGeometry(finShape))
-    const dorsal = new THREE.Mesh(finGeometry, this.accentMaterial)
-    dorsal.position.set(0, 1.6, -1.2)
-    dorsal.rotation.y = -Math.PI / 2
-    this.root.add(dorsal)
-
-    const tail = new THREE.Group()
-    tail.name = "tail"
-    tail.position.z = -5
-    const tailFin = new THREE.Mesh(finGeometry, this.accentMaterial)
-    tailFin.scale.set(1.2, 1.4, 1)
-    tailFin.rotation.set(0, Math.PI / 2, 0)
-    tailFin.position.set(0, -1.6, 1.4)
-    tail.add(tailFin)
-    this.root.add(tail)
-
-    for (const side of [-1, 1]) {
-      const fin = new THREE.Mesh(finGeometry, this.accentMaterial)
-      fin.scale.set(0.9, 0.9, 1)
-      fin.position.set(side * 1.3, -0.6, 1.5)
-      fin.rotation.set(Math.PI / 2, 0, side > 0 ? -0.4 : Math.PI + 0.4)
-      this.root.add(fin)
-    }
-
-    // Placas de chatarra clavadas y dientes.
-    const plate = this.geo(new THREE.BoxGeometry(1, 0.15, 1.4))
-    for (let i = 0; i < 6; i++) {
-      const piece = new THREE.Mesh(plate, this.accentMaterial)
-      const a = i * 1.7
-      piece.position.set(Math.cos(a) * 1.4, Math.sin(a) * 1.5, -2 + i * 0.8)
-      piece.lookAt(piece.position.clone().multiplyScalar(2))
-      this.root.add(piece)
-    }
-    const tooth = this.geo(new THREE.ConeGeometry(0.12, 0.45, 4))
-    const toothMaterial = this.mat(
-      new THREE.MeshStandardMaterial({ color: 0xe8e2cf }),
-    )
-    for (let i = 0; i < 9; i++) {
-      const a = Math.PI + (i / 8 - 0.5) * 2.2
-      const t = new THREE.Mesh(tooth, toothMaterial)
-      t.position.set(Math.sin(a) * -0.8, -0.55 + Math.cos(a) * 0.1, 4.7)
-      t.rotation.x = Math.PI
-      this.root.add(t)
-    }
-    this.spreadNodes(body, this.spec.nodes, true)
-  }
-
-  private buildSerpent(start: THREE.Vector3): void {
-    const sphere = this.geo(new THREE.SphereGeometry(1, 12, 9))
-    const spike = this.geo(new THREE.ConeGeometry(0.25, 1, 4))
-    const nodeEvery = Math.max(
-      1,
-      Math.floor(SERPENT_SEGMENTS / this.spec.nodes),
-    )
-    let placed = 0
-    for (let i = 0; i < SERPENT_SEGMENTS; i++) {
-      const taper = 1 - (i / SERPENT_SEGMENTS) * 0.7
-      const segment = new THREE.Mesh(
-        sphere,
-        i === 0 ? this.accentMaterial : this.bodyMaterial,
-      )
-      segment.scale.set(1.6 * taper, 1.4 * taper, 1.5 * taper)
-      segment.rotation.order = "YXZ"
-      this.mesh.add(segment)
-      this.segments.push(segment)
-      this.trail.push(
-        start
-          .clone()
-          .add(
-            new THREE.Vector3(
-              -Math.sin(this.heading) * SERPENT_SPACING * i,
-              0,
-              -Math.cos(this.heading) * SERPENT_SPACING * i,
-            ),
-          ),
-      )
-      this.cores.push({ object: segment, radius: 1.4 * taper })
-      if (i > 0 && i % 2 === 0) {
-        const s = new THREE.Mesh(spike, this.accentMaterial)
-        s.position.y = 1
-        s.scale.set(
-          1 / segment.scale.x,
-          1.2 / segment.scale.y,
-          1 / segment.scale.z,
-        )
-        segment.add(s)
-      }
-      if (i > 0 && i % nodeEvery === 0 && placed < this.spec.nodes) {
-        const side = placed % 2 === 0 ? 1 : -1
-        this.addNode(segment, new THREE.Vector3(side * 0.75, 0.75, 0))
-        placed++
-      }
-    }
-    while (placed < this.spec.nodes) {
-      this.addNode(this.segments[1], new THREE.Vector3(0, 1.02, 0.2 * placed))
-      placed++
-    }
-    // Ojos en la cabeza.
-    for (const side of [-1, 1]) {
-      const eye = new THREE.Mesh(sphere, this.nodeMaterial)
-      eye.scale.set(0.12, 0.12, 0.1)
-      eye.position.set(side * 0.55, 0.35, 0.8)
-      this.segments[0].add(eye)
-    }
-    this.layoutSerpent(0)
   }
 
   /** El leviatán es una cadena de segmentos que sigue a la cabeza. */

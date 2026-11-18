@@ -7,8 +7,9 @@ import type {
   CreatureKind,
 } from "../Creature"
 import { CREATURE_NAMES } from "../Creature"
-import { edgeAvoidance, turnToward } from "../steering"
-import { animateLook, buildLook, type CreatureLook } from "./look"
+import { angleDelta, edgeAvoidance, turnToward } from "../steering"
+import { animateLook, type CreatureLook } from "./look"
+import { buildModel } from "./models"
 import { SPECIES, type GenericKind, type SpeciesSpec } from "./species"
 
 const EDGE_MARGIN = 8
@@ -17,9 +18,9 @@ const FLOOR_OFFSET = 0.7
 const toTarget = new THREE.Vector3()
 
 /**
- * Criatura montada a partir de su ficha (`SPECIES`): un aspecto hecho de
- * piezas, un estilo de movimiento y un comportamiento. Cada comportamiento es
- * una pequeña máquina de estados con su temporizador.
+ * Criatura montada a partir de su ficha (`SPECIES`): un modelo propio
+ * (`models/`), un estilo de movimiento y un comportamiento. Cada
+ * comportamiento es una pequeña máquina de estados con su temporizador.
  */
 export class SpeciesCreature implements Creature {
   public readonly kind: GenericKind
@@ -29,8 +30,12 @@ export class SpeciesCreature implements Creature {
   private readonly look: CreatureLook
   private readonly phase: number
   private heading: number
+  /** Rumbo del frame anterior, para ladearse en las curvas. */
+  private lastHeading: number
   private pitch = 0
   private speedFactor = 1
+  /** Escala del pez globo: 1 desinflado, 1.8 inflado. */
+  private inflation = 1
 
   /** Enfriamiento del golpe, del regalo o del robo. */
   private cooldown = 0
@@ -51,12 +56,13 @@ export class SpeciesCreature implements Creature {
     this.spec = SPECIES[kind]
     this.phase = rng.range(0, Math.PI * 2)
     this.heading = rng.range(0, Math.PI * 2)
+    this.lastHeading = this.heading
 
     this.mesh.name = kind
     this.mesh.userData.kind = kind
     this.mesh.position.copy(position)
 
-    this.look = buildLook(this.spec.look, rng)
+    this.look = buildModel(kind, rng)
     this.mesh.add(this.look.root)
 
     const behavior = this.spec.behavior
@@ -453,19 +459,34 @@ export class SpeciesCreature implements Creature {
     look.root.rotation.order = "YXZ"
     look.root.rotation.y = this.heading
     look.root.rotation.x = -this.pitch * 0.6
-    animateLook(look, time, this.phase, Math.min(3, this.speedFactor))
 
     const behavior = this.spec.behavior
     const blend = 1 - Math.exp(-6 * deltaTime)
 
     if (behavior.type === "inflate") {
-      const inflated = this.active > 0 ? 1.8 : 1
-      const current = look.body.scale.x / this.spec.look.body[0]
-      const next = current + (inflated - current) * blend
-      const [w, h, l] = this.spec.look.body
-      look.body.scale.set(w * next, h * next, l * next)
-      look.spikes?.scale.setScalar(next > 1.2 ? next : 0.35)
+      const target = this.active > 0 ? 1.8 : 1
+      this.inflation += (target - this.inflation) * blend
+      // Las púas salen al inflarse y se esconden al desinflarse.
+      const out = THREE.MathUtils.smoothstep(this.inflation, 1.1, 1.5)
+      look.spikes?.scale.setScalar(0.35 + 0.65 * out)
     }
+
+    const turn =
+      deltaTime > 0 ? angleDelta(this.lastHeading, this.heading) / deltaTime : 0
+    this.lastHeading = this.heading
+
+    let effort = Math.min(3, this.speedFactor)
+    if (behavior.type === "rescue") effort = this.freed ? 1.6 : 2.5
+    const hunting = behavior.type === "chase" && this.active > 0
+    animateLook(look, {
+      deltaTime,
+      time,
+      phase: this.phase,
+      effort,
+      turn,
+      inflate: this.inflation,
+      mouth: hunting ? 1 : this.inflation > 1.2 ? 0.6 : 0,
+    })
 
     if (look.lureMaterial) {
       const lit = behavior.type === "chase" && this.cooldown > 0 ? 0.2 : 2.4
