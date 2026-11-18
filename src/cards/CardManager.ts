@@ -73,13 +73,15 @@ export class CardManager {
   }
 
   // Aplica la carta y la guarda en el RunState. Devuelve un texto cuando hay
-  // algo que explicar: el resultado del azar o, en las de caos, lo que ha
-  // cambiado (alteran reglas y conviene recordarlo al elegirlas).
+  // algo que explicar: el resultado del azar o, en las de caos y las que
+  // cambian reglas, lo que ha cambiado (conviene recordarlo al elegirlas).
   public pick(card: Card, ctx: CardContext): string | undefined {
     const outcome = applyCard(card, ctx)
     ctx.run.cards.push(card)
     if (outcome !== undefined) return outcome
-    return card.rarity === "chaos" ? cardValueText(card) : undefined
+    return card.rarity === "chaos" || card.rules
+      ? cardValueText(card)
+      : undefined
   }
 
   // --- Roll base ---

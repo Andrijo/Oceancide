@@ -2,7 +2,8 @@
 // Efectos declarativos de las cartas: de una sola declaración salen el texto
 // del valor, su color (positivo/negativo) y la aplicación real.
 
-import type { Card, CardContext } from "./Card"
+import type { Card, CardContext, CardTag } from "./Card"
+import { applyCardRules, describeCardRules } from "./CardRules"
 
 /**
  * Efectos de una carta. El orden de las claves es el orden en que se muestran.
@@ -156,10 +157,123 @@ export function joinCardValue(
   return parts.map((part) => part.text).join(separator)
 }
 
-/** Tramos del valor de una carta: los declarados y, si tiene azar, los suyos. */
+/** Efectos que se multiplican entre sí (el resto se suman). */
+const MULTIPLICATIVE: ReadonlySet<EffectKey> = new Set<EffectKey>([
+  "speed",
+  "eco",
+  "passiveToxicity",
+])
+
+/** Junta dos efectos en uno equivalente a aplicar `a` y después `b`. */
+export function combineCardEffects(
+  a: CardEffects,
+  b: CardEffects,
+): CardEffects {
+  const result: CardEffects = { ...a }
+  for (const [key, value] of entries(b)) {
+    const current = result[key]
+    if (current === undefined) result[key] = value
+    else
+      result[key] = MULTIPLICATIVE.has(key) ? current * value : current + value
+  }
+  return result
+}
+
+/** Efectos aplicados `times` veces seguidas. */
+export function scaleCardEffects(
+  effects: CardEffects,
+  times: number,
+): CardEffects {
+  const result: CardEffects = {}
+  if (times <= 0) return result
+  for (const [key, value] of entries(effects)) {
+    result[key] = MULTIPLICATIVE.has(key) ? value ** times : value * times
+  }
+  return result
+}
+
+const TAG_LABELS: Record<CardTag, string> = {
+  dash: "#DASH",
+  filtro: "#FILTRO",
+  eco: "#ECO",
+  cuidado: "#CUIDADO",
+  riesgo: "#RIESGO",
+}
+
+export function tagLabel(tag: CardTag): string {
+  return TAG_LABELS[tag]
+}
+
+/**
+ * Arquetipos de una carta: los declarados o, si no los tiene, los que se
+ * deducen de sus efectos y su rareza.
+ */
+export function cardTags(card: Card): CardTag[] {
+  if (card.tags) return card.tags
+  const tags: CardTag[] = []
+  const effects = card.effects ?? {}
+  if (effects.dash !== undefined) tags.push("dash")
+  if (effects.filters !== undefined || effects.ecoPerSecond !== undefined) {
+    tags.push("filtro")
+  }
+  if (effects.eco !== undefined && effects.eco > 1) tags.push("eco")
+  if (effects.resistance !== undefined && effects.resistance > 0) {
+    tags.push("cuidado")
+  }
+  if (card.rarity === "curse" || card.rarity === "chaos") tags.push("riesgo")
+  return tags
+}
+
+function countTag(cards: readonly Card[], tag: CardTag): number {
+  return cards.filter((card) => cardTags(card).includes(tag)).length
+}
+
+/**
+ * Lo que de verdad aplica una carta con las que ya tienes (`owned`): sus
+ * efectos, su sinergia (una vez por carta de su etiqueta, ella incluida) y la
+ * sinergia de las cartas que ya tienes y que escalan con sus etiquetas.
+ */
+export function effectiveCardEffects(
+  card: Card,
+  owned: readonly Card[],
+): CardEffects {
+  let effects: CardEffects = card.effects ?? {}
+
+  if (card.scaling) {
+    const own = cardTags(card).includes(card.scaling.tag) ? 1 : 0
+    const times = countTag(owned, card.scaling.tag) + own
+    effects = combineCardEffects(
+      effects,
+      scaleCardEffects(card.scaling.effects, times),
+    )
+  }
+
+  const tags = cardTags(card)
+  for (const other of owned) {
+    if (other.scaling && tags.includes(other.scaling.tag)) {
+      effects = combineCardEffects(effects, other.scaling.effects)
+    }
+  }
+
+  return effects
+}
+
+/** Texto de una sinergia: sus efectos "POR #ETIQUETA". */
+function describeScaling(card: Card): CardValuePart[] {
+  if (!card.scaling) return []
+  const suffix = ` POR ${tagLabel(card.scaling.tag)}`
+  return describeCardEffects(card.scaling.effects).map((part) => ({
+    ...part,
+    text: part.text + suffix,
+  }))
+}
+
+/** Tramos del valor de una carta: efectos, reglas, sinergia y azar. */
 export function cardValueParts(card: Card): CardValuePart[] {
   return [
     ...(card.effects ? describeCardEffects(card.effects) : []),
+    ...(card.rules ? describeCardRules(card.rules) : []),
+    ...describeScaling(card),
     ...(card.random?.value ?? []),
   ]
 }
@@ -173,8 +287,12 @@ export function cardValueText(card: Card): string {
   return joinCardValue(cardValueParts(card), cardValueSeparator(card))
 }
 
-/** Aplica la carta entera; devuelve el resultado del azar si lo hay. */
+/**
+ * Aplica la carta entera con las que ya hay en `ctx.run.cards` (sinergias y
+ * reglas incluidas); devuelve el resultado del azar si lo hay.
+ */
 export function applyCard(card: Card, ctx: CardContext): string | undefined {
-  if (card.effects) applyCardEffects(card.effects, ctx)
+  applyCardEffects(effectiveCardEffects(card, ctx.run.cards), ctx)
+  if (card.rules) applyCardRules(card.rules, ctx.run.rules)
   return card.random?.apply(ctx)
 }

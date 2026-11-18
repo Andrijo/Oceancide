@@ -4,7 +4,11 @@
 
 import { addToxicityResistance } from "@core/systems/toxicity"
 import type { Card, CardContext } from "./Card"
-import type { CardEffects, CardTone } from "./CardEffects"
+import {
+  effectiveCardEffects,
+  type CardEffects,
+  type CardTone,
+} from "./CardEffects"
 
 export type StatKey = keyof CardEffects
 
@@ -195,20 +199,21 @@ export interface CardPreviewLine {
 }
 
 /**
- * Líneas "antes → después" de una carta, en el orden de sus efectos. Las
- * cartas con azar no se pueden prever: devuelven solo su parte declarada.
+ * Líneas "antes → después" de una carta, en el orden de sus efectos, con las
+ * sinergias que ya tienes (`owned`). Las cartas con azar no se pueden prever:
+ * devuelven solo su parte declarada; las reglas no son atributos y no salen.
  */
 export function previewCard(
   card: Card,
   build: BuildSnapshot,
+  owned: readonly Card[] = [],
 ): CardPreviewLine[] {
-  if (!card.effects) return []
-
-  const after = projectBuild(build, card.effects)
+  const effects = effectiveCardEffects(card, owned)
+  const after = projectBuild(build, effects)
   const lines: CardPreviewLine[] = []
 
-  for (const key of Object.keys(card.effects) as StatKey[]) {
-    if (card.effects[key] === undefined) continue
+  for (const key of Object.keys(effects) as StatKey[]) {
+    if (effects[key] === undefined) continue
 
     const info = STAT_INFO[key]
     const beforeText = info.format(build[key])

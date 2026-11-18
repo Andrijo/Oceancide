@@ -2080,12 +2080,6 @@ button.build-chip:focus-visible,
   --rarity-bg: var(--rarity-chaos-bg);
 }
 
-.rarity-icon {
-  flex: none;
-  width: 1em;
-  height: 1em;
-}
-
 .card-row {
   display: flex;
   flex-wrap: wrap;
@@ -2266,14 +2260,83 @@ button.build-chip:focus-visible,
   color: rgba(245, 238, 221, 0.75);
 }
 
+/* Arquetipos de la carta (#DASH, #FILTRO...): pistas de sinergia. */
+.card-tags {
+  margin-top: 6px;
+  font: 700 10px/1.3 var(--font-body);
+  letter-spacing: 0.06em;
+  color: var(--rarity, var(--color-mist));
+  opacity: 0.85;
+}
+
+/* Volver a tirar y saltar, bajo las cartas. */
+.card-choice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.card-choice-actions > .btn {
+  width: auto;
+  min-height: 40px;
+  padding: 6px 18px;
+  font-size: 14px;
+}
+
+/* Móvil: las tres cartas van apiladas, así que se compactan para que la
+   elección quepa sin scroll. */
+@media (max-width: 560px) {
+  .card-row {
+    gap: 10px;
+  }
+
+  .card-choice {
+    flex: 1 1 100%;
+    min-height: 0;
+    border-width: 4px;
+  }
+
+  .card-rarity {
+    padding: 10px 12px 2px;
+    gap: 4px;
+  }
+
+  .card-rarity-label {
+    font-size: 13px;
+  }
+
+  .card-divider {
+    display: none;
+  }
+
+  .card-body {
+    padding: 0 14px 10px;
+    gap: 4px;
+  }
+
+  .card-name {
+    font-size: 17px;
+  }
+
+  .card-value {
+    font-size: 15px;
+  }
+
+  .card-desc {
+    margin-top: 0;
+    font-size: 11.5px;
+    line-height: 1.35;
+  }
+
+  .card-tags {
+    margin-top: 2px;
+  }
+}
+
 /* Fichas de cartas de la pausa: el color e icono de su rareza. */
 .build-chip[class*="rarity-"] {
   --chip-color: var(--rarity);
-}
-
-.build-chip .rarity-icon {
-  align-self: center;
-  color: var(--chip-color);
 }
 
 @keyframes ultraGlow {
@@ -2463,13 +2526,6 @@ button.build-chip:focus-visible,
   background: color-mix(in srgb, var(--rarity-bg) 55%, transparent);
   font-size: 11px;
   color: var(--text-strong);
-}
-
-.summary-card .rarity-icon {
-  width: 10px;
-  height: 10px;
-  flex: none;
-  color: var(--rarity);
 }
 
 .summary-card-count {

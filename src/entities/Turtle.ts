@@ -235,18 +235,28 @@ export class Turtle {
       speed: 9,
       collectionRadius: 3,
       toxicityResistance: 0.1,
-      filterCapacity: 5,
+      // Pocas esferas a la vez: así las cartas de "+1 filtro" importan (con 5
+      // de base, lo que limitaba siempre era el Eco).
+      filterCapacity: 3,
     }
     this.baseStats = { ...this.stats }
   }
 
-  public trigger360Spin(direction: "left" | "right" = "left"): void {
-    if (this.isSpinning) return
+  /**
+   * Empieza un giro de 360°. `extraBoost` se suma a la fuerza del dash solo en
+   * este giro (cadenas de giros). Devuelve `false` si ya estaba girando.
+   */
+  public trigger360Spin(
+    direction: "left" | "right" = "left",
+    extraBoost = 0,
+  ): boolean {
+    if (this.isSpinning) return false
 
     this.isSpinning = true
     this.spinProgress = 0
     this.spinDirection = direction === "left" ? 1 : -1
-    this.spinBoost = this.spinBoostMultiplier
+    this.spinBoost = this.spinBoostMultiplier + extraBoost
+    return true
   }
 
   public triggerBackflip(): void {

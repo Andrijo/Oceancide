@@ -153,7 +153,7 @@ describe("CardManager.pick", () => {
 
     expect(ctx.state.toxicity).toBe(70)
     expect(ctx.turtle.stats.speed).toBeCloseTo(11.25)
-    expect(ctx.turtle.stats.filterCapacity).toBe(6)
+    expect(ctx.turtle.stats.filterCapacity).toBe(4)
   })
 })
 

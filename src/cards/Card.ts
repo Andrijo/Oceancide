@@ -5,6 +5,7 @@ import type { Turtle } from "@entities/Turtle"
 import type { GameState } from "@core/types"
 import type { Rng } from "@core/rng"
 import type { CardEffects, CardValuePart } from "./CardEffects"
+import { createDefaultRules, type CardRules, type RunRules } from "./CardRules"
 
 export type CardRarity =
   | "common"
@@ -14,6 +15,20 @@ export type CardRarity =
   | "curse"
   | "ultra_legendary"
   | "chaos"
+
+/**
+ * Arquetipos de carta. Sirven para las sinergias: las cartas con `scaling`
+ * mejoran con cada carta de su etiqueta.
+ */
+export type CardTag = "dash" | "filtro" | "eco" | "cuidado" | "riesgo"
+
+export const CARD_TAGS: readonly CardTag[] = [
+  "dash",
+  "filtro",
+  "eco",
+  "cuidado",
+  "riesgo",
+]
 
 /** Estado de la run que las cartas pueden modificar; vive en Game y se reinicia al empezar una run. */
 export interface RunState {
@@ -37,6 +52,9 @@ export interface RunState {
 
   /** Ids de las reliquias encontradas en esta run, en orden. */
   relics: string[]
+
+  /** Reglas de las mecánicas que han cambiado las cartas. */
+  rules: RunRules
 }
 
 export function createRunState(): RunState {
@@ -48,6 +66,7 @@ export function createRunState(): RunState {
     toxicityMultiplier: 1,
     enemyCountBonus: 0,
     relics: [],
+    rules: createDefaultRules(),
   }
 }
 
@@ -81,4 +100,20 @@ export interface Card {
   effects?: CardEffects
   /** Solo para cartas cuyo resultado depende del azar. */
   random?: CardRandomEffect
+  /** Reglas de mecánicas que cambia (ver CardRules). */
+  rules?: CardRules
+  /**
+   * Sinergia: `effects` se aplica una vez por cada carta con `tag` que tengas
+   * (esta incluida) y otra vez cada vez que elijas una nueva.
+   */
+  scaling?: CardScaling
+  /**
+   * Arquetipos. Si se omite, se deducen de los efectos (ver `cardTags`).
+   */
+  tags?: CardTag[]
+}
+
+export interface CardScaling {
+  tag: CardTag
+  effects: CardEffects
 }

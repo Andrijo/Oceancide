@@ -11,9 +11,11 @@ import {
 } from "@core/MetaState"
 import type { Card } from "@cards/Card"
 import {
+  cardTags,
   cardValueParts,
   cardValueSeparator,
   cardValueText,
+  tagLabel,
 } from "@cards/CardEffects"
 import { CARD_POOL } from "@cards/CardPool"
 import {
@@ -55,7 +57,7 @@ import {
   type ButtonVariant,
 } from "@ui/dom"
 import { createConfirmDialog, type ConfirmOptions } from "@ui/ConfirmDialog"
-import { RARITY_LABELS, rarityClass, rarityIcon } from "@ui/rarity"
+import { RARITY_LABELS, rarityClass } from "@ui/rarity"
 import { upgradeView } from "@ui/upgradeView"
 import { UPGRADES } from "@/tycoon/Upgrades"
 import { UpgradeManager, affordableUpgrades } from "@/tycoon/UpgradeManager"
@@ -88,6 +90,18 @@ export interface ScreenCallbacks {
    * cancela). Devuelve la función que deja de escuchar.
    */
   capturePadButton(onButton: (button: number | null) => void): () => void
+}
+
+/** Acciones extra de la elección de carta: volver a tirar y saltar. */
+export interface CardChoiceOptions {
+  reroll?: {
+    /** Eco que cuesta volver a tirar. */
+    cost: number
+    /** Si hay Eco suficiente (si no, el botón explica por qué no). */
+    affordable: boolean
+    onReroll(): void
+  }
+  onSkip?: () => void
 }
 
 export interface HelpState {
@@ -1035,7 +1049,7 @@ export class ScreenManager {
       for (const { card, count } of chips) {
         const item = el("li", `summary-card ${rarityClass(card.rarity)}`)
         item.title = `${RARITY_LABELS[card.rarity]}: ${card.description}`
-        item.append(rarityIcon(card.rarity), el("span", "", card.name))
+        item.append(el("span", "", card.name))
         if (count > 1) {
           item.append(el("span", "summary-card-count", `×${count}`))
         }
@@ -1228,6 +1242,7 @@ export class ScreenManager {
     onPick: (card: Card) => void,
     notice?: string,
     getPreview?: (card: Card) => CardPreviewLine[],
+    options: CardChoiceOptions = {},
   ): void {
     const pick = (index: number) => {
       if (!this.cardChoiceActive || !this.canActivateChoice()) return
@@ -1235,6 +1250,14 @@ export class ScreenManager {
       if (!card) return
       this.hide()
       onPick(card)
+    }
+
+    // Volver a tirar y saltar pasan por el mismo bloqueo que las cartas, para
+    // que una pulsación pendiente no los active sin querer.
+    const extra = (action: () => void) => () => {
+      if (!this.cardChoiceActive || !this.canActivateChoice()) return
+      this.hide()
+      action()
     }
 
     const { root, content } = this.makeWindowFrame()
@@ -1263,11 +1286,43 @@ export class ScreenManager {
     this.enableArrowNav(row)
 
     content.append(title, row)
+
+    const extraButtons: HTMLButtonElement[] = []
+    if (options.reroll || options.onSkip) {
+      const actions = el("div", "card-choice-actions")
+      const { reroll, onSkip } = options
+      if (reroll) {
+        const btn = makeButton(
+          `Volver a tirar · ${reroll.cost} Eco`,
+          extra(reroll.onReroll),
+        )
+        btn.classList.add("btn--compact")
+        if (!reroll.affordable) {
+          setUnavailable(btn, true)
+          btn.setAttribute(
+            "aria-label",
+            `Volver a tirar: necesitas ${reroll.cost} de Eco`,
+          )
+          btn.title = `Necesitas ${reroll.cost} de Eco`
+        }
+        extraButtons.push(btn)
+      }
+      if (onSkip) {
+        const btn = makeButton("Saltar", extra(onSkip))
+        btn.classList.add("btn--compact")
+        btn.title = "Seguir sin elegir ninguna carta"
+        extraButtons.push(btn)
+      }
+      actions.append(...extraButtons)
+      this.enableArrowNav(actions)
+      content.append(actions)
+    }
+
     this.open(root, () => {})
     this.cardChoiceActive = true
     this.cardChoiceHandler = pick
     this.choiceGuard.open()
-    this.showChoiceLock(cardButtons, content)
+    this.showChoiceLock([...cardButtons, ...extraButtons], content)
     // El realce de la carta enfocada es CSS (:focus-visible): al acabar la
     // animación de entrada, que limpia el transform, vuelve a aplicarse solo.
     void revealCards(cardButtons)
@@ -1542,7 +1597,6 @@ export class ScreenManager {
         chip.setAttribute("aria-pressed", "false")
         const text = `${card.name} (${RARITY_LABELS[card.rarity]}): ${card.description}`
         chip.append(
-          rarityIcon(card.rarity),
           el("span", "build-chip-name", card.name),
           el("span", "build-chip-value", cardValueText(card)),
         )
@@ -1800,19 +1854,22 @@ export class ScreenManager {
       preview && preview.length > 0
         ? ` ${preview.map(previewLineText).join(". ")}.`
         : ""
+    const tagText =
+      cardTags(card).length > 0
+        ? ` Etiquetas: ${cardTags(card).map(tagLabel).join(", ")}.`
+        : ""
     btn.setAttribute(
       "aria-label",
-      `${label}: ${card.name}. ${cardValueText(card)}. ${card.description}${previewText}`,
+      `${label}: ${card.name}. ${cardValueText(card)}. ${card.description}${tagText}${previewText}`,
     )
     btn.addEventListener("click", onClick)
 
     const keyBadge = el("span", "card-key", `${index + 1}`)
     keyBadge.setAttribute("aria-hidden", "true")
 
-    // La rareza se distingue también por la forma del icono, no solo el color.
+    // La rareza se lee en el texto, no solo en el color.
     const rarityArea = el("span", "card-rarity")
-    const rarityLabel = el("span", "card-rarity-label")
-    rarityLabel.append(rarityIcon(card.rarity), label)
+    const rarityLabel = el("span", "card-rarity-label", label)
     rarityArea.append(rarityLabel, el("span", "card-divider"))
 
     const body = el("span", "card-body")
@@ -1832,8 +1889,15 @@ export class ScreenManager {
 
     body.append(name, value, desc)
 
+    // Arquetipos, para ver de un vistazo qué cartas se combinan.
+    const tags = cardTags(card)
+    if (tags.length > 0) {
+      body.append(el("span", "card-tags", tags.map(tagLabel).join(" ")))
+    }
+
     // Vista previa "antes → después" con los valores actuales de la tortuga.
-    if (preview) {
+    // Las cartas que solo cambian reglas no tienen atributos que prever.
+    if (preview && (preview.length > 0 || card.random)) {
       const previewBox = el("span", "card-preview")
       previewBox.setAttribute("aria-hidden", "true") // va en el aria-label
 

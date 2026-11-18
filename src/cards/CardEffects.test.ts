@@ -159,7 +159,10 @@ describe("applyCardEffects", () => {
 describe("mazo: texto y efectos coherentes", () => {
   it("toda carta declara sus efectos o trae un efecto con azar", () => {
     for (const card of CARD_POOL) {
-      expect(card.effects ?? card.random, card.id).toBeDefined()
+      expect(
+        card.effects ?? card.random ?? card.rules ?? card.scaling,
+        card.id,
+      ).toBeDefined()
       expect(cardValueParts(card).length, card.id).toBeGreaterThan(0)
     }
   })
