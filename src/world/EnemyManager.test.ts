@@ -2,12 +2,22 @@ import { describe, expect, it } from "vitest"
 import * as THREE from "three"
 import { Rng } from "@core/rng"
 import type { WorldBounds } from "@core/types"
+import type { CreatureTarget } from "@entities/Creature"
 import { EnemyManager } from "./EnemyManager"
 
 const BOUNDS: WorldBounds = {
   halfSize: 20,
   minY: -10,
   maxY: 10,
+}
+
+function jellies(count: number): "jellyfish"[] {
+  return Array.from({ length: count }, () => "jellyfish" as const)
+}
+
+/** Tortuga quieta en `position`, sin impulso. */
+function at(position: THREE.Vector3): CreatureTarget {
+  return { position, boosting: false, dashing: false }
 }
 
 function createManager(): {
@@ -22,7 +32,7 @@ describe("EnemyManager", () => {
   it("genera medusas dentro de los bounds y lejos del centro", () => {
     const { scene, manager } = createManager()
 
-    manager.spawn(5, BOUNDS, new Rng(42))
+    manager.spawnKinds(jellies(5), BOUNDS, new Rng(42))
 
     expect(manager.getCount()).toBe(5)
     expect(scene.children).toHaveLength(5)
@@ -39,37 +49,41 @@ describe("EnemyManager", () => {
 
   it("detecta el impacto, activa el cooldown y lo recupera", () => {
     const { scene, manager } = createManager()
-    manager.spawn(1, BOUNDS, new Rng(7))
+    manager.spawnKinds(jellies(1), BOUNDS, new Rng(7))
 
     const jellyfish = scene.children[0] as THREE.Group
     const dome = jellyfish.children[0] as THREE.Mesh
     const material = dome.material as THREE.MeshPhysicalMaterial
 
     // Primer update con la tortuga lejos para fijar la posición de la medusa.
-    manager.update(0, 0, new THREE.Vector3(999, 999, 999), BOUNDS)
+    manager.update(0, 0, at(new THREE.Vector3(999, 999, 999)), BOUNDS)
     const position = jellyfish.position.clone()
 
-    expect(manager.update(0, 0, position, BOUNDS)).toBe(true)
+    expect(manager.update(0, 0, at(position), BOUNDS).hit?.kind).toBe(
+      "jellyfish",
+    )
     expect(manager.getCount()).toBe(1)
     expect(material.opacity).toBeCloseTo(0.08)
-    expect(manager.update(0, 0, position, BOUNDS)).toBe(false)
+    expect(manager.update(0, 0, at(position), BOUNDS).hit).toBeNull()
 
     // Al agotarse el cooldown vuelve a ser peligrosa y recupera su opacidad.
-    manager.update(3.1, 3.1, new THREE.Vector3(999, 999, 999), BOUNDS)
+    manager.update(3.1, 3.1, at(new THREE.Vector3(999, 999, 999)), BOUNDS)
     expect(material.opacity).toBeCloseTo(0.6)
 
     const currentPosition = jellyfish.position.clone()
-    expect(manager.update(0, 3.1, currentPosition, BOUNDS)).toBe(true)
+    expect(manager.update(0, 3.1, at(currentPosition), BOUNDS).hit?.kind).toBe(
+      "jellyfish",
+    )
   })
 
   it("limita las posiciones al cambiar de bounds", () => {
     const { scene, manager } = createManager()
-    manager.spawn(1, BOUNDS, new Rng(11))
+    manager.spawnKinds(jellies(1), BOUNDS, new Rng(11))
 
     const jellyfish = scene.children[0] as THREE.Group
     const smallBounds: WorldBounds = { halfSize: 2, minY: -1, maxY: 1 }
 
-    manager.update(0, 1, new THREE.Vector3(999, 999, 999), smallBounds)
+    manager.update(0, 1, at(new THREE.Vector3(999, 999, 999)), smallBounds)
 
     expect(Math.abs(jellyfish.position.x)).toBeLessThanOrEqual(2)
     expect(Math.abs(jellyfish.position.z)).toBeLessThanOrEqual(2)
@@ -79,7 +93,7 @@ describe("EnemyManager", () => {
 
   it("las medusas nadan: se desplazan y no se salen del bioma", () => {
     const { scene, manager } = createManager()
-    manager.spawn(4, BOUNDS, new Rng(5))
+    manager.spawnKinds(jellies(4), BOUNDS, new Rng(5))
 
     const far = new THREE.Vector3(999, 999, 999)
     const starts = scene.children.map((child) => child.position.clone())
@@ -89,7 +103,7 @@ describe("EnemyManager", () => {
     // Dos minutos de juego a 30 fps.
     const dt = 1 / 30
     for (let frame = 0; frame < 3600; frame++) {
-      manager.update(dt, frame * dt, far, BOUNDS)
+      manager.update(dt, frame * dt, at(far), BOUNDS)
 
       scene.children.forEach((child, i) => {
         const position = child.position
@@ -114,8 +128,8 @@ describe("EnemyManager", () => {
   it("limpia y reemplaza la generación anterior", () => {
     const { scene, manager } = createManager()
 
-    manager.spawn(3, BOUNDS, new Rng(1))
-    manager.spawn(2, BOUNDS, new Rng(2))
+    manager.spawnKinds(jellies(3), BOUNDS, new Rng(1))
+    manager.spawnKinds(jellies(2), BOUNDS, new Rng(2))
 
     expect(manager.getCount()).toBe(2)
     expect(scene.children).toHaveLength(2)

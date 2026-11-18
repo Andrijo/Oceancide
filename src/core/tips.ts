@@ -11,6 +11,19 @@ export const TIP_IDS = [
   "leak_seen",
   "fragile_broken",
   "jellyfish_hit",
+  "eel_charge",
+  "lantern_pull",
+  "school_scatter",
+  "puffer_inflate",
+  "barracuda_chase",
+  "angler_ambush",
+  "octopus_steal",
+  "squid_ink",
+  "friendly_help",
+  "rescue_net",
+  "manta_aura",
+  "whale_song",
+  "boss_seen",
   "time_low",
   "filter_affordable",
 ] as const
@@ -83,6 +96,32 @@ export function tipText(id: TipId, ctx: TipTextContext): string {
       return "Era frágil y se rompió por llegar con impulso. Acércate con calma para recogerlo entero."
     case "jellyfish_hit":
       return "Las medusas te intoxican y te frenan. Tras picar se apagan unos segundos: aprovecha para alejarte."
+    case "eel_charge":
+      return "¡Una anguila! Cuando te ve con impulso se encara, brilla y embiste en línea recta. Apártate de lado."
+    case "lantern_pull":
+      return "La luz del pez linterna te arrastra hacia él y muerde si lo tocas. Nada en contra para escapar."
+    case "school_scatter":
+      return "Al atravesar un banco de peces, los desechos de alrededor salen despedidos. Rodéalo si quieres que sigan juntos."
+    case "puffer_inflate":
+      return "El pez globo se infla si te acercas: sus púas pinchan y alrededor el agua se vuelve tóxica. Espera a que se desinfle."
+    case "barracuda_chase":
+      return "Una barracuda te persigue. Es algo más lenta que tú: usa el impulso para dejarla atrás."
+    case "angler_ambush":
+      return "El rape espera quieto en el fondo con su luz encendida y se lanza si pasas cerca. Mantén la distancia."
+    case "octopus_steal":
+      return "El pulpo roba los desechos que atraen tus esferas. Coloca las esferas lejos de él."
+    case "squid_ink":
+      return "El calamar suelta tinta tóxica al asustarse. Sal de la nube cuanto antes y no lo persigas con impulso."
+    case "friendly_help":
+      return "Hay animales que ayudan: el caballito de mar te limpia, el delfín te acelera y la rémora te protege de un golpe. Nada hacia ellos."
+    case "rescue_net":
+      return "¡Una tortuga atrapada en una red! Quédate a su lado un momento para liberarla."
+    case "manta_aura":
+      return "Mientras nadas junto a la manta raya, recoges desechos desde más lejos."
+    case "whale_song":
+      return "El canto de la ballena limpia el agua: cerca de ella, la toxicidad baja mientras canta."
+    case "boss_seen":
+      return "¡Un megajefe! Toca las fugas brillantes de su cuerpo para purificarlo. Evita el cuerpo y salta sus ondas cambiando de profundidad o con dash."
     case "time_low":
       return "Queda poco tiempo. Al llegar a cero, la presión dispara la toxicidad: limpia la zona cuanto antes."
     case "filter_affordable":

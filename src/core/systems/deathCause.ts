@@ -6,6 +6,7 @@ export type DeathCauseKind =
   | "passive" // toxicidad pasiva del agua contaminada
   | "time" // toxicidad pasiva multiplicada por agotar el tiempo del bioma
   | "jellyfish" // picadura de medusa
+  | "creature" // otra criatura (anguila, pez linterna...): va en `source`
   | "event" // opción de un evento de acto
   | "chaos" // carta de caos (o maldición)
 
@@ -24,6 +25,7 @@ const CAUSE_TITLES: Record<DeathCauseKind, string> = {
   passive: "Agua contaminada",
   time: "Tiempo agotado",
   jellyfish: "Picadura de medusa",
+  creature: "Fauna",
   event: "Un evento",
   chaos: "Una carta",
 }
@@ -32,6 +34,7 @@ const CAUSE_DETAILS: Record<DeathCauseKind, string> = {
   passive: "La toxicidad del agua sin limpiar llegó al máximo.",
   time: "Con el tiempo del bioma agotado, la toxicidad sube mucho más rápido.",
   jellyfish: "El último golpe de toxicidad vino de una medusa.",
+  creature: "El último golpe de toxicidad vino de la fauna del bioma.",
   event: "La decisión del evento llevó la toxicidad al máximo.",
   chaos: "El efecto de la carta llevó la toxicidad al máximo.",
 }

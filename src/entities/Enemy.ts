@@ -1,7 +1,8 @@
 import * as THREE from "three"
 import type { Rng } from "@core/rng"
-import type { WorldBounds } from "@core/types"
+import type { Creature, CreatureContext, CreatureEffects } from "./Creature"
 import { addFresnelRim } from "./fresnelRim"
+import { angleDelta } from "./steering"
 
 const DOME_RADIUS = 0.9
 const TENTACLE_COUNT = 6
@@ -15,6 +16,13 @@ const BASE_EMISSIVE = 1.1
 const HIT_EMISSIVE = 0.15
 
 const HIT_COOLDOWN = 3
+const HIT_DISTANCE = 1.8
+const HIT_TOXICITY = 15
+
+// Huida: con la tortuga en impulso o dash cerca, se aparta de su camino.
+const FLEE_RADIUS = 7
+const FLEE_TURN = 3 // rad/s con los que gira para alejarse
+const FLEE_THRUST = 2.4 // u/s² extra mientras huye
 
 // Nado a pulsos: la campana se contrae (impulso) y luego se relaja planeando.
 const CONTRACT_FRACTION = 0.3 // parte del ciclo en la que empuja
@@ -29,11 +37,6 @@ const MAX_LEAN = 0.5
 const SQUASH = 0.18 // cuánto se estrecha la campana al contraerse
 const TENTACLE_SPREAD = 0.16 // apertura de los tentáculos en reposo
 
-/** Diferencia angular más corta entre dos rumbos, en -PI..PI. */
-function angleDelta(from: number, to: number): number {
-  return Math.atan2(Math.sin(to - from), Math.cos(to - from))
-}
-
 /**
  * Medusa errante. Nada a pulsos como una medusa real: contrae la campana para
  * impulsarse en la dirección de su rumbo y luego planea mientras se relaja, con
@@ -41,7 +44,8 @@ function angleDelta(from: number, to: number): number {
  * bordes del bioma. Al golpear se vuelve casi transparente durante su cooldown
  * para comunicar que no puede volver a hacer daño de inmediato.
  */
-export class Jellyfish {
+export class Jellyfish implements Creature {
+  public readonly kind = "jellyfish"
   public readonly mesh = new THREE.Group()
 
   private readonly dome: THREE.Mesh
@@ -141,7 +145,8 @@ export class Jellyfish {
     return this.cooldown > 0
   }
 
-  public update(time: number, deltaTime: number, bounds?: WorldBounds): void {
+  public update(ctx: CreatureContext): CreatureEffects | null {
+    const { time, deltaTime, bounds, target } = ctx
     if (this.cooldown > 0) {
       this.cooldown = Math.max(0, this.cooldown - deltaTime)
       if (this.cooldown === 0) this.restoreVisuals()
@@ -171,23 +176,37 @@ export class Jellyfish {
 
     let pitch = CLIMB_BIAS + Math.sin(t * this.wanderSpeed * 0.8) * 0.5
 
-    if (bounds) {
-      const edge = bounds.halfSize - EDGE_MARGIN
-      if (Math.abs(position.x) > edge || Math.abs(position.z) > edge) {
-        const toCenter = Math.atan2(-position.x, -position.z)
-        const turn = angleDelta(this.heading, toCenter)
-        const maxTurn = EDGE_TURN * deltaTime
+    // Huye del impulso y del dash: gira para alejarse y empuja sin esperar
+    // al pulso, para que se note que reacciona.
+    let flee = 0
+    if (target.boosting || target.dashing) {
+      const dx = position.x - target.position.x
+      const dz = position.z - target.position.z
+      const distance = Math.hypot(dx, dz)
+      if (distance < FLEE_RADIUS) {
+        const away = Math.atan2(dx, dz)
+        const turn = angleDelta(this.heading, away)
+        const maxTurn = FLEE_TURN * deltaTime
         this.heading += THREE.MathUtils.clamp(turn, -maxTurn, maxTurn)
+        flee = 1 - distance / FLEE_RADIUS
       }
-
-      const marginY = Math.min(2, (bounds.maxY - bounds.minY) * 0.2)
-      if (position.y > bounds.maxY - marginY) pitch = -0.5
-      else if (position.y < bounds.minY + marginY) pitch = 0.7
     }
+
+    const edge = bounds.halfSize - EDGE_MARGIN
+    if (Math.abs(position.x) > edge || Math.abs(position.z) > edge) {
+      const toCenter = Math.atan2(-position.x, -position.z)
+      const turn = angleDelta(this.heading, toCenter)
+      const maxTurn = EDGE_TURN * deltaTime
+      this.heading += THREE.MathUtils.clamp(turn, -maxTurn, maxTurn)
+    }
+
+    const marginY = Math.min(2, (bounds.maxY - bounds.minY) * 0.2)
+    if (position.y > bounds.maxY - marginY) pitch = -0.5
+    else if (position.y < bounds.minY + marginY) pitch = 0.7
 
     // --- Impulso, freno del agua y caída lenta ---
     const horizontal = Math.cos(pitch)
-    const accel = this.thrust * push * deltaTime
+    const accel = (this.thrust * push + FLEE_THRUST * flee) * deltaTime
     this.velocity.x += Math.sin(this.heading) * horizontal * accel
     this.velocity.z += Math.cos(this.heading) * horizontal * accel
     this.velocity.y += Math.sin(pitch) * accel - SINK * deltaTime
@@ -226,6 +245,22 @@ export class Jellyfish {
       tentacle.rotation.z = Math.cos(angle) * spread + sway
       tentacle.rotation.x = -Math.sin(angle) * spread + sway * 0.6
     }
+
+    if (
+      this.cooldown === 0 &&
+      position.distanceToSquared(target.position) < HIT_DISTANCE * HIT_DISTANCE
+    ) {
+      this.hit()
+      return {
+        hit: {
+          kind: "jellyfish",
+          toxicity: HIT_TOXICITY,
+          slowDuration: 2,
+          slowMultiplier: 0.5,
+        },
+      }
+    }
+    return null
   }
 
   public hit(): void {

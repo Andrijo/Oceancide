@@ -26,6 +26,7 @@ const PULL_SPEED = 6
 const DRIFT_RANGE = 3.5 // amplitud horizontal de la deriva (unidades)
 const DRIFT_SPEED = 0.35 // velocidad angular de la deriva
 const VERTICAL_SPEED = 1.1 // u/s de hundimiento y flotación
+const SCATTER_DRAG = 2.2 // 1/s: frenado del empujón de un banco de peces
 
 // El emisivo del catálogo viene expresado como una intensidad relativa muy baja
 // (0.12–0.4); sin esta ganancia el glow no se ve ni llega al umbral del bloom.
@@ -471,10 +472,15 @@ export class Debris {
   public pullArrived = false
   /** Marcado por `shatter()`: tocado en boost siendo frágil (no da eco). */
   public shattered = false
+  /** Segundos que las esferas no pueden atraerlo (recién robado). */
+  public grabCooldown = 0
 
   private readonly minY: number
   private readonly maxY: number
   private baseX: number
+  /** Empujón horizontal (u/s) que le dio un banco de peces; se frena solo. */
+  private readonly scatterVelocity = new THREE.Vector2()
+  private readonly halfSize: number
   private baseY: number
   private baseZ: number
   private phase: number
@@ -507,6 +513,7 @@ export class Debris {
     this.isFragment = isFragment
     this.minY = bounds.minY
     this.maxY = bounds.maxY
+    this.halfSize = bounds.halfSize
 
     const visual = getVisual(definition.id)
 
@@ -588,6 +595,15 @@ export class Debris {
     this.pullTarget = target.clone()
   }
 
+  /**
+   * Empuja el desecho en horizontal (banco de peces). Se suma al movimiento
+   * propio y se frena en un par de segundos.
+   */
+  public scatter(velocityX: number, velocityZ: number): void {
+    this.scatterVelocity.x += velocityX
+    this.scatterVelocity.y += velocityZ
+  }
+
   /** Marca el desecho como fragmentado (tocado en boost siendo frágil). */
   public shatter(): void {
     this.shattered = true
@@ -603,6 +619,9 @@ export class Debris {
   }
 
   public animate(time: number, deltaTime: number): void {
+    if (this.grabCooldown > 0) {
+      this.grabCooldown = Math.max(0, this.grabCooldown - deltaTime)
+    }
     if (this.pullTarget) {
       pullDelta.copy(this.pullTarget).sub(this.object.position)
 
@@ -622,6 +641,8 @@ export class Debris {
 
       return
     }
+
+    this.applyScatter(deltaTime)
 
     this.object.rotation.y += 0.55 * deltaTime
     this.object.rotation.x += 0.18 * deltaTime
@@ -660,6 +681,31 @@ export class Debris {
       default:
         this.object.position.y = this.bobY(time)
     }
+  }
+
+  private applyScatter(deltaTime: number): void {
+    const velocity = this.scatterVelocity
+    if (velocity.x === 0 && velocity.y === 0) return
+
+    const limit = this.halfSize
+    const x = THREE.MathUtils.clamp(
+      this.object.position.x + velocity.x * deltaTime,
+      -limit,
+      limit,
+    )
+    const z = THREE.MathUtils.clamp(
+      this.object.position.z + velocity.y * deltaTime,
+      -limit,
+      limit,
+    )
+    // La deriva oscila alrededor de su origen: se mueve el origen también.
+    this.baseX += x - this.object.position.x
+    this.baseZ += z - this.object.position.z
+    this.object.position.x = x
+    this.object.position.z = z
+
+    velocity.multiplyScalar(Math.exp(-SCATTER_DRAG * deltaTime))
+    if (velocity.lengthSq() < 0.0025) velocity.set(0, 0)
   }
 
   /** Libera los recursos propios de la instancia (nube). Las geometrías y materiales normales son compartidos. */
