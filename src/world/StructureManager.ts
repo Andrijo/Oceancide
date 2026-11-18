@@ -44,6 +44,11 @@ export class StructureManager {
     return this.structures.length
   }
 
+  /** Posición de cada esfera activa (el pulpo va a por ellas). */
+  public getPositions(): THREE.Vector3[] {
+    return this.structures.map((s) => s.position)
+  }
+
   public build(
     key: StructureKey,
     position: THREE.Vector3,
@@ -88,7 +93,8 @@ export class StructureManager {
 
       for (let j = s.inFlight.length - 1; j >= 0; j--) {
         const debris = s.inFlight[j]
-        if (debris.removed) {
+        // Retirado, o soltado por otro (un pulpo se lo ha robado).
+        if (debris.removed || !debris.claimed) {
           s.inFlight.splice(j, 1)
         } else if (debris.pullArrived) {
           biome.removeDebris(debris)
@@ -140,7 +146,7 @@ export class StructureManager {
     let bestScore = -Infinity
     const radiusSq = s.config.radius * s.config.radius
     for (const debris of debrisList) {
-      if (debris.claimed || debris.removed) continue
+      if (debris.claimed || debris.removed || debris.grabCooldown > 0) continue
       const distSq = debris.mesh.position.distanceToSquared(s.position)
       if (distSq > radiusSq) continue
       // La raíz solo se calcula para los candidatos dentro del radio.

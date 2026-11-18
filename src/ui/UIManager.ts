@@ -85,6 +85,8 @@ export class UIManager {
   private lastBiomeTimerText = ""
   private leaksEl: HTMLElement
   private lastLeaks = -1
+  private bossEl: HTMLElement
+  private lastBossText = ""
 
   private lastToxicityLevel: string | null = null
   private lastToxicityVisible = false
@@ -149,6 +151,25 @@ export class UIManager {
       pointer-events: none;
     `
     this.dangerClusterEl.appendChild(this.leaksEl)
+
+    // Megajefe del bioma: nombre y fugas de su cuerpo limpiadas.
+    this.bossEl = document.createElement("div")
+    this.bossEl.id = "boss-hud"
+    this.bossEl.setAttribute("role", "status")
+    this.bossEl.style.cssText = `
+      display: none;
+      padding: 2px 10px;
+      font-family: ${PARAGRAPH_FONT};
+      font-size: 14px;
+      font-weight: bold;
+      color: ${SEMANTIC.bad};
+      background: var(--hud-panel);
+      border: 2px solid ${tint(SEMANTIC.bad, 60)};
+      border-radius: 10px;
+      pointer-events: none;
+      white-space: nowrap;
+    `
+    this.dangerClusterEl.appendChild(this.bossEl)
 
     this.dangerClusterEl.appendChild(this.toxicitySkullEl)
 
@@ -351,6 +372,27 @@ export class UIManager {
     this.lastLeaks = count
     this.leaksEl.style.display = count > 0 ? "block" : "none"
     this.leaksEl.textContent = `Fugas: ${count}`
+  }
+
+  /** Megajefe del bioma, o `null` si no hay. */
+  public updateBoss(
+    boss: {
+      name: string
+      cleaned: number
+      total: number
+      defeated: boolean
+    } | null,
+  ): void {
+    const text = !boss
+      ? ""
+      : boss.defeated
+        ? `${boss.name} · purificado`
+        : `${boss.name} · fugas ${boss.cleaned}/${boss.total}`
+    if (text === this.lastBossText) return
+    this.lastBossText = text
+    this.bossEl.style.display = text ? "block" : "none"
+    this.bossEl.textContent = text
+    this.bossEl.style.color = boss?.defeated ? SEMANTIC.good : SEMANTIC.bad
   }
 
   public updateBiomeTimer(remaining: number, limit: number): void {

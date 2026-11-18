@@ -166,6 +166,8 @@ export class Turtle {
 
   private slowTimer = 0
   private slowMultiplier = 1
+  private hasteTimer = 0
+  private hasteMultiplier = 1
   private hurtTimer = 0
 
   /* Spinning */
@@ -285,6 +287,8 @@ export class Turtle {
 
     this.slowTimer = 0
     this.slowMultiplier = 1
+    this.hasteTimer = 0
+    this.hasteMultiplier = 1
     this.hurtTimer = 0
   }
 
@@ -302,6 +306,13 @@ export class Turtle {
   }
 
   /** Dispara el retroceso y el flash de dolor. Reinicia la animación si ya estaba activa. */
+  /** Acelera a la tortuga un rato (estela de un delfín). */
+  public applyHaste(duration: number, multiplier: number): void {
+    if (duration <= 0) return
+    this.hasteTimer = Math.max(this.hasteTimer, duration)
+    this.hasteMultiplier = Math.max(this.hasteMultiplier, multiplier)
+  }
+
   public playHurt(): void {
     this.hurtTimer = HURT_DURATION
   }
@@ -362,6 +373,10 @@ export class Turtle {
       this.slowTimer = Math.max(0, this.slowTimer - deltaTime)
       if (this.slowTimer === 0) this.slowMultiplier = 1
     }
+    if (this.hasteTimer > 0) {
+      this.hasteTimer = Math.max(0, this.hasteTimer - deltaTime)
+      if (this.hasteTimer === 0) this.hasteMultiplier = 1
+    }
 
     // Decaimiento del boost de giro
     if (this.spinBoost > 0) {
@@ -389,7 +404,8 @@ export class Turtle {
 
     const inputBoost = isBoosting ? 2 : 1
     const totalBoost = inputBoost * (1 + this.spinBoost)
-    const maxSpeed = this.stats.speed * totalBoost * this.slowMultiplier
+    const maxSpeed =
+      this.stats.speed * totalBoost * this.slowMultiplier * this.hasteMultiplier
 
     // Ejes analógicos si el stick está activo; si no, booleanos del teclado.
     const throttle =

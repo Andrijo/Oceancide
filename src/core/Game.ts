@@ -93,6 +93,7 @@ import {
   type InputState,
   type RunOutcome,
   type RunSummary,
+  type WorldBounds,
 } from "@core/types"
 import {
   applyToxicityDelta,
@@ -124,6 +125,7 @@ import {
   deathTimeScale,
 } from "@core/systems/deathSequence"
 import { UpgradeManager } from "@/tycoon/UpgradeManager"
+import { CREATURE_NAMES, type CreatureKind } from "@entities/Creature"
 import { ACT_EVENTS } from "@/events/EventPool"
 import { RELICS, pickRelic, type Relic } from "@/relics/RelicPool"
 import {
@@ -133,6 +135,12 @@ import {
 } from "@/events/EventEffects"
 
 const MAX_DELTA = 0.1
+
+/** Aviso en pantalla al recibir el golpe de una criatura (salvo la medusa). */
+function creatureHitMessage(kind: CreatureKind): string {
+  if (kind === "lanternfish") return "¡MORDISCO!"
+  return `¡${CREATURE_NAMES[kind].toUpperCase()}!`
+}
 // Colores temporales para teñir la estela de burbujas (sin allocations).
 const bubbleWater = new THREE.Color()
 const bubbleAccent = new THREE.Color()
@@ -186,6 +194,12 @@ export class Game {
   private runState: RunState = createRunState()
   private biomeIndex = 0
   private collectedInZone = 0
+  /** Escudo de una rémora: absorbe el siguiente golpe de la fauna. */
+  private faunaShield = false
+  /** Radio de recogida extra de una manta cercana (este frame). */
+  private faunaRadiusBoost = 1
+  /** Desechos que se han comido los peces limpiadores este frame. */
+  private readonly faunaGrazed: Debris[] = []
   private godMode = false
   private bubbles: BubbleTrail
   private structures: StructureManager
@@ -723,6 +737,8 @@ export class Game {
     this.biomeIndex = index
     this.collectedInZone = 0
     this.state.zoneProgress = 0
+    this.faunaShield = false
+    this.faunaGrazed.length = 0
 
     this.loop = Math.floor(index / BIOME_ORDER.length)
     const biomeKey = BIOME_ORDER[index % BIOME_ORDER.length]
@@ -754,7 +770,7 @@ export class Game {
       12,
       2 + (index % BIOME_ORDER.length) + this.runState.enemyCountBonus,
     )
-    this.enemyManager.spawn(enemyCount, bounds, rng)
+    this.enemyManager.spawn(enemyCount, bounds, rng, biomeKey)
     this.applyBiomeLighting()
 
     const toxicityFloor =
@@ -1296,6 +1312,150 @@ export class Game {
     this.uiManager.showFloatingEco(value, screen.x, screen.y)
   }
 
+  /**
+   * Mueve la fauna y aplica lo que le hace a la tortuga y a los desechos.
+   * Devuelve `false` si un golpe acabó con la run.
+   */
+  private updateFauna(
+    deltaTime: number,
+    time: number,
+    bounds: WorldBounds,
+  ): boolean {
+    const turtlePosition = this.turtle.mesh.position
+    const fauna = this.enemyManager.update(
+      deltaTime,
+      time,
+      {
+        position: turtlePosition,
+        boosting: this.turtle.isBoosting(),
+        dashing: this.turtle.isSpinInProgress() || this.turtle.isSpinBoosting(),
+        spheres: this.structures.getPositions(),
+      },
+      bounds,
+    )
+
+    for (const notice of fauna.notices) this.tips.trigger(notice)
+    for (const scatter of fauna.scatters) {
+      this.biomeGenerator.scatterDebris(
+        scatter.center,
+        scatter.radius,
+        scatter.speed,
+      )
+    }
+
+    // Pez linterna: arrastra a la tortuga hacia su luz.
+    if (fauna.pull.lengthSq() > 0) {
+      turtlePosition.addScaledVector(fauna.pull, deltaTime)
+      turtlePosition.x = THREE.MathUtils.clamp(
+        turtlePosition.x,
+        -bounds.halfSize,
+        bounds.halfSize,
+      )
+      turtlePosition.y = THREE.MathUtils.clamp(
+        turtlePosition.y,
+        bounds.minY,
+        bounds.maxY,
+      )
+      turtlePosition.z = THREE.MathUtils.clamp(
+        turtlePosition.z,
+        -bounds.halfSize,
+        bounds.halfSize,
+      )
+    }
+
+    // --- Fauna amiga y peces limpiadores ---
+    this.faunaRadiusBoost = fauna.radiusBoost
+    if (fauna.haste) {
+      this.turtle.applyHaste(fauna.haste.duration, fauna.haste.multiplier)
+    }
+    if (fauna.shield) this.faunaShield = true
+    if (fauna.eco > 0) {
+      const eco = Math.round(fauna.eco * this.runState.ecoMultiplier)
+      this.state.ecoAwareness += eco
+      this.showFloatingEcoAt(turtlePosition, eco)
+    }
+    for (const graze of fauna.grazes) {
+      this.faunaGrazed.push(
+        ...this.biomeGenerator.grazeDebris(
+          graze.center,
+          graze.radius,
+          graze.max,
+        ),
+      )
+    }
+    for (const steal of fauna.steals) {
+      const stolen = this.biomeGenerator.stealClaimedDebris(
+        steal.center,
+        steal.radius,
+      )
+      if (stolen > 0) this.tips.trigger("octopus_steal")
+    }
+    this.uiManager.updateBoss(
+      fauna.boss
+        ? {
+            name: CREATURE_NAMES[fauna.boss.kind],
+            cleaned: fauna.boss.cleaned,
+            total: fauna.boss.total,
+            defeated: fauna.boss.defeated,
+          }
+        : null,
+    )
+    const message = fauna.messages[fauna.messages.length - 1]
+    if (message) this.uiManager.showMessage(message, 1600)
+
+    if (this.godMode) return true
+
+    if (fauna.heal > 0) {
+      this.state.toxicity = applyToxicityDelta(this.state.toxicity, -fauna.heal)
+    }
+    // Tinta y púas infladas (suben); canto de ballena (baja).
+    if (fauna.drain !== 0) {
+      this.state.toxicity = applyToxicityDelta(
+        this.state.toxicity,
+        fauna.drain * deltaTime,
+      )
+      if (this.state.toxicity >= 100 && !this.tryKill({ kind: "creature" })) {
+        return false
+      }
+    }
+
+    const hit = fauna.hit
+    if (!hit) return true
+
+    // Rémora: absorbe el golpe entero y se suelta.
+    if (this.faunaShield) {
+      this.faunaShield = false
+      this.enemyManager.onShieldUsed()
+      this.uiManager.showMessage("¡La rémora te protege!", 1200)
+      return true
+    }
+
+    this.state.toxicity = Math.min(100, this.state.toxicity + hit.toxicity)
+    if (hit.slowDuration > 0) {
+      this.turtle.applySlow(hit.slowDuration, hit.slowMultiplier)
+    }
+    this.turtle.playHurt()
+
+    if (hit.kind === "jellyfish") {
+      // Piel Urticante: cada picadura de medusa da Eco.
+      const stingEco = Math.round(this.runState.rules.jellyfishEco)
+      if (stingEco > 0) this.state.ecoAwareness += stingEco
+      this.uiManager.showMessage(
+        stingEco > 0 ? `¡MEDUSA! +${stingEco} Eco` : "¡MEDUSA!",
+        1000,
+      )
+      this.tips.trigger("jellyfish_hit")
+    } else {
+      this.uiManager.showMessage(creatureHitMessage(hit.kind), 1000)
+    }
+
+    const cause: DeathCause =
+      hit.kind === "jellyfish"
+        ? { kind: "jellyfish" }
+        : { kind: "creature", source: CREATURE_NAMES[hit.kind] }
+    return this.state.toxicity < 100 || this.tryKill(cause)
+  }
+
   private update(deltaTime: number, time: number): void {
     if (!this.state.isRunning) return
     if (this.dying) {
@@ -1325,28 +1485,7 @@ export class Game {
     this.turtle.update(deltaTime, this.input, bounds)
     this.trackHeldControls()
 
-    const hitByEnemy = this.enemyManager.update(
-      deltaTime,
-      time,
-      this.turtle.mesh.position,
-      bounds,
-    )
-    if (hitByEnemy && !this.godMode) {
-      this.state.toxicity = Math.min(100, this.state.toxicity + 15)
-      this.turtle.applySlow(2, 0.5)
-      this.turtle.playHurt()
-      // Piel Urticante: cada picadura da Eco.
-      const stingEco = Math.round(this.runState.rules.jellyfishEco)
-      if (stingEco > 0) this.state.ecoAwareness += stingEco
-      this.uiManager.showMessage(
-        stingEco > 0 ? `¡MEDUSA! +${stingEco} Eco` : "¡MEDUSA!",
-        1000,
-      )
-      this.tips.trigger("jellyfish_hit")
-      if (this.state.toxicity >= 100 && !this.tryKill({ kind: "jellyfish" })) {
-        return
-      }
-    }
+    if (!this.updateFauna(deltaTime, time, bounds)) return
 
     this.cameraRig.update(
       deltaTime,
@@ -1378,7 +1517,7 @@ export class Game {
       : 1
     const collected = this.biomeGenerator.updateDebris(
       this.turtle.mesh.position,
-      this.turtle.getCollectionRadius() * spinRadius,
+      this.turtle.getCollectionRadius() * spinRadius * this.faunaRadiusBoost,
       time,
       deltaTime,
       // Tacto Suave: los frágiles no se rompen aunque vayas en impulso.
@@ -1404,7 +1543,11 @@ export class Game {
       )
     }
 
-    // --- Recolección manual ---
+    // --- Recolección manual (y lo que se comen los peces limpiadores) ---
+    if (this.faunaGrazed.length > 0) {
+      collected.push(...this.faunaGrazed)
+      this.faunaGrazed.length = 0
+    }
     for (const debris of collected) {
       this.state.debrisCollected++
       // Cazafugas: las fugas valen más Eco.
@@ -1691,7 +1834,11 @@ export class Game {
       this.enemyManager.update(
         worldDelta,
         this.deathWorldTime,
-        this.turtle.mesh.position,
+        {
+          position: this.turtle.mesh.position,
+          boosting: false,
+          dashing: false,
+        },
         bounds,
       )
       this.biomeGenerator.updateVisuals(worldDelta)

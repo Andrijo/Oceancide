@@ -506,6 +506,84 @@ export class BiomeGenerator {
     }
   }
 
+  /**
+   * Aparta de un punto los desechos libres que tenga cerca (banco de peces).
+   * Los que ya va atrayendo una esfera no se tocan. Devuelve cuántos movió.
+   */
+  public scatterDebris(
+    center: THREE.Vector3,
+    radius: number,
+    speed: number,
+  ): number {
+    let moved = 0
+    const radiusSq = radius * radius
+    for (const debris of this.debrisList) {
+      if (debris.removed || debris.claimed) continue
+      const dx = debris.mesh.position.x - center.x
+      const dz = debris.mesh.position.z - center.z
+      const distanceSq = dx * dx + dz * dz
+      if (distanceSq >= radiusSq) continue
+
+      const distance = Math.sqrt(distanceSq)
+      // Más fuerte en el centro; en el centro exacto sale en una dirección fija.
+      const strength = speed * (1 - distance / radius) + speed * 0.3
+      const nx = distance > 1e-3 ? dx / distance : 1
+      const nz = distance > 1e-3 ? dz / distance : 0
+      debris.scatter(nx * strength, nz * strength)
+      moved++
+    }
+    return moved
+  }
+
+  /**
+   * Un pulpo roba lo que atraen las esferas cerca de él: lo suelta, lo aparta
+   * y las esferas tardan un rato en poder volver a atraerlo.
+   */
+  public stealClaimedDebris(center: THREE.Vector3, radius: number): number {
+    let stolen = 0
+    const radiusSq = radius * radius
+    for (const debris of this.debrisList) {
+      if (debris.removed || !debris.claimed || debris.pullArrived) continue
+      const position = debris.mesh.position
+      if (position.distanceToSquared(center) >= radiusSq) continue
+      debris.release()
+      debris.grabCooldown = 6
+      const dx = position.x - center.x
+      const dz = position.z - center.z
+      const distance = Math.hypot(dx, dz) || 1
+      debris.scatter((dx / distance) * 5, (dz / distance) * 5)
+      stolen++
+    }
+    return stolen
+  }
+
+  /**
+   * Un pez limpiador se come los desechos libres más cercanos. Se quitan del
+   * bioma y se devuelven para que cuenten como recogidos.
+   */
+  public grazeDebris(
+    center: THREE.Vector3,
+    radius: number,
+    max: number,
+  ): Debris[] {
+    const eaten: Debris[] = []
+    const radiusSq = radius * radius
+    for (
+      let i = this.debrisList.length - 1;
+      i >= 0 && eaten.length < max;
+      i--
+    ) {
+      const debris = this.debrisList[i]
+      // Las reliquias y las fugas se las deja a la tortuga.
+      if (debris.removed || debris.claimed || debris.relic) continue
+      if (debris.hazard === "lixivia") continue
+      if (debris.mesh.position.distanceToSquared(center) >= radiusSq) continue
+      eaten.push(debris)
+      this.removeDebrisInternal(debris, i)
+    }
+    return eaten
+  }
+
   /** Elimina un debris del bioma sin dispose (materiales compartidos); solo lo quita y actualiza la contaminación. */
   public removeDebris(debris: Debris): void {
     if (debris.removed) return
