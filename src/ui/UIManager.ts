@@ -4,6 +4,12 @@ import { PARAGRAPH_FONT, TITLE_FONT } from "@ui/fonts"
 import { CenterNotices, messageTopBelow } from "@ui/centerNotices"
 import { SEMANTIC, tint } from "@ui/colorVision"
 import type { BuildHudView } from "@ui/buildHud"
+import {
+  zoneObjectiveRatio,
+  zoneObjectiveText,
+  type ZoneObjectiveKind,
+  type ZoneObjectiveView,
+} from "@ui/zoneObjective"
 
 const TIMER_NORMAL = { color: "#f5eedd", border: "rgba(245, 238, 221, 0.35)" }
 const TIMER_LOW = { color: SEMANTIC.warn, border: tint(SEMANTIC.warn, 70) }
@@ -12,6 +18,8 @@ const TIMER_CRITICAL = { color: SEMANTIC.bad, border: tint(SEMANTIC.bad, 90) }
 const CLEANSING_DURATION = 600
 /** Separación entre el aviso de reliquia y un mensaje que conviva con él. */
 const MESSAGE_BELOW_RELIC_GAP = 4
+/** Separación mínima entre el mensaje central y el grupo de arriba. */
+const MESSAGE_BELOW_CLUSTER_GAP = 8
 const CLEANSING_THRESHOLD = 0.5
 
 const TOXICITY_LEVEL_LABELS: Record<string, string> = {
@@ -59,7 +67,11 @@ export class UIManager {
   private floatingEcoNext = 0
 
   private ecoAwarenessEl: HTMLElement
-  private zoneProgressEl: HTMLElement
+  private objectiveEl: HTMLElement
+  private objectiveTextEl: HTMLElement
+  private objectiveFillEl: HTMLElement
+  private objectiveKind: ZoneObjectiveKind = "debris"
+  private lastObjectiveRatio = -1
   private toxicitySkullEl: HTMLElement
   private toxicitySkullFillEl: SVGRectElement
   private toxicityTrendEl: HTMLElement
@@ -106,7 +118,6 @@ export class UIManager {
 
   constructor() {
     this.ecoAwarenessEl = document.getElementById("eco-awareness")!
-    this.zoneProgressEl = document.getElementById("zone-progress")!
     this.toxicitySkullEl = document.getElementById("toxicity-skull")!
     this.toxicitySkullFillEl = document.querySelector<SVGRectElement>(
       "#toxicity-skull-fill",
@@ -134,6 +145,24 @@ export class UIManager {
       transition: color 0.3s ease, border-color 0.3s ease;
     `
     this.dangerClusterEl.appendChild(this.biomeTimerEl)
+
+    // Objetivo de zona justo bajo el tiempo: meta y amenaza se leen juntas
+    // (estilos en styles.css).
+    this.objectiveEl = document.createElement("div")
+    this.objectiveEl.id = "zone-objective"
+    this.objectiveEl.className = "zone-objective"
+    this.objectiveTextEl = document.createElement("div")
+    this.objectiveTextEl.className = "zone-objective-text"
+    this.objectiveTextEl.setAttribute("role", "status")
+    this.objectiveTextEl.setAttribute("aria-label", "Objetivo de zona")
+    const objectiveBar = document.createElement("div")
+    objectiveBar.className = "zone-objective-bar"
+    objectiveBar.setAttribute("aria-hidden", "true")
+    this.objectiveFillEl = document.createElement("div")
+    this.objectiveFillEl.className = "zone-objective-fill"
+    objectiveBar.appendChild(this.objectiveFillEl)
+    this.objectiveEl.append(this.objectiveTextEl, objectiveBar)
+    this.dangerClusterEl.appendChild(this.objectiveEl)
 
     // Fugas pendientes: solo visible mientras quede alguna.
     this.leaksEl = document.createElement("div")
@@ -370,8 +399,32 @@ export class UIManager {
   public updateLeaks(count: number): void {
     if (count === this.lastLeaks) return
     this.lastLeaks = count
-    this.leaksEl.style.display = count > 0 ? "block" : "none"
+    // Con el objetivo de cerrar fugas, el propio objetivo ya las cuenta.
+    const show = count > 0 && this.objectiveKind !== "leaks"
+    this.leaksEl.style.display = show ? "block" : "none"
     this.leaksEl.textContent = `Fugas: ${count}`
+  }
+
+  /** Objetivo de la zona: "Desechos 12/30" con una barra de progreso. */
+  public updateZoneObjective(view: ZoneObjectiveView): void {
+    if (view.kind !== this.objectiveKind) {
+      this.objectiveKind = view.kind
+      this.lastLeaks = -1 // vuelve a decidir si se ve el aviso de fugas
+    }
+    const text = zoneObjectiveText(view)
+    if (this.objectiveTextEl.textContent !== text) {
+      this.objectiveTextEl.textContent = text
+      this.objectiveTextEl.setAttribute(
+        "aria-label",
+        `Objetivo de zona: ${text}`,
+      )
+    }
+    const ratio = zoneObjectiveRatio(view)
+    if (ratio !== this.lastObjectiveRatio) {
+      this.lastObjectiveRatio = ratio
+      this.objectiveFillEl.style.transform = `scaleX(${ratio})`
+      this.objectiveEl.classList.toggle("is-done", ratio >= 1)
+    }
   }
 
   /** Megajefe del bioma, o `null` si no hay. */
@@ -420,7 +473,6 @@ export class UIManager {
 
   public updateUI(state: GameState, deltaTime: number): void {
     this.setText(this.ecoAwarenessEl, Math.floor(state.ecoAwareness).toString())
-    this.setText(this.zoneProgressEl, `${Math.round(state.zoneProgress)}%`)
 
     const toxicity = Math.min(state.toxicity, 100)
 
@@ -577,12 +629,16 @@ export class UIManager {
       left: 50%;
       transform: translate(-50%, -50%);
       color: #f5eedd;
+      width: max-content;
+      max-width: calc(100% - 32px);
+      box-sizing: border-box;
+      text-align: center;
       font-family: ${TITLE_FONT};
-      font-size: 38px;
+      font-size: clamp(22px, 6vw, 38px);
       font-weight: bold;
       text-shadow: 2px 2px 4px rgba(0,0,0,0.6);
       background: none;
-      padding: 20px 40px;
+      padding: 12px 20px;
       border-radius: 10px;
       pointer-events: none;
       z-index: 1000;
@@ -591,7 +647,24 @@ export class UIManager {
 
     document.getElementById("game-container")!.appendChild(msgEl)
     this.centerNotices.show("message", msgEl, duration)
+    this.placeMessageBelowCluster(msgEl)
     this.placeMessageBelowRelic()
+  }
+
+  /**
+   * Centra el mensaje hacia el 20% del alto, pero nunca encima del grupo de
+   * arriba (tiempo, objetivo, fugas, calavera): en pantallas bajas o angostas
+   * lo taparía.
+   */
+  private placeMessageBelowCluster(message: HTMLElement): void {
+    const container = document.getElementById("game-container")!
+    const containerRect = container.getBoundingClientRect()
+    const clusterBottom =
+      this.dangerClusterEl.getBoundingClientRect().bottom - containerRect.top
+    const centered = containerRect.height * 0.2 - message.offsetHeight / 2
+    const top = Math.max(centered, clusterBottom + MESSAGE_BELOW_CLUSTER_GAP)
+    message.style.top = `${top}px`
+    message.style.transform = "translate(-50%, 0)"
   }
 
   /**
