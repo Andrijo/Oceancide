@@ -144,6 +144,7 @@ const HUD_IDS = [
   "ui-overlay",
   "toxicity-skull",
   "biome-timer",
+  "zone-objective",
   "hud-bottom", // impulso, dash y filtro
   "controls-hint",
   "touch-controls",

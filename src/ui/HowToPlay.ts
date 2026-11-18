@@ -247,7 +247,7 @@ export function createHowToPlayBody(
   const goal = node(
     "p",
     "help-lead",
-    "Cumple el objetivo de cada zona (recoger el 60% de sus desechos: el contador llega al 100%) y desciende a la siguiente. Vigila la calavera: si la toxicidad se llena, la inmersión termina.",
+    "Arriba, bajo el tiempo, está el objetivo de la zona (por ejemplo, «Desechos 12/30»): cúmplelo para descender a la siguiente. Vigila la calavera, justo debajo: si la toxicidad se llena, la inmersión termina.",
   )
 
   const currency = node(

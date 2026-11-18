@@ -123,6 +123,7 @@ import {
   computeReviveTimeRemaining,
   computeTimePressure,
   computeZoneProgress,
+  computeZoneRequirement,
 } from "@core/systems/progression"
 import {
   deathFade,
@@ -172,6 +173,7 @@ import {
   discoverRelic,
 } from "@/meta/codex"
 import { evaluateAchievements, lockedCards } from "@/meta/achievements"
+import type { ZoneObjectiveView } from "@ui/zoneObjective"
 import { dailyKey, dailySeed } from "@/meta/daily"
 import { RELICS, pickRelic, type Relic } from "@/relics/RelicPool"
 import {
@@ -1818,7 +1820,9 @@ ${extras.join(" · ")}`
         ? this.biomeTimeRemaining / this.biomeTimeLimit
         : 1,
     )
-    this.uiManager.updateLeaks(this.countLeaks())
+    const leaks = this.countLeaks()
+    this.uiManager.updateLeaks(leaks)
+    this.uiManager.updateZoneObjective(this.zoneObjectiveView(leaks))
 
     // --- Recolección ---
     const rules = this.runState.rules
@@ -2047,6 +2051,24 @@ ${extras.join(" · ")}`
       if (debris.hazard === "lixivia" && !debris.removed) leaks++
     }
     return leaks
+  }
+
+  /** Objetivo de la zona tal y como lo cuenta el HUD ("Desechos 12/30"). */
+  private zoneObjectiveView(leaks: number): ZoneObjectiveView {
+    if (this.currentNode.objective === "leaks") {
+      return {
+        kind: "leaks",
+        done: this.initialLeaks - leaks,
+        total: this.initialLeaks,
+      }
+    }
+    return {
+      kind: "debris",
+      done: this.collectedInZone,
+      total: computeZoneRequirement(
+        this.biomeGenerator.getInitialDebrisCount(),
+      ),
+    }
   }
 
   /** Progreso del objetivo de la zona (0..100). */
