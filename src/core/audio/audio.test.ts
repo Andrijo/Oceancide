@@ -13,6 +13,8 @@ import {
 import {
   BIOME_MOODS,
   HUB_MOOD,
+  MODES,
+  PHRASE_BARS,
   STEPS_PER_BAR,
   composeBar,
   degreeFrequency,
@@ -137,29 +139,105 @@ describe("música", () => {
     expect(degreeFrequency(mood, -7)).toBeCloseTo(mood.root / 2)
   })
 
-  it("composeBar da una tríada, un bajo y un paso de melodía por semicorchea", () => {
-    const mood = BIOME_MOODS.subphotic
-    const bar = composeBar(new Rng(1), mood, 0, 0)
-    expect(bar.chord).toHaveLength(3)
-    expect(bar.bass).toBeLessThan(bar.chord[0])
-    expect(bar.melody).toHaveLength(STEPS_PER_BAR)
-    expect(bar.pulse).toBe(false)
-    // Las notas de la melodía están por encima del pad.
-    for (const note of bar.melody) {
-      if (note !== null) expect(note).toBeGreaterThan(bar.chord[0])
+  it("el tempo va de 116 BPM en la superficie a 84 en el fondo", () => {
+    for (const key of keys) {
+      const bpm = 60 / BIOME_MOODS[key].stepSeconds / 4
+      expect(bpm).toBeGreaterThanOrEqual(83.9)
+      expect(bpm).toBeLessThanOrEqual(116.1)
     }
   })
 
-  it("con más intensidad hay más notas y pulso de peligro", () => {
-    const mood = BIOME_MOODS.deepSea
-    let calm = 0
-    let tense = 0
-    for (let i = 0; i < 200; i++) {
-      calm += composeBar(new Rng(i), mood, i, 0).melody.filter(Boolean).length
-      tense += composeBar(new Rng(i), mood, i, 1).melody.filter(Boolean).length
+  it("empieza en mayor y el modo se oscurece con la profundidad", () => {
+    const byDepth = [...keys].sort((a, b) => BIOMES[a].depth - BIOMES[b].depth)
+    // Suma de los intervalos del modo: cuanto menor, más oscuro.
+    const light = (key: BiomeKey): number =>
+      BIOME_MOODS[key].scale.reduce((sum, semis) => sum + semis, 0)
+    for (let i = 1; i < byDepth.length; i++) {
+      expect(light(byDepth[i])).toBeLessThanOrEqual(light(byDepth[i - 1]))
     }
-    expect(tense).toBeGreaterThan(calm)
-    expect(composeBar(new Rng(1), mood, 0, 1).pulse).toBe(true)
+    expect(BIOME_MOODS[byDepth[0]].scale).toEqual(MODES.lydian)
+    expect(BIOME_MOODS[byDepth[byDepth.length - 1]].scale).toEqual(
+      MODES.locrian,
+    )
+    // Tercera mayor en el menú y en la superficie.
+    expect(HUB_MOOD.scale[2]).toBe(4)
+  })
+
+  const hits = (track: boolean[]): number[] =>
+    track.map((hit, i) => (hit ? i : -1)).filter((i) => i >= 0)
+
+  it("composeBar da 16 semicorcheas con arpegio continuo y bajo en corcheas", () => {
+    const bar = composeBar(new Rng(1), BIOME_MOODS.subphotic, 0, 0)
+    expect(bar.chord).toHaveLength(4)
+    for (const track of [
+      bar.arp,
+      bar.bass,
+      bar.lead,
+      bar.kick,
+      bar.snare,
+      bar.hat,
+    ]) {
+      expect(track).toHaveLength(STEPS_PER_BAR)
+    }
+    // El arpegio no para y va por encima del pad.
+    for (const note of bar.arp) {
+      expect(note).not.toBeNull()
+      expect(note!).toBeGreaterThan(bar.chord[0])
+    }
+    // El bajo pulsa en corcheas, por debajo del pad.
+    bar.bass.forEach((note, i) => {
+      if (i % 2 === 1) expect(note).toBeNull()
+      else expect(note!).toBeLessThan(bar.chord[0])
+    })
+  })
+
+  it("con calma: pad, arpegio, bajo y bombo, sin caja, charles ni melodía", () => {
+    const bar = composeBar(new Rng(3), BIOME_MOODS.deepSea, 0, 0)
+    expect(hits(bar.kick)).toEqual([0, 8])
+    expect(bar.snare.some(Boolean)).toBe(false)
+    expect(bar.hat.some(Boolean)).toBe(false)
+    expect(bar.lead.some((note) => note !== null)).toBe(false)
+    expect(bar.filter).toBeLessThan(0.5)
+  })
+
+  it("con tensión media entran la melodía y la caja en 2 y 4", () => {
+    const bar = composeBar(new Rng(3), BIOME_MOODS.deepSea, 0, 0.4)
+    expect(hits(bar.snare)).toEqual([4, 12])
+    expect(bar.hat.some(Boolean)).toBe(false)
+    let notes = 0
+    for (let i = 0; i < 50; i++) {
+      const lead = composeBar(new Rng(i), BIOME_MOODS.deepSea, i, 0.4).lead
+      notes += lead.filter((note) => note !== null).length
+      // Notas largas: solo en el 1 y el 3.
+      lead.forEach((note, step) => {
+        if (step !== 0 && step !== 8) expect(note).toBeNull()
+      })
+    }
+    expect(notes).toBeGreaterThan(0)
+  })
+
+  it("al máximo: charles en semicorcheas y melodía también en 2 y 4", () => {
+    const bar = composeBar(new Rng(3), BIOME_MOODS.deepSea, 0, 1)
+    expect(hits(bar.kick)).toEqual([0, 8, 10])
+    expect(hits(bar.hat)).toHaveLength(STEPS_PER_BAR)
+    const onsets = new Set<number>()
+    for (let i = 0; i < 100; i++) {
+      composeBar(new Rng(i), BIOME_MOODS.deepSea, i, 1).lead.forEach(
+        (note, step) => {
+          if (note !== null) onsets.add(step)
+        },
+      )
+    }
+    expect([...onsets].sort((a, b) => a - b)).toEqual([0, 4, 8, 12])
+  })
+
+  it("el filtro se abre con la intensidad y a lo largo de la frase", () => {
+    const mood = BIOME_MOODS.subphotic
+    const filter = (bar: number, level: number): number =>
+      composeBar(new Rng(1), mood, bar, level).filter
+    expect(filter(0, 1)).toBeGreaterThan(filter(0, 0))
+    expect(filter(PHRASE_BARS - 1, 0)).toBeGreaterThan(filter(0, 0))
+    expect(filter(PHRASE_BARS - 1, 1)).toBeLessThanOrEqual(1)
   })
 
   it("composeBar es determinista con la misma semilla", () => {

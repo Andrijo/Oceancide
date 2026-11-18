@@ -55,10 +55,19 @@ export class AudioManager {
   private musicBus: GainNode | null = null
   /** Filtro de toda la música: se cierra en pausa. */
   private musicDuck: BiquadFilterNode | null = null
-  /** Filtro del pad: su corte sigue el brillo del bioma y la intensidad. */
+  /** Filtro del pad: se abre con la tensión y a lo largo de cada frase. */
   private padFilter: BiquadFilterNode | null = null
-  /** Eco de la melodía (suena a agua). */
+  /** Entrada de la reverb larga (pad, arpegio y melodía). */
+  private reverbIn: GainNode | null = null
+  /** Entrada de la reverb cortada de la caja (sonido de los 80). */
+  private gatedIn: GainNode | null = null
+  /** Batería: bombo, caja y charles. */
+  private drumBus: GainNode | null = null
+  /** Arpegio, con eco sincronizado con el tempo. */
   private melodyBus: GainNode | null = null
+  private echoDelay: DelayNode | null = null
+  /** Melodía lenta. */
+  private leadBus: GainNode | null = null
   private noiseBuffer: AudioBuffer | null = null
 
   private readonly limiter = new SfxLimiter()
@@ -128,15 +137,14 @@ export class AudioManager {
     const starting = this.mood === null
     this.mood = mood
     if (starting) this.barIndex = 0
-    this.updatePadFilter()
   }
 
-  /** Tensión de la música (0..1): densidad de la melodía y brillo del pad. */
+  /**
+   * Tensión de la música (0..1): entran charles, palmas y arpegio, y se abre
+   * el filtro. Se aplica en el siguiente compás.
+   */
   public setIntensity(intensity: number): void {
-    const next = Math.min(1, Math.max(0, intensity))
-    if (Math.abs(next - this.intensity) < 0.02) return
-    this.intensity = next
-    this.updatePadFilter()
+    this.intensity = Math.min(1, Math.max(0, intensity))
   }
 
   /** Con la partida en pausa la música se oye amortiguada. */
@@ -211,17 +219,46 @@ export class AudioManager {
     this.musicDuck.connect(this.musicBus)
     this.musicBus.connect(master)
 
+    // Reverb larga y reverb cortada (respuestas al impulso generadas).
+    const reverb = ctx.createConvolver()
+    reverb.buffer = this.createImpulse(ctx, 3.2, 0)
+    const reverbOut = ctx.createGain()
+    reverbOut.gain.value = 0.55
+    this.reverbIn = ctx.createGain()
+    this.reverbIn.connect(reverb)
+    reverb.connect(reverbOut)
+    reverbOut.connect(this.musicDuck)
+
+    const gated = ctx.createConvolver()
+    gated.buffer = this.createImpulse(ctx, 0.32, 0.26)
+    const gatedOut = ctx.createGain()
+    gatedOut.gain.value = 0.85
+    this.gatedIn = ctx.createGain()
+    this.gatedIn.connect(gated)
+    gated.connect(gatedOut)
+    gatedOut.connect(this.musicDuck)
+
     this.padFilter = ctx.createBiquadFilter()
     this.padFilter.type = "lowpass"
-    this.padFilter.Q.value = 0.8
+    this.padFilter.Q.value = 1.2
+    this.padFilter.frequency.value = 900
     this.padFilter.connect(this.musicDuck)
-    this.updatePadFilter()
+    this.padFilter.connect(this.send(ctx, this.reverbIn, 0.8))
 
-    // Melodía con eco: la señal seca y una copia retardada que se realimenta.
+    this.drumBus = ctx.createGain()
+    this.drumBus.connect(this.musicDuck)
+
+    this.leadBus = ctx.createGain()
+    this.leadBus.connect(this.musicDuck)
+    this.leadBus.connect(this.send(ctx, this.reverbIn, 0.7))
+
+    // Arpegio con eco: la señal seca y una copia retardada que se realimenta.
     this.melodyBus = ctx.createGain()
     this.melodyBus.connect(this.musicDuck)
+    this.melodyBus.connect(this.send(ctx, this.reverbIn, 0.25))
     const delay = ctx.createDelay(1)
     delay.delayTime.value = 0.39
+    this.echoDelay = delay
     const feedback = ctx.createGain()
     feedback.gain.value = 0.38
     const echoTone = ctx.createBiquadFilter()
@@ -258,13 +295,6 @@ export class AudioManager {
 
   private isHidden(): boolean {
     return typeof document !== "undefined" && document.hidden
-  }
-
-  private updatePadFilter(): void {
-    const ctx = this.ctx
-    if (!ctx || !this.padFilter || !this.mood) return
-    const cutoff = this.mood.brightness * (0.75 + this.intensity * 0.9)
-    this.padFilter.frequency.setTargetAtTime(cutoff, ctx.currentTime, 0.8)
   }
 
   // --- Efectos ---
@@ -349,54 +379,266 @@ export class AudioManager {
     }
   }
 
+  /** Ganancia intermedia para mandar una señal a una reverb. */
+  private send(ctx: AudioContext, target: AudioNode, level: number): GainNode {
+    const gain = ctx.createGain()
+    gain.gain.value = level
+    gain.connect(target)
+    return gain
+  }
+
+  /**
+   * Respuesta al impulso estéreo de ruido. Con `hold` > 0 el ruido se mantiene
+   * plano ese tiempo y luego se corta en seco (reverb cortada); si no, decae
+   * poco a poco (reverb de sala grande).
+   */
+  private createImpulse(
+    ctx: AudioContext,
+    seconds: number,
+    hold: number,
+  ): AudioBuffer {
+    const length = Math.floor(ctx.sampleRate * seconds)
+    const buffer = ctx.createBuffer(2, length, ctx.sampleRate)
+    for (let channel = 0; channel < 2; channel++) {
+      const data = buffer.getChannelData(channel)
+      for (let i = 0; i < length; i++) {
+        const t = i / ctx.sampleRate
+        const envelope =
+          hold > 0
+            ? t < hold
+              ? 1 - (t / hold) * 0.3
+              : Math.max(0, 1 - (t - hold) / (seconds - hold)) * 0.7
+            : Math.pow(1 - i / length, 2.5)
+        data[i] = (Math.random() * 2 - 1) * envelope
+      }
+    }
+    return buffer
+  }
+
   private scheduleBar(
     ctx: AudioContext,
     mood: MusicMood,
     bar: MusicBar,
     start: number,
   ): void {
-    if (!this.padFilter || !this.melodyBus || !this.musicDuck) return
-    const barSeconds = mood.stepSeconds * STEPS_PER_BAR
+    const { padFilter, drumBus, melodyBus, leadBus, gatedIn } = this
+    if (!padFilter || !drumBus || !melodyBus || !leadBus || !gatedIn) return
+    const stepSeconds = mood.stepSeconds
+    const barSeconds = stepSeconds * STEPS_PER_BAR
+    const at = (i: number): number => start + i * stepSeconds
+
+    // El pad se abre o se cierra durante el compás.
+    const cutoff = 300 + mood.brightness * bar.filter
+    padFilter.frequency.setTargetAtTime(cutoff, start, barSeconds * 0.3)
+    // Eco del arpegio a corchea con puntillo del tempo actual.
+    this.echoDelay?.delayTime.setValueAtTime(stepSeconds * 3, start)
+
+    for (const freq of bar.chord)
+      this.padNote(ctx, padFilter, freq, start, barSeconds)
+
+    for (let i = 0; i < STEPS_PER_BAR; i++) {
+      const t = at(i)
+      if (bar.kick[i]) this.kick(ctx, drumBus, t)
+      if (bar.snare[i]) this.snare(ctx, drumBus, gatedIn, t)
+      if (bar.hat[i]) this.hat(ctx, drumBus, t, 0.03, 0.03)
+
+      const bass = bar.bass[i]
+      if (bass !== null)
+        this.bassNote(ctx, this.musicDuck!, bass, t, stepSeconds * 1.7)
+
+      const arp = bar.arp[i]
+      if (arp !== null) {
+        this.tone(ctx, melodyBus, "square", arp, t, stepSeconds * 0.9, 0.017)
+      }
+
+      const lead = bar.lead[i]
+      if (lead !== null) {
+        // La nota se sostiene hasta la siguiente (o el final del compás).
+        let next = i + 1
+        while (next < STEPS_PER_BAR && bar.lead[next] === null) next++
+        const tail = next === STEPS_PER_BAR ? 0.3 : 0
+        this.leadNote(ctx, leadBus, lead, t, (next - i) * stepSeconds + tail)
+      }
+    }
+  }
+
+  /** Nota del pad: tres sierras desafinadas, entrada lenta y cola larga. */
+  private padNote(
+    ctx: AudioContext,
+    destination: AudioNode,
+    freq: number,
+    start: number,
+    barSeconds: number,
+  ): void {
     const end = start + barSeconds
-
-    // Pad: cada nota con dos sierras desafinadas, entrada y salida lentas
-    // que se solapan con el compás siguiente.
-    for (const freq of bar.chord) {
-      const env = ctx.createGain()
-      env.gain.setValueAtTime(0.0001, start)
-      env.gain.linearRampToValueAtTime(0.05, start + barSeconds * 0.35)
-      env.gain.linearRampToValueAtTime(0.04, end)
-      env.gain.exponentialRampToValueAtTime(0.0001, end + barSeconds * 0.4)
-      env.connect(this.padFilter)
-      for (const detune of [-7, 7]) {
-        const osc = ctx.createOscillator()
-        osc.type = "sawtooth"
-        osc.frequency.value = freq
-        osc.detune.value = detune
-        osc.connect(env)
-        osc.start(start)
-        osc.stop(end + barSeconds * 0.45)
-        osc.onended = () => env.disconnect()
-      }
+    const env = ctx.createGain()
+    env.gain.setValueAtTime(0.0001, start)
+    env.gain.linearRampToValueAtTime(0.022, start + barSeconds * 0.25)
+    env.gain.setValueAtTime(0.022, end)
+    env.gain.exponentialRampToValueAtTime(0.0001, end + barSeconds * 0.5)
+    env.connect(destination)
+    for (const detune of [-12, 0, 12]) {
+      const osc = ctx.createOscillator()
+      osc.type = "sawtooth"
+      osc.frequency.value = freq
+      osc.detune.value = detune
+      osc.connect(env)
+      osc.start(start)
+      osc.stop(end + barSeconds * 0.55)
+      osc.onended = () => env.disconnect()
     }
+  }
 
-    // Bajo: una nota larga al empezar el compás.
-    this.tone(ctx, this.musicDuck, "sine", bar.bass, start, barSeconds, 0.12)
+  /** Melodía: dos sierras desafinadas con vibrato suave y entrada lenta. */
+  private leadNote(
+    ctx: AudioContext,
+    destination: AudioNode,
+    freq: number,
+    t: number,
+    duration: number,
+  ): void {
+    const filter = ctx.createBiquadFilter()
+    filter.type = "lowpass"
+    filter.frequency.value = 3200
+    filter.Q.value = 2
+    const env = ctx.createGain()
+    env.gain.setValueAtTime(0.0001, t)
+    env.gain.linearRampToValueAtTime(0.048, t + 0.06)
+    env.gain.setValueAtTime(0.042, t + duration * 0.7)
+    env.gain.exponentialRampToValueAtTime(0.0001, t + duration)
+    filter.connect(env)
+    env.connect(destination)
 
-    // Melodía: notas cortas, con eco.
-    bar.melody.forEach((freq, step) => {
-      if (freq === null) return
-      const at = start + step * mood.stepSeconds
-      this.tone(ctx, this.melodyBus!, "triangle", freq, at, 0.6, 0.05)
-    })
+    const vibrato = ctx.createOscillator()
+    vibrato.frequency.value = 5
+    const depth = ctx.createGain()
+    depth.gain.value = 6 // cents
+    vibrato.connect(depth)
+    vibrato.start(t)
+    vibrato.stop(t + duration + 0.05)
 
-    // Pulso de peligro: un golpe grave en cada tiempo.
-    if (bar.pulse) {
-      for (let beat = 0; beat < STEPS_PER_BAR; beat += 2) {
-        const at = start + beat * mood.stepSeconds
-        this.tone(ctx, this.musicDuck, "sine", bar.bass / 2, at, 0.25, 0.2)
-      }
+    // Dos sierras desafinadas y una cuadrada una octava abajo para dar cuerpo.
+    for (const [detune, type, ratio] of [
+      [-8, "sawtooth", 1],
+      [8, "sawtooth", 1],
+      [0, "square", 0.5],
+    ] as const) {
+      const osc = ctx.createOscillator()
+      osc.type = type
+      osc.frequency.value = freq * ratio
+      osc.detune.value = detune
+      depth.connect(osc.detune)
+      osc.connect(filter)
+      osc.start(t)
+      osc.stop(t + duration + 0.05)
+      osc.onended = () => env.disconnect()
     }
+  }
+
+  /** Bombo de caja de ritmos: seno con caída rápida de tono. */
+  private kick(ctx: AudioContext, destination: AudioNode, t: number): void {
+    const osc = ctx.createOscillator()
+    osc.type = "sine"
+    osc.frequency.setValueAtTime(160, t)
+    osc.frequency.exponentialRampToValueAtTime(38, t + 0.12)
+    const env = ctx.createGain()
+    env.gain.setValueAtTime(0.7, t)
+    env.gain.exponentialRampToValueAtTime(0.0001, t + 0.42)
+    osc.connect(env)
+    env.connect(destination)
+    osc.start(t)
+    osc.stop(t + 0.4)
+    osc.onended = () => env.disconnect()
+  }
+
+  /** Ruido filtrado con envolvente corta (caja y charles). */
+  private noiseHit(
+    ctx: AudioContext,
+    destinations: AudioNode[],
+    t: number,
+    duration: number,
+    gain: number,
+    type: BiquadFilterType,
+    freq: number,
+  ): void {
+    if (!this.noiseBuffer) return
+    const noise = ctx.createBufferSource()
+    noise.buffer = this.noiseBuffer
+    // Cada golpe empieza en un punto distinto del ruido.
+    const offset = Math.random() * (this.noiseBuffer.duration - duration)
+    const filter = ctx.createBiquadFilter()
+    filter.type = type
+    filter.frequency.value = freq
+    filter.Q.value = 1
+    const env = ctx.createGain()
+    env.gain.setValueAtTime(gain, t)
+    env.gain.exponentialRampToValueAtTime(0.0001, t + duration)
+    noise.connect(filter)
+    filter.connect(env)
+    for (const destination of destinations) env.connect(destination)
+    noise.start(t, Math.max(0, offset), duration + 0.02)
+    noise.onended = () => env.disconnect()
+  }
+
+  /** Caja: cuerpo tonal y ruido, con envío a la reverb cortada. */
+  private snare(
+    ctx: AudioContext,
+    destination: AudioNode,
+    gated: AudioNode,
+    t: number,
+  ): void {
+    const body = ctx.createOscillator()
+    body.type = "triangle"
+    body.frequency.setValueAtTime(190, t)
+    body.frequency.exponentialRampToValueAtTime(140, t + 0.1)
+    const env = ctx.createGain()
+    env.gain.setValueAtTime(0.24, t)
+    env.gain.exponentialRampToValueAtTime(0.0001, t + 0.14)
+    body.connect(env)
+    env.connect(destination)
+    env.connect(gated)
+    body.start(t)
+    body.stop(t + 0.15)
+    body.onended = () => env.disconnect()
+    this.noiseHit(ctx, [destination, gated], t, 0.24, 0.22, "bandpass", 1800)
+  }
+
+  private hat(
+    ctx: AudioContext,
+    destination: AudioNode,
+    t: number,
+    duration: number,
+    gain: number,
+  ): void {
+    this.noiseHit(ctx, [destination], t, duration, gain, "highpass", 8000)
+  }
+
+  /** Bajo: sierra filtrada, pulsante. */
+  private bassNote(
+    ctx: AudioContext,
+    destination: AudioNode,
+    freq: number,
+    t: number,
+    duration: number,
+  ): void {
+    const osc = ctx.createOscillator()
+    osc.type = "sawtooth"
+    osc.frequency.value = freq
+    const filter = ctx.createBiquadFilter()
+    filter.type = "lowpass"
+    filter.Q.value = 2
+    filter.frequency.setValueAtTime(700, t)
+    filter.frequency.exponentialRampToValueAtTime(200, t + duration)
+    const env = ctx.createGain()
+    env.gain.setValueAtTime(0.0001, t)
+    env.gain.linearRampToValueAtTime(0.11, t + 0.01)
+    env.gain.exponentialRampToValueAtTime(0.0001, t + duration)
+    osc.connect(filter)
+    filter.connect(env)
+    env.connect(destination)
+    osc.start(t)
+    osc.stop(t + duration + 0.05)
+    osc.onended = () => env.disconnect()
   }
 
   private tone(
