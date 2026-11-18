@@ -2,16 +2,25 @@ import * as THREE from "three"
 import type { Rng } from "@core/rng"
 import type { Creature, CreatureContext, CreatureEffects } from "./Creature"
 import { addFresnelRim } from "./fresnelRim"
+import {
+  disposeTree,
+  lerpHex,
+  ModelKit,
+  paintFaces,
+  smoothstep,
+} from "./fauna/models/kit"
 import { angleDelta } from "./steering"
 
 const DOME_RADIUS = 0.9
-const TENTACLE_COUNT = 6
+const TENTACLE_COUNT = 8
 const TENTACLE_LENGTH = 1.8
+const LAPPETS = 20
 
 const DOME_OPACITY = 0.6
 const TENTACLE_OPACITY = 0.42
 const HIT_DOME_OPACITY = 0.08
 const HIT_TENTACLE_OPACITY = 0.05
+const GLOW_OPACITY = 0.85
 const BASE_EMISSIVE = 1.1
 const HIT_EMISSIVE = 0.15
 
@@ -48,10 +57,14 @@ export class Jellyfish implements Creature {
   public readonly kind = "jellyfish"
   public readonly mesh = new THREE.Group()
 
-  private readonly dome: THREE.Mesh
+  /** Campana con sus lóbulos, gónadas y ocelos: se contrae entera. */
+  private readonly dome = new THREE.Group()
   private readonly domeMaterial: THREE.MeshStandardMaterial
+  private readonly glowMaterial: THREE.MeshStandardMaterial
   private readonly tentacleMaterial: THREE.MeshBasicMaterial
   private readonly tentacles = new THREE.Group()
+  /** Brazos orales: cortinas onduladas bajo la campana. */
+  private readonly oralArms = new THREE.Group()
 
   private readonly velocity = new THREE.Vector3()
   private readonly phase: number
@@ -80,20 +93,15 @@ export class Jellyfish implements Creature {
     this.mesh.scale.setScalar(rng.range(0.8, 1.2))
     this.mesh.userData.kind = "jellyfish"
 
-    const domeGeometry = new THREE.SphereGeometry(
-      DOME_RADIUS,
-      18,
-      10,
-      0,
-      Math.PI * 2,
-      0,
-      Math.PI / 2,
-    )
+    const kit = new ModelKit()
     // Sin `transmission` (render pass extra) ni luz propia (el número de
     // luces cambiaría con cada medusa y recompilaría todos los shaders): la
-    // gelatina luminosa sale del emisivo + borde fresnel + bloom.
+    // gelatina luminosa sale del emisivo + borde fresnel + bloom. Facetada
+    // como la tortuga, con el color pintado por caras.
     this.domeMaterial = new THREE.MeshStandardMaterial({
-      color: 0xff5fd2,
+      color: 0xffffff,
+      vertexColors: true,
+      flatShading: true,
       transparent: true,
       opacity: DOME_OPACITY,
       roughness: 0.2,
@@ -104,18 +112,65 @@ export class Jellyfish implements Creature {
       depthWrite: false,
     })
     addFresnelRim(this.domeMaterial, 0.8, 2)
-    this.dome = new THREE.Mesh(domeGeometry, this.domeMaterial)
+    this.glowMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffe0f6,
+      emissive: 0xffb8ec,
+      emissiveIntensity: 1.6,
+      flatShading: true,
+      transparent: true,
+      opacity: GLOW_OPACITY,
+      depthWrite: false,
+    })
+
+    // Campana: más clara en la cima y más intensa hacia el borde.
+    const bell = new THREE.SphereGeometry(
+      DOME_RADIUS,
+      12,
+      5,
+      0,
+      Math.PI * 2,
+      0,
+      Math.PI / 2,
+    ).toNonIndexed()
+    paintFaces(bell, (c) =>
+      lerpHex(0xff5fd2, 0xffb0ec, smoothstep(c.y, 0.2, 0.8)),
+    )
+    kit.part(this.dome, bell, this.domeMaterial)
+    // Borde festoneado: lóbulos que cuelgan un poco.
+    const lappet = new THREE.IcosahedronGeometry(0.16, 0)
+    for (let i = 0; i < LAPPETS; i++) {
+      const a = (i / LAPPETS) * Math.PI * 2
+      kit.part(
+        this.dome,
+        lappet,
+        this.domeMaterial,
+        {
+          at: [Math.cos(a) * 0.86, -0.03, Math.sin(a) * 0.86],
+          rot: [0, -a, 0],
+          scale: [0.55, 0.3, 1.45],
+        },
+        0xff4fc8,
+      )
+    }
+    // Cuatro gónadas en herradura (se ven a través de la campana) y ocelos.
+    const gonad = new THREE.TorusGeometry(0.17, 0.045, 4, 8, Math.PI * 1.4)
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4
+      kit.part(this.dome, gonad, this.glowMaterial, {
+        at: [Math.cos(a) * 0.28, 0.42, Math.sin(a) * 0.28],
+        rot: [Math.PI / 2, 0, a],
+      })
+    }
+    const ocellus = new THREE.IcosahedronGeometry(0.035, 0)
+    for (let i = 0; i < 8; i++) {
+      const a = ((i + 0.5) / 8) * Math.PI * 2
+      kit.part(this.dome, ocellus, this.glowMaterial, {
+        at: [Math.cos(a) * 0.88, 0.04, Math.sin(a) * 0.88],
+      })
+    }
     this.dome.scale.y = 0.8
     this.mesh.add(this.dome)
 
-    const tentacleGeometry = new THREE.CylinderGeometry(
-      0.025,
-      0.055,
-      TENTACLE_LENGTH,
-      5,
-      1,
-      true,
-    )
     this.tentacleMaterial = new THREE.MeshBasicMaterial({
       color: 0xff8fe0,
       transparent: true,
@@ -124,20 +179,46 @@ export class Jellyfish implements Creature {
       side: THREE.DoubleSide,
     })
 
+    // Brazos orales: cuatro cortinas onduladas fundidas en una malla.
+    const curtain = wavyStrand(1.25, 0.09, 0.02, 0.08, 7)
+    curtain.scale(1, 1, 0.35)
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2
+      kit.part(this.oralArms, curtain, this.tentacleMaterial, {
+        at: [Math.cos(a) * 0.1, 0, Math.sin(a) * 0.1],
+        rot: [0, -a, 0],
+      })
+    }
+    this.oralArms.position.y = -0.05
+    this.mesh.add(this.oralArms)
+
+    // Tentáculos marginales: finos y rizados, cada uno en su pivote.
+    const radius = DOME_RADIUS * 0.82
     for (let i = 0; i < TENTACLE_COUNT; i++) {
       const angle = (i / TENTACLE_COUNT) * Math.PI * 2 + this.phase * 0.25
-      const radius = DOME_RADIUS * 0.78
-      const tentacle = new THREE.Mesh(tentacleGeometry, this.tentacleMaterial)
+      const tentacle = new THREE.Group()
       tentacle.position.set(
         Math.cos(angle) * radius,
-        -TENTACLE_LENGTH * 0.5 - 0.05,
+        -0.05,
         Math.sin(angle) * radius,
       )
       tentacle.rotation.z = Math.cos(angle) * TENTACLE_SPREAD
       tentacle.rotation.x = -Math.sin(angle) * TENTACLE_SPREAD
       tentacle.userData.angle = angle
+      kit.part(
+        tentacle,
+        wavyStrand(
+          TENTACLE_LENGTH * (0.85 + (i % 3) * 0.1),
+          0.04,
+          0.012,
+          0.05,
+          9,
+        ),
+        this.tentacleMaterial,
+      )
       this.tentacles.add(tentacle)
     }
+    kit.build()
     this.mesh.add(this.tentacles)
   }
 
@@ -237,6 +318,10 @@ export class Jellyfish implements Creature {
     // --- Tentáculos: se recogen y estiran con el impulso y ondean después ---
     this.tentacles.rotation.y += this.rotationSpeed * deltaTime
     this.tentacles.scale.set(width, 1 + 0.2 * push - 0.08 * rebound, width)
+    this.oralArms.rotation.y -= this.rotationSpeed * 0.6 * deltaTime
+    this.oralArms.scale.set(width, 1 + 0.12 * push, width)
+    this.glowMaterial.emissiveIntensity =
+      this.cooldown > 0 ? 0.2 : 1.4 + push * 0.8
 
     const spread = TENTACLE_SPREAD * (1 - 0.7 * push) + rebound * 1.2
     for (const tentacle of this.tentacles.children) {
@@ -268,6 +353,7 @@ export class Jellyfish implements Creature {
     this.domeMaterial.opacity = HIT_DOME_OPACITY
     this.tentacleMaterial.opacity = HIT_TENTACLE_OPACITY
     this.domeMaterial.emissiveIntensity = HIT_EMISSIVE
+    this.glowMaterial.opacity = HIT_DOME_OPACITY
   }
 
   public dispose(): void {
@@ -275,19 +361,36 @@ export class Jellyfish implements Creature {
     this.disposed = true
 
     this.mesh.removeFromParent()
-    this.dome.geometry.dispose()
-    this.domeMaterial.dispose()
-    this.tentacleMaterial.dispose()
-
-    // Todas las medusas comparten la geometría de los tentáculos dentro de esta
-    // instancia; se libera una sola vez.
-    const tentacle = this.tentacles.children[0] as THREE.Mesh | undefined
-    tentacle?.geometry.dispose()
+    disposeTree(this.mesh)
   }
 
   private restoreVisuals(): void {
     this.domeMaterial.opacity = DOME_OPACITY
     this.tentacleMaterial.opacity = TENTACLE_OPACITY
     this.domeMaterial.emissiveIntensity = BASE_EMISSIVE
+    this.glowMaterial.opacity = GLOW_OPACITY
   }
+}
+
+/**
+ * Hebra que cuelga del origen hacia -Y y ondula de lado a lado (tentáculos y
+ * brazos orales). `waves` es el número de medias ondas a lo largo.
+ */
+function wavyStrand(
+  length: number,
+  r0: number,
+  r1: number,
+  amplitude: number,
+  waves: number,
+): THREE.BufferGeometry {
+  const g = new THREE.CylinderGeometry(r0, r1, length, 4, 12, true)
+  g.translate(0, -length / 2, 0)
+  const pos = g.getAttribute("position")
+  for (let i = 0; i < pos.count; i++) {
+    const t = -pos.getY(i) / length
+    // Más rizado hacia la punta.
+    pos.setX(i, pos.getX(i) + Math.sin(t * waves * Math.PI) * amplitude * t)
+  }
+  g.computeVertexNormals()
+  return g
 }

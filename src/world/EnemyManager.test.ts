@@ -69,8 +69,9 @@ describe("EnemyManager", () => {
     manager.spawnKinds(jellies(1), BOUNDS, new Rng(7))
 
     const jellyfish = scene.children[0] as THREE.Group
-    const dome = jellyfish.children[0] as THREE.Mesh
-    const material = dome.material as THREE.MeshPhysicalMaterial
+    // La campana es un grupo; su primera malla es la gelatina.
+    const dome = jellyfish.children[0].children[0] as THREE.Mesh
+    const material = dome.material as THREE.MeshStandardMaterial
 
     // Primer update con la tortuga lejos para fijar la posición de la medusa.
     manager.update(0, 0, at(new THREE.Vector3(999, 999, 999)), BOUNDS)

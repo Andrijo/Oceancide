@@ -1,6 +1,15 @@
 import * as THREE from "three"
 import type { Rng } from "@core/rng"
 import type { Creature, CreatureContext, CreatureEffects } from "./Creature"
+import {
+  countershade,
+  disposeTree,
+  fin,
+  hash3,
+  hull,
+  ModelKit,
+  type Paint,
+} from "./fauna/models/kit"
 import { edgeAvoidance, turnToward } from "./steering"
 
 const SEGMENTS = 11
@@ -40,13 +49,12 @@ export class Eel implements Creature {
   public readonly kind = "eel"
   public readonly mesh = new THREE.Group()
 
-  private readonly segments: THREE.Mesh[] = []
+  /** Cabeza y vértebras: cada una sigue a la anterior. */
+  private readonly segments: THREE.Group[] = []
   /** Posición de cada segmento en coordenadas del mundo. */
   private readonly trail: THREE.Vector3[] = []
-  private readonly geometry: THREE.SphereGeometry
   private readonly material: THREE.MeshStandardMaterial
-  private readonly eyeMaterial: THREE.MeshBasicMaterial
-  private readonly eyeGeometry: THREE.SphereGeometry
+  private readonly jaw: THREE.Group
 
   private readonly chargeDirection = new THREE.Vector3()
   private readonly phase: number
@@ -63,25 +71,38 @@ export class Eel implements Creature {
     this.mesh.userData.kind = "eel"
     this.mesh.position.copy(position)
 
-    this.geometry = new THREE.SphereGeometry(1, 10, 8)
-    this.material = new THREE.MeshStandardMaterial({
-      color: 0x2f4a3a,
-      roughness: 0.55,
-      metalness: 0.1,
-      emissive: 0x7dff9b,
-      emissiveIntensity: BASE_GLOW,
-    })
-    this.eyeGeometry = new THREE.SphereGeometry(0.07, 6, 4)
-    this.eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xd9ff6b })
+    // Piel de morena: lomo verde oscuro moteado y vientre amarillento.
+    const kit = new ModelKit()
+    this.material = kit.skin(0x7dff9b, { glow: BASE_GLOW, rim: [0.4, 2.5] })
+    const shade = countershade(0x2f4a3a, 0x9fae6a, -0.3)
+    const mottled: Paint = (c, n) =>
+      c.y > -0.2 && hash3(c) > 0.78 ? 0x1d2e24 : shade(c, n)
+    // Vértebra: casco facetado con la cresta dorsal (una malla por segmento).
+    const vertebra = hull([1, 0.85, 1.5], { paint: mottled })
+    const crest = fin(
+      [
+        [-0.6, 0],
+        [0.2, 0.55],
+        [0.7, 0],
+      ],
+      0.08,
+      0x3d5c48,
+    )
 
     for (let i = 0; i < SEGMENTS; i++) {
-      const segment = new THREE.Mesh(this.geometry, this.material)
+      const segment = new THREE.Group()
       const taper = 1 - (i / SEGMENTS) * 0.75
-      segment.scale.set(
-        HEAD_RADIUS * taper,
-        HEAD_RADIUS * taper * 0.85,
-        HEAD_RADIUS * taper * 1.5,
-      )
+      const r = HEAD_RADIUS * taper
+      if (i > 0) {
+        kit.part(segment, vertebra, this.material, {
+          scale: [r, r * 0.85, r * 1.5],
+        })
+        kit.part(segment, crest, this.material, {
+          at: [0, r * 0.7, 0],
+          rot: [0, Math.PI / 2, 0],
+          scale: [r, r, 1],
+        })
+      }
       this.segments.push(segment)
       this.mesh.add(segment)
       this.trail.push(
@@ -93,13 +114,52 @@ export class Eel implements Creature {
       )
     }
 
-    for (const side of [-1, 1]) {
-      const eye = new THREE.Mesh(this.eyeGeometry, this.eyeMaterial)
-      eye.position.set(side * 0.5, 0.35, 0.72)
-      this.segments[0].add(eye)
-      // Compensa la escala del segmento para que el ojo no se deforme.
-      eye.scale.set(1 / HEAD_RADIUS, 1 / (HEAD_RADIUS * 0.85), 1 / 0.51)
+    // Cabeza: cráneo alargado, mandíbula con colmillos y ojos amarillos.
+    const head = this.segments[0]
+    kit.part(
+      head,
+      hull([HEAD_RADIUS, HEAD_RADIUS * 0.8, HEAD_RADIUS * 1.7], {
+        nose: 0.35,
+        paint: mottled,
+      }),
+      this.material,
+      { at: [0, 0.03, 0.05] },
+    )
+    this.jaw = kit.pivot(head, [0, -0.1, 0.05])
+    kit.part(
+      this.jaw,
+      hull([0.25, 0.08, 0.45], { nose: 0.3, paint: 0x9fae6a }),
+      this.material,
+      { at: [0, -0.02, 0.18] },
+    )
+    const tooth = kit.material(0xf0ecd8, { roughness: 0.4, glow: 0.2 })
+    const fang = new THREE.ConeGeometry(0.018, 0.08, 3)
+    for (let k = 0; k < 4; k++) {
+      for (const side of [-1, 1]) {
+        kit.part(this.jaw, fang, tooth, {
+          at: [side * 0.14 * (1 - k * 0.18), 0.05, 0.1 + k * 0.1],
+        })
+      }
     }
+    kit.eyes(head, { at: [0.2, 0.15, 0.3], size: 0.06, iris: 0xd9ff6b })
+
+    // Aleta en la punta de la cola.
+    const last = this.segments[SEGMENTS - 1]
+    kit.part(
+      last,
+      fin(
+        [
+          [0, 0.12],
+          [0.45, 0],
+          [0, -0.12],
+        ],
+        0.03,
+        0x3d5c48,
+      ),
+      this.material,
+      { at: [0, 0, -0.08], rot: [0, Math.PI / 2, 0] },
+    )
+    kit.build()
 
     // La cabeza se orienta con rumbo y cabeceo (el resto mira al anterior).
     this.segments[0].rotation.order = "YXZ"
@@ -205,10 +265,7 @@ export class Eel implements Creature {
 
   public dispose(): void {
     this.mesh.removeFromParent()
-    this.geometry.dispose()
-    this.material.dispose()
-    this.eyeGeometry.dispose()
-    this.eyeMaterial.dispose()
+    disposeTree(this.mesh)
   }
 
   private startRecover(): void {
@@ -234,6 +291,10 @@ export class Eel implements Creature {
     const blend = 1 - Math.exp(-8 * deltaTime)
     this.material.emissiveIntensity +=
       (target - this.material.emissiveIntensity) * blend
+    // Enseña los dientes al prepararse y al embestir.
+    const open =
+      this._state === "windup" || this._state === "charge" ? 0.55 : 0.1
+    this.jaw.rotation.x += (open - this.jaw.rotation.x) * blend
   }
 
   /**

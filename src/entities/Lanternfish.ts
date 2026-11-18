@@ -1,8 +1,9 @@
 import * as THREE from "three"
 import type { Rng } from "@core/rng"
 import type { Creature, CreatureContext, CreatureEffects } from "./Creature"
-import { addFresnelRim } from "./fresnelRim"
-import { edgeAvoidance, turnToward } from "./steering"
+import { animateLook, type CreatureLook } from "./fauna/look"
+import { buildModel } from "./fauna/models"
+import { angleDelta, edgeAvoidance, turnToward } from "./steering"
 
 /** Radio en el que su luz arrastra a la tortuga. */
 export const LURE_RADIUS = 10
@@ -30,67 +31,25 @@ export class Lanternfish implements Creature {
   public readonly kind = "lanternfish"
   public readonly mesh = new THREE.Group()
 
-  private readonly body: THREE.Mesh
-  private readonly lure: THREE.Mesh
-  private readonly bodyGeometry: THREE.SphereGeometry
-  private readonly bodyMaterial: THREE.MeshStandardMaterial
-  private readonly stalkGeometry: THREE.CylinderGeometry
-  private readonly lureGeometry: THREE.SphereGeometry
-  private readonly lureMaterial: THREE.MeshStandardMaterial
-  private readonly finGeometry: THREE.ConeGeometry
-  private readonly tail: THREE.Mesh
-
+  private readonly look: CreatureLook
   private readonly pull = new THREE.Vector3()
   private readonly phase: number
   private heading: number
+  private lastHeading: number
   private cooldown = 0
   private luring = false
 
   constructor(position: THREE.Vector3, rng: Rng) {
     this.phase = rng.range(0, Math.PI * 2)
     this.heading = rng.range(0, Math.PI * 2)
+    this.lastHeading = this.heading
 
     this.mesh.name = "lanternfish"
     this.mesh.userData.kind = "lanternfish"
     this.mesh.position.copy(position)
-    this.mesh.scale.setScalar(rng.range(0.9, 1.15))
 
-    this.bodyGeometry = new THREE.SphereGeometry(0.6, 14, 10)
-    this.bodyMaterial = new THREE.MeshStandardMaterial({
-      color: 0x22283a,
-      roughness: 0.5,
-      metalness: 0.2,
-      emissive: 0x3a4f9a,
-      emissiveIntensity: 0.25,
-    })
-    addFresnelRim(this.bodyMaterial, 0.6, 2.5)
-    this.body = new THREE.Mesh(this.bodyGeometry, this.bodyMaterial)
-    this.body.scale.set(0.8, 0.85, 1.25)
-    this.mesh.add(this.body)
-
-    this.finGeometry = new THREE.ConeGeometry(0.35, 0.6, 6)
-    this.tail = new THREE.Mesh(this.finGeometry, this.bodyMaterial)
-    this.tail.rotation.x = -Math.PI / 2
-    this.tail.position.z = -0.85
-    this.mesh.add(this.tail)
-
-    // Antena que sale de la frente y se curva hacia delante.
-    this.stalkGeometry = new THREE.CylinderGeometry(0.02, 0.035, 0.9, 5)
-    const stalk = new THREE.Mesh(this.stalkGeometry, this.bodyMaterial)
-    stalk.position.set(0, 0.6, 0.45)
-    stalk.rotation.x = 0.7
-    this.mesh.add(stalk)
-
-    this.lureGeometry = new THREE.SphereGeometry(0.16, 10, 8)
-    this.lureMaterial = new THREE.MeshStandardMaterial({
-      color: 0xfff3b0,
-      emissive: 0xffe066,
-      emissiveIntensity: LURE_GLOW,
-      roughness: 0.3,
-    })
-    this.lure = new THREE.Mesh(this.lureGeometry, this.lureMaterial)
-    this.lure.position.set(0, 0.95, 0.85)
-    this.mesh.add(this.lure)
+    this.look = buildModel("lanternfish", rng)
+    this.mesh.add(this.look.root)
   }
 
   public get coolingDown(): boolean {
@@ -127,13 +86,26 @@ export class Lanternfish implements Creature {
       position.y += Math.sin(time * 0.5 + this.phase) * 0.3 * deltaTime
     }
 
-    this.mesh.rotation.y = this.heading
-    this.tail.rotation.y = Math.sin(time * 5 + this.phase) * 0.35
-    const glowTarget = this.cooldown > 0 ? DIM_GLOW : LURE_GLOW
-    const blend = 1 - Math.exp(-4 * deltaTime)
-    this.lureMaterial.emissiveIntensity +=
-      (glowTarget - this.lureMaterial.emissiveIntensity) * blend
-    this.lure.scale.setScalar(1 + Math.sin(time * 3 + this.phase) * 0.12)
+    this.look.root.rotation.y = this.heading
+    const turn =
+      deltaTime > 0 ? angleDelta(this.lastHeading, this.heading) / deltaTime : 0
+    this.lastHeading = this.heading
+    animateLook(this.look, {
+      deltaTime,
+      time,
+      phase: this.phase,
+      // Nada con más brío mientras te arrastra hacia su luz.
+      effort: inLight ? 1.6 : 1,
+      turn,
+      mouth: inLight ? Math.min(1, 1.5 - distance / LURE_RADIUS) : 0,
+    })
+    const lureMaterial = this.look.lureMaterial
+    if (lureMaterial) {
+      const glowTarget = this.cooldown > 0 ? DIM_GLOW : LURE_GLOW
+      const blend = 1 - Math.exp(-4 * deltaTime)
+      lureMaterial.emissiveIntensity +=
+        (glowTarget - lureMaterial.emissiveIntensity) * blend
+    }
 
     if (!inLight) {
       this.luring = false
@@ -164,11 +136,6 @@ export class Lanternfish implements Creature {
 
   public dispose(): void {
     this.mesh.removeFromParent()
-    this.bodyGeometry.dispose()
-    this.bodyMaterial.dispose()
-    this.stalkGeometry.dispose()
-    this.lureGeometry.dispose()
-    this.lureMaterial.dispose()
-    this.finGeometry.dispose()
+    this.look.dispose()
   }
 }

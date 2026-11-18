@@ -1,6 +1,8 @@
 import * as THREE from "three"
 import type { Rng } from "@core/rng"
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js"
 import type { Creature, CreatureContext, CreatureEffects } from "./Creature"
+import { countershade, fin, hull, placeMatrix } from "./fauna/models/kit"
 import { edgeAvoidance, turnToward } from "./steering"
 
 const FISH_COUNT = 18
@@ -17,6 +19,8 @@ export const SCHOOL_REGROUP_TIME = 7
 const SCATTER_SPREAD = 9
 
 interface Fish {
+  /** Desfase del coleteo. */
+  wiggle: number
   radius: number
   speed: number
   angle: number
@@ -26,6 +30,49 @@ interface Fish {
 }
 
 const dummy = new THREE.Object3D()
+
+/**
+ * Pez del banco: cuerpo facetado plateado con lomo azul, cola ahorquillada y
+ * aleta dorsal, todo en una geometría (se dibuja instanciado).
+ */
+function schoolFishGeometry(): THREE.BufferGeometry {
+  const body = hull([0.09, 0.12, 0.25], {
+    taper: 0.5,
+    nose: 0.3,
+    paint: countershade(0x2f6f9a, 0xe6f4ff, 0.1, 0.3),
+  })
+  const tail = fin(
+    [
+      [0, 0.03],
+      [0.16, 0.12],
+      [0.11, 0],
+      [0.16, -0.12],
+      [0, -0.03],
+    ],
+    0.02,
+    0x4f8fb8,
+  )
+  tail.applyMatrix4(
+    placeMatrix({ at: [0, 0, -0.22], rot: [0, Math.PI / 2, 0] }),
+  )
+  const dorsal = fin(
+    [
+      [0, 0],
+      [0.05, 0.07],
+      [0.12, 0],
+    ],
+    0.02,
+    0x2f6f9a,
+  )
+  dorsal.applyMatrix4(
+    placeMatrix({ at: [0, 0.1, 0.02], rot: [0, Math.PI / 2, 0] }),
+  )
+  const merged = mergeGeometries([body, tail, dorsal])
+  body.dispose()
+  tail.dispose()
+  dorsal.dispose()
+  return merged
+}
 
 /**
  * Banco de peces. Gira en remolino alrededor de un centro que vaga por el
@@ -38,7 +85,7 @@ export class FishSchool implements Creature {
   public readonly mesh = new THREE.Group()
 
   private readonly fishMesh: THREE.InstancedMesh
-  private readonly geometry: THREE.ConeGeometry
+  private readonly geometry: THREE.BufferGeometry
   private readonly material: THREE.MeshStandardMaterial
   private readonly fish: Fish[] = []
   private readonly phase: number
@@ -46,6 +93,7 @@ export class FishSchool implements Creature {
   /** 0..1: lo dispersos que están los peces (1 recién atravesado). */
   private spread = 0
   private regroup = 0
+  private clock = 0
 
   constructor(position: THREE.Vector3, rng: Rng) {
     this.phase = rng.range(0, Math.PI * 2)
@@ -55,11 +103,11 @@ export class FishSchool implements Creature {
     this.mesh.userData.kind = "fishSchool"
     this.mesh.position.copy(position)
 
-    this.geometry = new THREE.ConeGeometry(0.12, 0.45, 5)
-    // El cono apunta a +Y; se tumba para que el pez nade hacia +Z.
-    this.geometry.rotateX(Math.PI / 2)
+    this.geometry = schoolFishGeometry()
     this.material = new THREE.MeshStandardMaterial({
-      color: 0xbfe6ff,
+      color: 0xffffff,
+      vertexColors: true,
+      flatShading: true,
       roughness: 0.25,
       metalness: 0.6,
       emissive: 0x2a6f9a,
@@ -75,6 +123,7 @@ export class FishSchool implements Creature {
 
     for (let i = 0; i < FISH_COUNT; i++) {
       this.fish.push({
+        wiggle: rng.range(0, Math.PI * 2),
         radius: rng.range(0.9, 2.6),
         speed: rng.range(1.1, 1.8),
         angle: rng.range(0, Math.PI * 2),
@@ -138,6 +187,7 @@ export class FishSchool implements Creature {
   }
 
   private layoutFish(deltaTime: number): void {
+    this.clock += deltaTime
     // Curva de salida: rápida al principio y frenando, como un estallido.
     const burst = 1 - (1 - this.spread) ** 3
     for (let i = 0; i < this.fish.length; i++) {
@@ -149,9 +199,12 @@ export class FishSchool implements Creature {
       const y = fish.height * (1 + burst * 2)
       dummy.position.set(x, y, z)
       // Tangente del giro (nadan en el sentido de su ángulo).
+      // Coleteo: el pez entero oscila un poco alrededor de su rumbo, más
+      // rápido cuando sale disparado.
+      const wiggle = Math.sin(this.clock * (9 + burst * 8) + fish.wiggle) * 0.18
       dummy.rotation.set(
         fish.tilt,
-        Math.atan2(-Math.sin(fish.angle), Math.cos(fish.angle)),
+        Math.atan2(-Math.sin(fish.angle), Math.cos(fish.angle)) + wiggle,
         0,
       )
       dummy.scale.setScalar(fish.scale)
