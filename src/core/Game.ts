@@ -33,6 +33,13 @@ import { setColorVisionMode } from "@ui/colorVision"
 import { CardManager } from "@cards/CardManager"
 import { createRunState, type RunState } from "@cards/Card"
 import { buildStatLines, previewCard, readBuild } from "@cards/BuildStats"
+import {
+  DASH_CHAIN_WINDOW,
+  dashChainBoost,
+  rerollCost,
+  sphereCapacity,
+  sphereCost,
+} from "@cards/CardRules"
 import { Debris } from "@entities/Debris"
 import { BubbleTrail } from "@entities/BubbleTrail"
 import { BiomeTransition } from "@world/BiomeTransition"
@@ -196,6 +203,11 @@ export class Game {
   private pendingTimeDelta = 0
   private pendingToxicityFloor: number | null = null
   private revivesUsed = 0
+  /** Veces que se han vuelto a tirar las cartas en esta run (sube el coste). */
+  private rerollsUsed = 0
+  /** Momento (runTime) del último giro y cuántos lleva encadenados. */
+  private lastDashAt = Number.NEGATIVE_INFINITY
+  private dashChain = 0
   private toxicityScaleMult = 1
 
   /** Momento de derrota en curso: entre la muerte y el resumen. */
@@ -827,7 +839,13 @@ export class Game {
 
     // Sin mensaje central: el giro de la tortuga ya lo indica y, al
     // encadenar, el HUD "DASH ×N" muestra el multiplicador.
-    this.turtle.trigger360Spin(direction)
+    // Corriente Encadenada: cada giro dentro de la ventana empuja más.
+    const chained = this.runTime - this.lastDashAt <= DASH_CHAIN_WINDOW
+    const chain = chained ? this.dashChain + 1 : 0
+    const extra = dashChainBoost(chain, this.runState.rules.dashChainBonus)
+    if (!this.turtle.trigger360Spin(direction, extra)) return
+    this.dashChain = chain
+    this.lastDashAt = this.runTime
     if (this.settings.vibration) navigator.vibrate?.(15)
     this.markControlUsed("dash")
   }
@@ -847,12 +865,13 @@ export class Game {
     this.markControlUsed("build")
 
     const config = STRUCTURES[key]
+    const cost = this.filterCost()
     if (this.structures.getActiveCount() >= this.turtle.stats.filterCapacity) {
       this.uiManager.showMessage("Máximo de filtros activos", 1200)
       return
     }
-    if (this.state.ecoAwareness < config.cost) {
-      this.uiManager.showMessage(`Necesitas ${config.cost} de Eco`, 1200)
+    if (this.state.ecoAwareness < cost) {
+      this.uiManager.showMessage(`Necesitas ${cost} de Eco`, 1200)
       return
     }
 
@@ -873,9 +892,19 @@ export class Game {
     )
     position.y = THREE.MathUtils.clamp(position.y, bounds.minY, bounds.maxY)
 
-    this.state.ecoAwareness -= config.cost
+    this.state.ecoAwareness -= cost
     const phase = this.computeStructurePhase()
-    this.structures.build(key, position, phase)
+    this.structures.build(
+      key,
+      position,
+      phase,
+      sphereCapacity(this.runState.rules, config.capacity),
+    )
+  }
+
+  /** Coste en Eco de una esfera filtradora con las cartas de la run. */
+  private filterCost(): number {
+    return sphereCost(this.runState.rules, STRUCTURES.filter.cost)
   }
 
   private updateBuildHud(): void {
@@ -886,7 +915,7 @@ export class Game {
       buildHudView({
         name: config.name,
         control: buildControlLabel(this.controlDevice, this.controlBindings()),
-        cost: config.cost,
+        cost: this.filterCost(),
         eco: this.state.ecoAwareness,
         active,
         max,
@@ -905,7 +934,7 @@ export class Game {
           this.controlDevice,
           this.controlBindings(),
         ),
-        filterCost: STRUCTURES.filter.cost,
+        filterCost: this.filterCost(),
       }),
       { water: biome.waterColor, accent: biome.accentColor },
     )
@@ -923,7 +952,7 @@ export class Game {
     }
 
     if (
-      this.state.ecoAwareness >= STRUCTURES.filter.cost &&
+      this.state.ecoAwareness >= this.filterCost() &&
       this.structures.getActiveCount() < this.turtle.stats.filterCapacity
     ) {
       this.tips.trigger("filter_affordable")
@@ -1086,6 +1115,9 @@ export class Game {
     this.pendingTimeDelta = 0
     this.pendingToxicityFloor = null
     this.revivesUsed = 0
+    this.rerollsUsed = 0
+    this.lastDashAt = Number.NEGATIVE_INFINITY
+    this.dashChain = 0
     const bonuses = this.upgradeManager.applyAll(this.meta, this.turtle.stats)
     this.runState.ecoMultiplier *= bonuses.ecoMult
     this.toxicityScaleMult = bonuses.toxScaleMult
@@ -1278,7 +1310,10 @@ export class Game {
     this.runTime += deltaTime
 
     // --- Timer por bioma ---
-    this.biomeTimeRemaining -= deltaTime
+    // Marea Eterna: el tiempo del bioma no corre.
+    if (!this.runState.rules.noTimeLimit) {
+      this.biomeTimeRemaining -= deltaTime
+    }
     if (this.biomeTimeRemaining < 0) this.biomeTimeRemaining = 0
     const timePressure = computeTimePressure(this.biomeTimeRemaining)
     this.uiManager.updateBiomeTimer(
@@ -1300,7 +1335,13 @@ export class Game {
       this.state.toxicity = Math.min(100, this.state.toxicity + 15)
       this.turtle.applySlow(2, 0.5)
       this.turtle.playHurt()
-      this.uiManager.showMessage("¡MEDUSA!", 1000)
+      // Piel Urticante: cada picadura da Eco.
+      const stingEco = Math.round(this.runState.rules.jellyfishEco)
+      if (stingEco > 0) this.state.ecoAwareness += stingEco
+      this.uiManager.showMessage(
+        stingEco > 0 ? `¡MEDUSA! +${stingEco} Eco` : "¡MEDUSA!",
+        1000,
+      )
       this.tips.trigger("jellyfish_hit")
       if (this.state.toxicity >= 100 && !this.tryKill({ kind: "jellyfish" })) {
         return
@@ -1330,12 +1371,18 @@ export class Game {
     )
 
     // --- Recolección ---
+    const rules = this.runState.rules
+    // Remolino: mientras dura el giro, el radio de recogida se multiplica.
+    const spinRadius = this.turtle.isSpinInProgress()
+      ? rules.spinCollectRadius
+      : 1
     const collected = this.biomeGenerator.updateDebris(
       this.turtle.mesh.position,
-      this.turtle.getCollectionRadius(),
+      this.turtle.getCollectionRadius() * spinRadius,
       time,
       deltaTime,
-      this.input.boost,
+      // Tacto Suave: los frágiles no se rompen aunque vayas en impulso.
+      this.input.boost && !rules.fragileSafe,
     )
 
     // --- Toxicidad Pasiva (aplicando el multiplicador de la mejora "Sistema Inmune") ---
@@ -1360,9 +1407,11 @@ export class Game {
     // --- Recolección manual ---
     for (const debris of collected) {
       this.state.debrisCollected++
+      // Cazafugas: las fugas valen más Eco.
+      const leak = debris.hazard === "lixivia" ? rules.leakEco : 1
       const eco = debris.shattered
         ? 0
-        : Math.round(debris.ecoValue * this.runState.ecoMultiplier)
+        : Math.round(debris.ecoValue * this.runState.ecoMultiplier * leak)
       this.state.ecoAwareness += eco
 
       if (!debris.isFragment) this.collectedInZone++
@@ -1387,7 +1436,19 @@ export class Game {
     }
 
     // --- Filtros ---
-    const credit = this.structures.update(deltaTime, time, this.biomeGenerator)
+    const credit = this.structures.update(
+      deltaTime,
+      time,
+      this.biomeGenerator,
+      { pull: rules.spherePull, leakEco: rules.leakEco },
+    )
+    // Esfera Estallido: al agotarse, cada esfera limpia toxicidad.
+    if (!this.godMode && credit.exhausted > 0 && rules.sphereBurst > 0) {
+      this.state.toxicity = applyToxicityDelta(
+        this.state.toxicity,
+        -rules.sphereBurst * credit.exhausted,
+      )
+    }
     this.state.debrisCollected += credit.count
     this.collectedInZone += credit.count
 
@@ -1507,13 +1568,18 @@ export class Game {
     if (this.transition.isActive()) return
     this.inputController.clear()
 
-    const rng = new Rng(deriveSeed(this.runSeed, this.biomeIndex + 1000))
+    // Cada tirada usa su propia semilla: la misma run repite las mismas cartas
+    // aunque se vuelva a tirar.
+    const salt = this.biomeIndex + 1000 + this.rerollsUsed * 100000
+    const rng = new Rng(deriveSeed(this.runSeed, salt))
     const choices = this.cardManager.rollChoices(3, rng)
     const build = readBuild({
       turtle: this.turtle,
       run: this.runState,
       state: this.state,
     })
+    const owned = [...this.runState.cards]
+    const cost = rerollCost(this.rerollsUsed)
 
     this.screens.showCardChoice(
       choices,
@@ -1541,7 +1607,24 @@ export class Game {
         this.advanceBiome()
       },
       notice,
-      (card) => previewCard(card, build),
+      (card) => previewCard(card, build, owned),
+      {
+        reroll: {
+          cost,
+          affordable: this.state.ecoAwareness >= cost,
+          onReroll: () => {
+            if (this.state.ecoAwareness < cost) return
+            this.state.ecoAwareness -= cost
+            this.rerollsUsed++
+            this.uiManager.updateUI(this.state, 0)
+            this.openCardChoice(notice)
+          },
+        },
+        onSkip: () => {
+          this.uiManager.showMessage("Sin carta en esta zona", 1500)
+          this.advanceBiome()
+        },
+      },
     )
   }
 

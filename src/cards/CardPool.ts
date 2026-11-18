@@ -31,34 +31,6 @@ export const CARD_POOL: Card[] = [
     effects: { filters: 1 },
   },
   {
-    id: "short_fins",
-    name: "Aletas Cortas",
-    description: "Pequeños ajustes en las aletas traseras.",
-    rarity: "common",
-    effects: { speed: 1.06 },
-  },
-  {
-    id: "thick_skin",
-    name: "Piel Gruesa",
-    description: "La piel se endurece y resiste mejor la toxicidad.",
-    rarity: "common",
-    effects: { resistance: 0.04 },
-  },
-  {
-    id: "instinct",
-    name: "Instinto",
-    description: "Un sexto sentido para encontrar desechos.",
-    rarity: "common",
-    effects: { radius: 0.4 },
-  },
-  {
-    id: "extra_valve",
-    name: "Válvula Extra",
-    description: "Un filtro adicional en el caparazón.",
-    rarity: "common",
-    effects: { filters: 1 },
-  },
-  {
     id: "minor_echo",
     name: "Eco Menor",
     description: "Cada desecho resuena un poco más.",
@@ -99,13 +71,6 @@ export const CARD_POOL: Card[] = [
     description: "La tortuga se adapta al medio hostil.",
     rarity: "common",
     effects: { speed: 1.03, resistance: 0.03 },
-  },
-  {
-    id: "fish_eye",
-    name: "Ojo de Pez",
-    description: "Visión panorámica del entorno.",
-    rarity: "common",
-    effects: { radius: 0.6 },
   },
   {
     id: "breathing",
@@ -151,39 +116,11 @@ export const CARD_POOL: Card[] = [
     effects: { resistance: 0.15 },
   },
   {
-    id: "turbo",
-    name: "Turbo",
-    description: "El dash impulsa notablemente más fuerte.",
-    rarity: "rare",
-    effects: { dash: 0.6 },
-  },
-  {
-    id: "filter_colony",
-    name: "Colonia de Filtros",
-    description: "Los filtros generan más Eco por segundo.",
-    rarity: "rare",
-    effects: { ecoPerSecond: 1.5 },
-  },
-  {
-    id: "greater_echo",
-    name: "Eco Mayor",
-    description: "El Eco resuena con fuerza.",
-    rarity: "rare",
-    effects: { eco: 1.35 },
-  },
-  {
     id: "double_fin",
     name: "Aleta Doble",
     description: "Aletas extendidas, mucha más velocidad.",
     rarity: "rare",
     effects: { speed: 1.2 },
-  },
-  {
-    id: "super_magnet",
-    name: "Super Imán",
-    description: "Atrae desechos desde puntos lejanos.",
-    rarity: "rare",
-    effects: { radius: 2 },
   },
   {
     id: "iron_lung",
@@ -200,13 +137,6 @@ export const CARD_POOL: Card[] = [
     effects: { resistance: 0.15, speed: 1.05 },
   },
   // Épicas
-  {
-    id: "advanced_filter",
-    name: "Filtro Mejorado",
-    description: "Puedes mantener dos filtros más a la vez.",
-    rarity: "epic",
-    effects: { filters: 2 },
-  },
   {
     id: "medusa_heart",
     name: "Corazón de Medusa",
@@ -358,6 +288,112 @@ export const CARD_POOL: Card[] = [
     description: "Una criatura ancestral se manifiesta a través del caparazón.",
     rarity: "ultra_legendary",
     effects: { dash: 1.2, speed: 1.3, revives: 1 },
+  },
+
+  // Cartas que cambian reglas (#60): no suben números, cambian cómo se juega.
+  {
+    id: "whirlpool",
+    name: "Remolino",
+    description: "Mientras giras, recoges desechos al doble de distancia.",
+    rarity: "rare",
+    tags: ["dash"],
+    rules: { spinCollectRadius: 2 },
+  },
+  {
+    id: "chain_current",
+    name: "Corriente Encadenada",
+    description:
+      "Cada giro que encadenas en menos de 1 s empuja más que el anterior.",
+    rarity: "epic",
+    tags: ["dash"],
+    rules: { dashChainBonus: 0.2 },
+  },
+  {
+    id: "twin_spheres",
+    name: "Esferas Gemelas",
+    description: "Cada esfera filtradora atrae dos desechos a la vez.",
+    rarity: "epic",
+    tags: ["filtro"],
+    rules: { spherePull: 1 },
+  },
+  {
+    id: "cheap_spheres",
+    name: "Esferas de Algas",
+    description: "Las esferas cuestan menos, pero se agotan antes.",
+    rarity: "rare",
+    tags: ["filtro"],
+    rules: { sphereCost: 25, sphereCapacity: 0.5 },
+  },
+  {
+    id: "burst_sphere",
+    name: "Esfera Estallido",
+    description: "Al agotarse, cada esfera estalla y limpia el agua.",
+    rarity: "rare",
+    tags: ["filtro", "cuidado"],
+    rules: { sphereBurst: 10 },
+  },
+  {
+    id: "soft_touch",
+    name: "Tacto Suave",
+    description:
+      "Los desechos frágiles ya no se rompen aunque vayas a toda prisa.",
+    rarity: "rare",
+    tags: ["cuidado"],
+    rules: { fragileSafe: true },
+  },
+  {
+    id: "leak_hunter",
+    name: "Cazafugas",
+    description: "Las fugas tóxicas valen el triple de Eco.",
+    rarity: "rare",
+    tags: ["cuidado", "eco"],
+    rules: { leakEco: 3 },
+  },
+  {
+    id: "stinging_skin",
+    name: "Piel Urticante",
+    description:
+      "Cada picadura de medusa te da Eco, pero atraes a una medusa más.",
+    rarity: "rare",
+    tags: ["riesgo"],
+    effects: { enemies: 1 },
+    rules: { jellyfishEco: 50 },
+  },
+  {
+    id: "endless_tide",
+    name: "Marea Eterna",
+    description:
+      "El tiempo del bioma deja de correr, pero el agua se vuelve más tóxica.",
+    rarity: "epic",
+    tags: ["riesgo"],
+    effects: { passiveToxicity: 1.5 },
+    rules: { noTimeLimit: true },
+  },
+  // Sinergias: crecen con cada carta de su etiqueta.
+  {
+    id: "fish_school",
+    name: "Banco de Peces",
+    description: "El dash crece con cada carta #DASH que tengas o elijas.",
+    rarity: "rare",
+    tags: ["dash"],
+    scaling: { tag: "dash", effects: { dash: 0.15 } },
+  },
+  {
+    id: "filter_network",
+    name: "Red de Filtros",
+    description:
+      "Cada esfera genera más Eco con cada carta #FILTRO que tengas o elijas.",
+    rarity: "epic",
+    tags: ["filtro"],
+    scaling: { tag: "filtro", effects: { ecoPerSecond: 0.3 } },
+  },
+  {
+    id: "resonance",
+    name: "Resonancia",
+    description: "El Eco crece con cada carta #ECO que tengas o elijas.",
+    rarity: "epic",
+    tags: ["eco"],
+    scaling: { tag: "eco", effects: { eco: 1.05 } },
   },
 
   // Caos: efectos con azar real, reglas alteradas o riesgo inmediato.

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest"
 import { Turtle } from "@entities/Turtle"
 import { createRunState, type Card, type CardContext } from "@cards/Card"
-import { applyCardEffects, describeCardEffects } from "@cards/CardEffects"
+import {
+  applyCardEffects,
+  describeCardEffects,
+  effectiveCardEffects,
+} from "@cards/CardEffects"
 import {
   STAT_INFO,
   STAT_KEYS,
@@ -39,7 +43,7 @@ describe("readBuild", () => {
       speed: 9,
       resistance: 0.1,
       radius: 3,
-      filters: 5,
+      filters: 3,
       eco: 1,
       dash: 1.6,
       ecoPerSecond: 0,
@@ -127,7 +131,7 @@ describe("previewCard", () => {
   it("tiene una línea por cada tramo declarado de la carta", () => {
     for (const card of CARD_POOL) {
       const lines = previewCard(card, readBuild(makeContext()))
-      const declared = card.effects ? describeCardEffects(card.effects) : []
+      const declared = describeCardEffects(effectiveCardEffects(card, []))
       expect(lines.length, card.id).toBe(declared.length)
     }
   })

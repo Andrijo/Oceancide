@@ -7,6 +7,8 @@ import type { StructureConfig } from "./StructureConfig"
 /** Una estructura colocada en el agua: aspecto, usos restantes y desechos en camino. */
 export class Structure {
   public readonly config: StructureConfig
+  /** Desechos que absorbe antes de agotarse (las cartas pueden cambiarlo). */
+  public readonly capacity: number
   public readonly group = new THREE.Group()
   public remaining: number
   public timer = 0
@@ -28,9 +30,15 @@ export class Structure {
   // Pulso de absorción (decae exponencialmente)
   private absorbPulse = 0
 
-  constructor(config: StructureConfig, position: THREE.Vector3, phase: number) {
+  constructor(
+    config: StructureConfig,
+    position: THREE.Vector3,
+    phase: number,
+    capacity = config.capacity,
+  ) {
     this.config = config
-    this.remaining = config.capacity
+    this.capacity = capacity
+    this.remaining = capacity
     this.group.position.copy(position)
     this.phase = phase
 
@@ -115,7 +123,7 @@ export class Structure {
     this.rings[1].scale.setScalar(ringScale)
 
     // --- Emisivo: saturación + pulso + spawn + absorb ---
-    const left = this.remaining / this.config.capacity
+    const left = this.remaining / this.capacity
     const pulse = Math.sin(time * 4 + this.phase) * 0.15
     this.coreMaterial.emissiveIntensity =
       0.25 + 0.75 * left + pulse + spawnFlash * 3 + this.absorbPulse * 1.8

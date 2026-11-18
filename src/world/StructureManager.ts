@@ -18,7 +18,19 @@ export interface StructureCredit {
   eco: number
   count: number
   absorptions: StructureAbsorption[]
+  /** Esferas que se han agotado en este frame. */
+  exhausted: number
 }
+
+/** Reglas de las cartas que cambian cómo trabajan las esferas. */
+export interface StructureRules {
+  /** Desechos que atrae cada esfera a la vez. */
+  pull: number
+  /** Multiplicador del Eco de las fugas. */
+  leakEco: number
+}
+
+const DEFAULT_RULES: StructureRules = { pull: 1, leakEco: 1 }
 
 export class StructureManager {
   private scene: THREE.Scene
@@ -36,8 +48,9 @@ export class StructureManager {
     key: StructureKey,
     position: THREE.Vector3,
     phase: number,
+    capacity?: number,
   ): Structure {
-    const structure = new Structure(STRUCTURES[key], position, phase)
+    const structure = new Structure(STRUCTURES[key], position, phase, capacity)
     this.scene.add(structure.group)
     this.structures.push(structure)
     return structure
@@ -60,11 +73,13 @@ export class StructureManager {
     deltaTime: number,
     time: number,
     biome: BiomeGenerator,
+    rules: StructureRules = DEFAULT_RULES,
   ): StructureCredit {
     const credit: StructureCredit = {
       eco: 0,
       count: 0,
       absorptions: [],
+      exhausted: 0,
     }
 
     for (let i = this.structures.length - 1; i >= 0; i--) {
@@ -79,7 +94,8 @@ export class StructureManager {
           biome.removeDebris(debris)
           s.inFlight.splice(j, 1)
 
-          const eco = Math.round(debris.ecoValue * s.config.yield)
+          const leak = debris.hazard === "lixivia" ? rules.leakEco : 1
+          const eco = Math.round(debris.ecoValue * s.config.yield * leak)
           credit.eco += eco
           credit.count += 1
 
@@ -95,19 +111,21 @@ export class StructureManager {
       if (s.remaining > 0) {
         s.timer += deltaTime
         if (s.timer >= s.config.interval) {
-          const target = this.findTarget(s, biome.getDebrisList())
-          if (target) {
+          let pulled = 0
+          while (pulled < rules.pull && s.remaining > 0) {
+            const target = this.findTarget(s, biome.getDebrisList())
+            if (!target) break
             target.pull(s.position)
             s.inFlight.push(target)
             s.remaining -= 1
-            s.timer = 0
-          } else {
-            s.timer = s.config.interval
+            pulled++
           }
+          s.timer = pulled > 0 ? 0 : s.config.interval
         }
       }
 
       if (s.isExhausted()) {
+        credit.exhausted += 1
         this.scene.remove(s.group)
         s.dispose()
         this.structures.splice(i, 1)
