@@ -79,6 +79,12 @@ describe("createDefaultMeta", () => {
       upgrades: {},
       seenTips: [],
       learnedControls: [],
+      records: {
+        bestDebris: 0,
+        bestEco: 0,
+        bestEndlessBiomes: 0,
+        fastestCompletion: 0,
+      },
     })
   })
 })
@@ -197,6 +203,39 @@ describe("applyRunToMeta", () => {
     expect(meta.runsPlayed).toBe(2)
     expect(meta.runsCompleted).toBe(1)
     expect(meta.bestBiomeIndex).toBe(4)
+  })
+
+  it("la inmersión sin fin no cuenta para la zona más profunda", () => {
+    const meta = createDefaultMeta()
+    meta.bestBiomeIndex = 5
+
+    applyRunToMeta(meta, makeSummary({ endless: true, biomeIndex: 9 }))
+
+    expect(meta.bestBiomeIndex).toBe(5)
+    expect(meta.records.bestEndlessBiomes).toBe(10)
+  })
+
+  it("guarda los récords de la run", () => {
+    const meta = createDefaultMeta()
+
+    applyRunToMeta(
+      meta,
+      makeSummary({
+        outcome: "completed",
+        biomeIndex: 5,
+        debrisCollected: 80,
+        ecoBase: 200,
+        ecoBonus: 50,
+        durationSeconds: 600,
+      }),
+    )
+
+    expect(meta.records).toEqual({
+      bestDebris: 80,
+      bestEco: 250,
+      bestEndlessBiomes: 0,
+      fastestCompletion: 600,
+    })
   })
 })
 
@@ -342,6 +381,22 @@ describe("sanitizeMeta", () => {
     })
 
     expect(meta).toEqual(createDefaultMeta())
+  })
+
+  it("acota la zona más profunda al último bioma", () => {
+    expect(sanitizeMeta({ bestBiomeIndex: 14 }).bestBiomeIndex).toBe(5)
+  })
+
+  it("lee los récords y descarta valores no válidos", () => {
+    const meta = sanitizeMeta({
+      records: { bestDebris: 40, bestEco: "x", fastestCompletion: -3 },
+    })
+    expect(meta.records).toEqual({
+      bestDebris: 40,
+      bestEco: 0,
+      bestEndlessBiomes: 0,
+      fastestCompletion: 0,
+    })
   })
 
   it("limita los niveles de mejora a maxLevel y descarta ids desconocidos", () => {

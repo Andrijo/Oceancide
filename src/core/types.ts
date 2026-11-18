@@ -1,6 +1,9 @@
 // src/types.ts
 // Clases y tipos de datos compartidos entre los distintos módulos del juego.
 
+import type { DeathCause } from "@core/systems/deathCause"
+import type { BiomeSegment } from "@core/systems/runTimeline"
+
 export interface GameState {
   debrisCollected: number
   ecoAwareness: number
@@ -25,6 +28,10 @@ export interface RunSummary {
   cardsPicked: string[] // ID de cartas elegidas
   endless: boolean
   loopsCompleted: number
+  /** Qué llevó la toxicidad a 100 (solo si `outcome` es "died"). */
+  deathCause?: DeathCause
+  /** Biomas recorridos, en orden, con lo que se hizo en cada uno. */
+  timeline?: BiomeSegment[]
 }
 
 export interface TurtleStats {

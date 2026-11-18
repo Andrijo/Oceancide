@@ -1,7 +1,14 @@
 // src/core/MetaState.ts
 // Progreso persistente entre runs y su guardado en localStorage.
 
-import type { RunOutcome, RunSummary } from "@core/types"
+import { BIOME_ORDER, type RunOutcome, type RunSummary } from "@core/types"
+import {
+  applyRunToRecords,
+  createDefaultRecords,
+  normalBiomeIndex,
+  sanitizeRecords,
+  type RunRecords,
+} from "@core/records"
 import { UPGRADES } from "@tycoon/Upgrades"
 import { isTipId, type TipId } from "@core/tips"
 import { isHintAction, type HintAction } from "@core/controlsHint"
@@ -42,6 +49,8 @@ export interface MetaState {
    * controles automática deja de nombrarlos.
    */
   learnedControls: HintAction[]
+  /** Récords personales (zona más profunda aparte: `bestBiomeIndex`). */
+  records: RunRecords
 }
 
 export function createDefaultMeta(): MetaState {
@@ -56,6 +65,7 @@ export function createDefaultMeta(): MetaState {
     upgrades: {},
     seenTips: [],
     learnedControls: [],
+    records: createDefaultRecords(),
   }
 }
 
@@ -112,7 +122,15 @@ export function applyRunToMeta(meta: MetaState, summary: RunSummary): void {
   meta.totalDebris += summary.debrisCollected
   meta.runsPlayed += 1
   if (summary.outcome === "completed") meta.runsCompleted += 1
-  meta.bestBiomeIndex = Math.max(meta.bestBiomeIndex, summary.biomeIndex)
+  // La zona más profunda es del modo normal: en la inmersión sin fin el índice
+  // sigue creciendo más allá del último bioma y tiene su propio récord.
+  if (!summary.endless) {
+    meta.bestBiomeIndex = Math.max(
+      meta.bestBiomeIndex,
+      normalBiomeIndex(summary),
+    )
+  }
+  applyRunToRecords(meta.records, summary)
 }
 
 function finiteNumber(value: unknown, fallback: number, min = 0): number {
@@ -147,10 +165,11 @@ export function sanitizeMeta(raw: Record<string, unknown>): MetaState {
     version: META_VERSION,
     ecoPoints: finiteNumber(raw.ecoPoints, defaults.ecoPoints),
     lifetimeEco: finiteNumber(raw.lifetimeEco, defaults.lifetimeEco),
-    bestBiomeIndex: finiteNumber(
-      raw.bestBiomeIndex,
-      defaults.bestBiomeIndex,
-      -1,
+    // Acotado al último bioma: versiones anteriores guardaban aquí el índice
+    // de la inmersión sin fin, que pasa del final del recorrido.
+    bestBiomeIndex: Math.min(
+      BIOME_ORDER.length - 1,
+      finiteNumber(raw.bestBiomeIndex, defaults.bestBiomeIndex, -1),
     ),
     runsPlayed: finiteNumber(raw.runsPlayed, defaults.runsPlayed),
     runsCompleted: finiteNumber(raw.runsCompleted, defaults.runsCompleted),
@@ -158,6 +177,7 @@ export function sanitizeMeta(raw: Record<string, unknown>): MetaState {
     upgrades,
     seenTips,
     learnedControls,
+    records: sanitizeRecords(raw.records),
   }
 }
 

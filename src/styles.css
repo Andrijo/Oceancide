@@ -2352,29 +2352,196 @@ button.build-chip:focus-visible,
 
 /* --- Resumen y pausa --- */
 
-.summary-cards {
-  max-width: 720px;
+/* Causa de la derrota, bajo el título del resumen. */
+.summary-cause {
+  max-width: 960px;
+  margin: 0;
   font-size: 13px;
-  line-height: 1.6;
   text-align: center;
-  color: var(--text-link);
-  opacity: 0.85;
+  color: var(--text-soft);
+}
+
+.summary-cause strong {
+  color: #ffb3a9;
+}
+
+/* Récords batidos: insignia en la casilla y línea de texto bajo la cuadrícula. */
+.record-badge {
+  align-self: flex-start;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-ink);
+  background: var(--rarity-legendary);
+}
+
+.summary-records {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--rarity-legendary);
+}
+
+/* Subpantalla "Detalles de la inmersión". */
+.details-heading {
+  width: 100%;
+  max-width: 960px;
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-soft);
+}
+
+.details-eco {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.summary-timeline {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 960px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.summary-timeline-hidden {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.summary-timeline-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.summary-timeline-item {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 12px;
+  padding: 3px 0;
+}
+
+.summary-timeline-item + .summary-timeline-item {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.summary-timeline-name {
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.summary-timeline-stats {
+  color: var(--text-muted);
+}
+
+/* Cartas elegidas: fichas en miniatura con el color de su rareza. */
+.summary-cards {
+  max-width: 960px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+}
+
+.summary-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--rarity-bg) 55%, transparent);
+  font-size: 11px;
+  color: var(--text-strong);
+}
+
+.summary-card .rarity-icon {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  color: var(--rarity);
+}
+
+.summary-card-count {
+  font-weight: 700;
+  color: var(--rarity);
 }
 
 .summary-actions {
   width: 100%;
-  max-width: 640px;
+  max-width: 960px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: clamp(14px, 2.4vh, 22px);
+  gap: clamp(10px, 1.8vh, 18px);
 }
 
+/* Semilla y sus acciones en una sola línea de botones pequeños. */
 .summary-seed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   font-size: 12px;
-  text-align: center;
   color: var(--text-link);
-  opacity: 0.7;
+}
+
+.summary-seed > .btn {
+  width: auto;
+  flex: none;
+  min-height: 40px;
+  padding: 6px 16px;
+  font-size: 14px;
+}
+
+.summary-seed-value {
+  opacity: 0.8;
+}
+
+/* En móvil la semilla va encima y los tres botones debajo, en una fila. */
+@media (max-width: 560px) {
+  .summary-seed-value {
+    flex-basis: 100%;
+  }
+
+  .summary-seed > .btn {
+    padding-inline: 10px;
+    font-size: 13px;
+  }
+}
+
+.summary-seed-link {
+  flex-basis: 100%;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  text-align: center;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+/* Solo para lectores de pantalla. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .goals-panel {
