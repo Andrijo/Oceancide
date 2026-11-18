@@ -41,6 +41,10 @@ import {
   type Direction,
 } from "@ui/focusNav"
 import { createDefaultSettings, type Settings } from "@core/settings"
+import { endlessBiomes, type RecordKind } from "@core/records"
+import { describeDeathCause } from "@core/systems/deathCause"
+import { visibleSegments } from "@core/systems/runTimeline"
+import { RECORD_LABELS, seedShareUrl, summaryCardChips } from "@ui/runSummary"
 import { buildNextGoals, type NextGoalsView } from "@ui/nextGoals"
 import {
   buttonClass,
@@ -66,6 +70,8 @@ function toneMarkClass(tone: "positive" | "negative"): string {
 export interface ScreenCallbacks {
   onStartRun(): void
   onStartEndless(): void
+  /** Empieza una run con la semilla indicada (botón "Repetir semilla"). */
+  onReplaySeed(seed: number, endless: boolean): void
   onReturnToHub(): void
   onResetProgress(): void
   onSaveMeta(): void
@@ -810,16 +816,19 @@ export class ScreenManager {
   }
 
   /**
-   * @param focus "upgrades" al volver de la pantalla de mejoras abierta desde
-   *   el resumen, para no perder la posición al navegar con teclado.
+   * @param newRecords Récords que ha batido esta run.
+   * @param focus Botón que recibe el foco al volver de una subpantalla
+   *   (mejoras o detalles), para no perder la posición con teclado.
    */
   public showSummary(
     summary: RunSummary,
     meta: MetaState,
-    focus?: "upgrades",
+    newRecords: readonly RecordKind[] = [],
+    focus?: "upgrades" | "details",
   ): void {
     const again = () => this.callbacks.onStartRun()
     const { root, content } = this.makeWindowFrame()
+    const isRecord = (kind: RecordKind) => newRecords.includes(kind)
 
     const title = summary.endless
       ? this.makeScreenTitle("Fin de la inmersión", "screen-title--completed")
@@ -827,55 +836,70 @@ export class ScreenManager {
           OUTCOME_TITLES[summary.outcome],
           OUTCOME_TITLE_CLASS[summary.outcome],
         )
+    // Sin el hueco habitual bajo el título: el resumen debe caber sin scroll.
+    title.classList.add("screen-title--tight")
+    content.append(title)
+
+    if (summary.outcome === "died" && summary.deathCause) {
+      content.append(this.makeDeathCause(summary.deathCause))
+    }
 
     const zoneLabel = summary.endless
       ? `Bioma ${summary.biomeIndex + 1} (vuelta ${summary.loopsCompleted + 1})`
       : `${summary.biomeIndex + 1}. ${summary.biomeName}`
 
+    // Solo lo esencial; récords, recorrido y cartas van en "Detalles".
+    const totalEarned = summary.ecoBase + summary.ecoBonus
     const bentoItems: BentoItem[] = [
-      {
-        label: summary.endless ? "Biomas sobrevividos" : "Zona alcanzada",
-        value: summary.endless ? String(summary.biomeIndex + 1) : zoneLabel,
-      },
+      summary.endless
+        ? {
+            label: "Biomas sobrevividos",
+            value: String(endlessBiomes(summary)),
+            record: isRecord("endless"),
+          }
+        : {
+            label: "Zona alcanzada",
+            value: zoneLabel,
+            record: isRecord("biome"),
+          },
       {
         label: "Desechos recolectados",
         value: summary.debrisCollected.toLocaleString("es"),
+        record: isRecord("debris"),
       },
       {
         label: "Tiempo de inmersión",
         value: formatTime(summary.durationSeconds),
+        record: isRecord("fastest"),
       },
       {
-        label: "Cartas elegidas",
-        value: String(summary.cardsPicked.length),
-      },
-      {
-        label: "Eco total",
-        value: meta.ecoPoints.toLocaleString("es"),
+        label: "Eco de esta inmersión",
+        value: `+${totalEarned.toLocaleString("es")}`,
+        sub:
+          summary.ecoBonus > 0
+            ? `Incluye +${summary.ecoBonus} de bono`
+            : summary.ecoLost > 0
+              ? `${summary.ecoLost.toLocaleString("es")} perdido por no cerrar la vuelta`
+              : undefined,
+        highlight: true,
+        record: isRecord("eco"),
       },
     ]
 
-    const totalEarned = summary.ecoBase + summary.ecoBonus
-    bentoItems.push({
-      label: "Eco de esta inmersión",
-      value: `+${totalEarned.toLocaleString("es")}`,
-      sub:
-        summary.ecoBonus > 0
-          ? `Incluye +${summary.ecoBonus} de bono`
-          : summary.ecoLost > 0
-            ? `${summary.ecoLost.toLocaleString("es")} perdido por no cerrar la vuelta`
-            : undefined,
-      highlight: true,
-    })
+    content.append(this.makeBentoGrid(bentoItems, true))
 
-    content.append(title, this.makeBentoGrid(bentoItems))
-
-    if (summary.cardsPicked.length > 0) {
-      const names = summary.cardsPicked
-        .map((id) => CARD_POOL.find((c) => c.id === id)?.name ?? id)
-        .join(" · ")
-
-      content.append(el("p", "summary-cards", names))
+    if (newRecords.length > 0) {
+      // Las insignias de las casillas son visuales; esto lo dice en texto.
+      const names = newRecords.map((kind) => RECORD_LABELS[kind]).join(", ")
+      content.append(
+        el(
+          "p",
+          "summary-records",
+          newRecords.length === 1
+            ? `¡Nuevo récord! ${names}`
+            : `¡${newRecords.length} nuevos récords! ${names}`,
+        ),
+      )
     }
 
     const buttons = el("div", "action-row action-row--top")
@@ -893,26 +917,241 @@ export class ScreenManager {
 
     buttons.append(againBtn, hubBtn)
 
-    // Objetivos pendientes y botones van en un mismo grupo de flechas (en
-    // cuadrícula), para llegar también al botón de mejoras del panel.
+    const detailsBtn = makeButton("Detalles", () =>
+      this.showRunDetails(summary, meta, newRecords),
+    )
+    detailsBtn.classList.add("btn--compact")
+
+    // Objetivos pendientes, botones y semilla van en un mismo grupo de flechas
+    // (en cuadrícula), para llegar también al botón de mejoras del panel.
     const actionArea = el("div", "summary-actions")
     const goals = this.makeNextGoals(buildNextGoals(summary, meta), () =>
       this.showUpgrades(
         meta,
-        () => this.showSummary(summary, meta, "upgrades"),
+        () => this.showSummary(summary, meta, newRecords, "upgrades"),
         "Volver al resumen",
       ),
     )
     if (goals) actionArea.append(goals.panel)
-    actionArea.append(buttons)
+    actionArea.append(buttons, this.makeSeedRow(summary, detailsBtn))
     this.enableArrowNav(actionArea, "grid")
     content.append(actionArea)
 
-    content.append(el("p", "summary-seed", `Semilla · ${summary.seed}`))
-
     this.open(root, again)
     const upgradesBtn = goals?.upgradesButton
-    ;(focus === "upgrades" && upgradesBtn ? upgradesBtn : againBtn).focus()
+    const focusTarget =
+      focus === "details"
+        ? detailsBtn
+        : focus === "upgrades" && upgradesBtn
+          ? upgradesBtn
+          : againBtn
+    focusTarget.focus()
+  }
+
+  /** Línea "Causa" bajo el título del resumen de una derrota. */
+  private makeDeathCause(
+    cause: NonNullable<RunSummary["deathCause"]>,
+  ): HTMLElement {
+    const text = describeDeathCause(cause)
+    const line = el("p", "summary-cause", "Causa: ")
+    line.append(el("strong", "", text.title), ` · ${text.detail}`)
+    return line
+  }
+
+  /**
+   * Subpantalla del resumen: récords, recorrido por biomas, cartas elegidas y
+   * Eco acumulado. Vuelve al resumen con el botón o con Escape.
+   */
+  private showRunDetails(
+    summary: RunSummary,
+    meta: MetaState,
+    newRecords: readonly RecordKind[],
+  ): void {
+    const back = () => this.showSummary(summary, meta, newRecords, "details")
+    const { root, content } = this.makeWindowFrame()
+    content.append(
+      this.makeScreenTitle("Detalles de la inmersión", "screen-title--tight"),
+    )
+
+    const { records } = meta
+    const isRecord = (kind: RecordKind) => newRecords.includes(kind)
+    const recordItems: BentoItem[] = [
+      {
+        label: RECORD_LABELS.biome,
+        value: BIOME_ORDER[meta.bestBiomeIndex]
+          ? `${meta.bestBiomeIndex + 1}. ${BIOMES[BIOME_ORDER[meta.bestBiomeIndex]].name}`
+          : "—",
+        record: isRecord("biome"),
+      },
+      {
+        label: RECORD_LABELS.debris,
+        value: records.bestDebris.toLocaleString("es"),
+        record: isRecord("debris"),
+      },
+      {
+        label: RECORD_LABELS.eco,
+        value: records.bestEco.toLocaleString("es"),
+        record: isRecord("eco"),
+      },
+      {
+        label: RECORD_LABELS.fastest,
+        value:
+          records.fastestCompletion > 0
+            ? formatTime(records.fastestCompletion)
+            : "—",
+        record: isRecord("fastest"),
+      },
+    ]
+    if (records.bestEndlessBiomes > 0) {
+      recordItems.push({
+        label: RECORD_LABELS.endless,
+        value: String(records.bestEndlessBiomes),
+        record: isRecord("endless"),
+      })
+    }
+
+    content.append(
+      el("h2", "details-heading", "Récords"),
+      this.makeBentoGrid(recordItems, true),
+      el(
+        "p",
+        "details-eco",
+        `Eco acumulado: ${meta.ecoPoints.toLocaleString("es")}`,
+      ),
+    )
+
+    const segments = summary.timeline ?? []
+    if (segments.length > 0) {
+      content.append(
+        el("h2", "details-heading", "Recorrido"),
+        this.makeRunTimeline(summary),
+      )
+    }
+
+    const chips = summaryCardChips(summary.cardsPicked, CARD_POOL)
+    if (chips.length > 0) {
+      const list = el("ul", "summary-cards")
+      list.setAttribute("aria-label", "Cartas elegidas")
+      for (const { card, count } of chips) {
+        const item = el("li", `summary-card ${rarityClass(card.rarity)}`)
+        item.title = `${RARITY_LABELS[card.rarity]}: ${card.description}`
+        item.append(rarityIcon(card.rarity), el("span", "", card.name))
+        if (count > 1) {
+          item.append(el("span", "summary-card-count", `×${count}`))
+        }
+        // El color y el icono no llegan al lector de pantalla.
+        item.append(el("span", "sr-only", ` (${RARITY_LABELS[card.rarity]})`))
+        list.append(item)
+      }
+      content.append(
+        el(
+          "h2",
+          "details-heading",
+          `Cartas elegidas (${summary.cardsPicked.length})`,
+        ),
+        list,
+      )
+    }
+
+    const backBtn = makeButton("Volver al resumen", back, "primary")
+    const row = el("div", "action-row action-row--top")
+    row.append(backBtn)
+    content.append(row)
+
+    this.open(root, back, back)
+    backBtn.focus()
+  }
+
+  /** Biomas recorridos con su tiempo, desechos y Eco. */
+  private makeRunTimeline(summary: RunSummary): HTMLElement {
+    const section = el("section", "summary-timeline")
+    section.setAttribute("aria-label", "Recorrido")
+
+    const { hidden, shown } = visibleSegments(summary.timeline ?? [], 8)
+    if (hidden > 0) {
+      section.append(
+        el(
+          "p",
+          "summary-timeline-hidden",
+          hidden === 1
+            ? "1 bioma anterior no se muestra"
+            : `${hidden} biomas anteriores no se muestran`,
+        ),
+      )
+    }
+
+    const list = el("ol", "summary-timeline-list")
+    for (const segment of shown) {
+      const loop = Math.floor(segment.biomeIndex / BIOME_ORDER.length)
+      const name = summary.endless
+        ? `${segment.biomeName} · vuelta ${loop + 1}`
+        : `${segment.biomeIndex + 1}. ${segment.biomeName}`
+      const stats = [
+        formatTime(segment.seconds),
+        `${segment.debris.toLocaleString("es")} desechos`,
+        `+${segment.eco.toLocaleString("es")} Eco`,
+      ].join(" · ")
+
+      const item = el("li", "summary-timeline-item")
+      item.append(
+        el("span", "summary-timeline-name", name),
+        el("span", "summary-timeline-stats", stats),
+      )
+      list.append(item)
+    }
+    section.append(list)
+    return section
+  }
+
+  /**
+   * Semilla de la run con los botones para compartirla y repetirla, más
+   * `extra` (el botón de detalles) en la misma fila.
+   */
+  private makeSeedRow(summary: RunSummary, extra: HTMLElement): HTMLElement {
+    const row = el("div", "summary-seed")
+    row.append(el("span", "summary-seed-value", `Semilla · ${summary.seed}`))
+
+    const status = el("span", "sr-only")
+    status.setAttribute("aria-live", "polite")
+
+    const link = seedShareUrl(location.href, summary.seed)
+    const linkText = el("code", "summary-seed-link", link)
+    linkText.hidden = true
+
+    const copyLabel = "Copiar enlace"
+    let resetTimer = 0
+    const copyBtn = makeButton(copyLabel, () => {
+      const done = (text: string) => {
+        copyBtn.textContent = text
+        status.textContent = text
+        window.clearTimeout(resetTimer)
+        resetTimer = window.setTimeout(() => {
+          copyBtn.textContent = copyLabel
+        }, 2000)
+      }
+      // Sin portapapeles (HTTP sin TLS, permisos denegados) se deja el enlace
+      // a la vista para copiarlo a mano.
+      const fallback = () => {
+        linkText.hidden = false
+        done("Cópialo abajo")
+      }
+      if (!navigator.clipboard) {
+        fallback()
+        return
+      }
+      navigator.clipboard
+        .writeText(link)
+        .then(() => done("¡Enlace copiado!"), fallback)
+    })
+    copyBtn.classList.add("btn--compact")
+
+    const replayBtn = makeButton("Repetir semilla", () =>
+      this.callbacks.onReplaySeed(summary.seed, summary.endless),
+    )
+    replayBtn.classList.add("btn--compact")
+
+    row.append(copyBtn, replayBtn, extra, status, linkText)
+    return row
   }
 
   /**
@@ -1401,6 +1640,11 @@ export class ScreenManager {
       ),
     )
     if (item.sub) card.append(el("div", "bento-sub", item.sub))
+    if (item.record) {
+      const badge = el("span", "record-badge", "¡Nuevo récord!")
+      badge.setAttribute("aria-hidden", "true") // lo dice .summary-records
+      card.append(badge)
+    }
     return card
   }
 
@@ -1629,4 +1873,6 @@ interface BentoItem {
   value: string
   sub?: string
   highlight?: boolean
+  /** Marca de "¡Nuevo récord!" en la casilla. */
+  record?: boolean
 }

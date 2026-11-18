@@ -95,6 +95,15 @@ import {
   computeFilterCleanup,
   computePassiveToxicityRate,
 } from "@core/systems/toxicity"
+import { passiveDeathCause, type DeathCause } from "@core/systems/deathCause"
+import {
+  closeSegment,
+  openSegment,
+  type BiomeSegment,
+  type OpenSegment,
+  type RunCounters,
+} from "@core/systems/runTimeline"
+import { computeNewRecords } from "@core/records"
 import {
   computeBiomeTimeLimit,
   computeReviveToxicity,
@@ -213,6 +222,11 @@ export class Game {
   private adaptiveQuality = new AdaptiveQuality()
   private screen: Screen = "hub"
   private runSeed = randomSeed()
+  /** Qué llevó la toxicidad a 100 en la muerte en curso. */
+  private deathCause: DeathCause | null = null
+  /** Biomas ya terminados de la run y el que está en curso. */
+  private timeline: BiomeSegment[] = []
+  private currentSegment: OpenSegment | null = null
   private runTime = 0
 
   private readonly tmpProjected = new THREE.Vector3()
@@ -276,6 +290,11 @@ export class Game {
 
     this.screens = new ScreenManager({
       onStartRun: () => this.startRun(false),
+      onReplaySeed: (seed, endless) => {
+        if (!endless || isEndlessUnlocked(this.meta)) {
+          this.startRun(endless, seed)
+        }
+      },
       onStartEndless: () => {
         if (isEndlessUnlocked(this.meta)) this.startRun(true)
       },
@@ -491,7 +510,9 @@ export class Game {
         // Los eventos pueden llevar la toxicidad a 100. Resolvemos la muerte o
         // el revive antes de abrir la elección de carta.
         const lethal = this.state.toxicity >= 100
-        if (lethal && !this.tryKill()) return
+        if (lethal && !this.tryKill({ kind: "event", source: opt.label })) {
+          return
+        }
 
         this.openCardChoice(result.summary)
       },
@@ -686,6 +707,7 @@ export class Game {
   }
 
   private loadBiome(index: number): void {
+    this.closeTimelineSegment()
     this.biomeIndex = index
     this.collectedInZone = 0
     this.state.zoneProgress = 0
@@ -732,6 +754,14 @@ export class Game {
       toxicityFloor,
     )
     this.pendingToxicityFloor = null
+
+    if (this.screen === "run") {
+      this.currentSegment = openSegment(
+        index,
+        this.biomeGenerator.getBiomeName(),
+        this.runCounters(),
+      )
+    }
 
     const sun = this.biomeGenerator.getSun()
     this.renderPipeline.setBloomStrength(sun.darkness * BLOOM_MAX_STRENGTH)
@@ -1029,15 +1059,19 @@ export class Game {
     this.screens.showHub(this.meta)
   }
 
-  private startRun(endless = false): void {
+  /** @param seed Semilla a repetir; si no, la de la URL o una al azar. */
+  private startRun(endless = false, seed?: number): void {
     this.endlessMode = endless
     this.endlessBankedEco = 0
     this.cancelDeath()
     this.transition.cancel()
     this.pendingAdvance = false
     this.paused = false
-    this.runSeed = seedFromUrl() ?? randomSeed()
+    this.runSeed = seed ?? seedFromUrl() ?? randomSeed()
     this.runTime = 0
+    this.deathCause = null
+    this.timeline = []
+    this.currentSegment = null
 
     this.state.debrisCollected = 0
     this.state.ecoAwareness = 0
@@ -1076,6 +1110,7 @@ export class Game {
     this.inputController.clear()
     this.enemyManager.clear()
     this.tips.clear()
+    this.closeTimelineSegment()
 
     const { base, bonus, lost } = this.endlessMode
       ? computeEndlessEco(this.state.ecoAwareness, this.endlessBankedEco)
@@ -1098,11 +1133,30 @@ export class Game {
       cardsPicked: this.runState.cards.map((c) => c.id),
       endless: this.endlessMode,
       loopsCompleted: Math.floor(this.biomeIndex / BIOME_ORDER.length),
+      deathCause:
+        outcome === "died" ? (this.deathCause ?? undefined) : undefined,
+      timeline: this.timeline,
     }
 
+    const newRecords = computeNewRecords(this.meta, summary)
     applyRunToMeta(this.meta, summary)
     this.saveManager.save(this.meta)
-    this.screens.showSummary(summary, this.meta)
+    this.screens.showSummary(summary, this.meta, newRecords)
+  }
+
+  private runCounters(): RunCounters {
+    return {
+      time: this.runTime,
+      debris: this.state.debrisCollected,
+      eco: this.state.ecoAwareness,
+    }
+  }
+
+  /** Cierra el tramo del bioma en curso en la línea de tiempo de la run. */
+  private closeTimelineSegment(): void {
+    if (!this.currentSegment) return
+    this.timeline.push(closeSegment(this.currentSegment, this.runCounters()))
+    this.currentSegment = null
   }
 
   private advanceBiome(): void {
@@ -1248,7 +1302,9 @@ export class Game {
       this.turtle.playHurt()
       this.uiManager.showMessage("¡MEDUSA!", 1000)
       this.tips.trigger("jellyfish_hit")
-      if (this.state.toxicity >= 100 && !this.tryKill()) return
+      if (this.state.toxicity >= 100 && !this.tryKill({ kind: "jellyfish" })) {
+        return
+      }
     }
 
     this.cameraRig.update(
@@ -1351,7 +1407,12 @@ export class Game {
       if (absorption.relic) this.claimRelic(absorption.relic)
     }
 
-    if (this.state.toxicity >= 100 && !this.tryKill()) return
+    if (
+      this.state.toxicity >= 100 &&
+      !this.tryKill(passiveDeathCause(timePressure))
+    ) {
+      return
+    }
 
     this.state.zoneProgress = computeZoneProgress(
       this.collectedInZone,
@@ -1470,7 +1531,12 @@ export class Game {
         )
 
         // Las cartas de caos pueden subir la toxicidad al máximo al instante.
-        if (this.state.toxicity >= 100 && !this.tryKill()) return
+        if (
+          this.state.toxicity >= 100 &&
+          !this.tryKill({ kind: "chaos", source: card.name })
+        ) {
+          return
+        }
 
         this.advanceBiome()
       },
@@ -1479,7 +1545,8 @@ export class Game {
     )
   }
 
-  private tryKill(): boolean {
+  /** @param cause Lo que acaba de llevar la toxicidad a 100. */
+  private tryKill(cause: DeathCause): boolean {
     if (this.godMode) return true
 
     if (this.runState.reviveCharges > 0) {
@@ -1493,6 +1560,7 @@ export class Game {
       return true
     }
 
+    this.deathCause = cause
     this.startDeath()
     return false
   }
