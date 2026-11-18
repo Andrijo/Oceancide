@@ -5,6 +5,7 @@
 // cerrar las fugas, contrarreloj) y a veces una recompensa al terminarla
 // (tienda o evento). Lógica pura y determinista con la semilla de la run.
 
+import { LOCALE } from "@core/locale"
 import { Rng, deriveSeed } from "@core/rng"
 import { BIOMES, type BiomeKey } from "@core/types"
 
@@ -270,7 +271,7 @@ export function shopItems(layer: number): ShopItem[] {
     {
       id: "magnet",
       label: "Imán de deriva",
-      description: "+0.5 de radio de recogida.",
+      description: "+0.5 de radio de recolección.",
       cost: Math.round(250 * scale),
     },
     {
@@ -306,5 +307,5 @@ export function describeNode(node: RouteNode): string {
 /** Nombre y profundidad de una zona ("Subfótico · 200 m"). */
 export function nodeTitle(node: RouteNode): string {
   const biome = BIOMES[node.biome]
-  return `${biome.name} · ${biome.depth} m`
+  return `${biome.name} · ${biome.depth.toLocaleString(LOCALE)} m`
 }

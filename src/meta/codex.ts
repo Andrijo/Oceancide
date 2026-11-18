@@ -20,31 +20,31 @@ export const DEBRIS_FACTS: Record<string, string> = {
   ghost_net_shallow:
     "Las redes fantasma son alrededor del 10% de la basura marina y siguen atrapando peces, tortugas y delfines durante décadas.",
   styrofoam_chunk:
-    "El poliestireno expandido no se biodegrada: se desmenuza en bolitas que peces y aves confunden con huevos o comida.",
+    "El unicel (poliestireno expandido) no se biodegrada: se desmenuza en bolitas que peces y aves confunden con huevos o comida.",
   synthetic_microfiber:
-    "Un solo lavado de ropa sintética puede soltar cientos de miles de microfibras que las depuradoras no retienen.",
+    "Un solo lavado de ropa sintética puede soltar cientos de miles de microfibras que las plantas de tratamiento no retienen.",
   oil_slick_patch:
     "Una película de aceite frena el paso de oxígeno y luz al agua y apelmaza las plumas de las aves, que pierden su aislamiento.",
   straw:
-    "Las pajitas están entre los residuos más recogidos en las limpiezas de playas de todo el mundo.",
+    "Los popotes están entre los residuos más recogidos en las limpiezas de playas de todo el mundo.",
   rubber_tire:
-    "El desgaste de los neumáticos es una de las mayores fuentes de microplásticos que llegan al mar.",
+    "El desgaste de las llantas es una de las mayores fuentes de microplásticos que llegan al mar.",
   aluminum_can:
     "Una lata de aluminio tarda entre 80 y 200 años en degradarse en el mar, pero se puede reciclar una y otra vez sin perder calidad.",
   glass_bottle:
     "El vidrio puede durar miles de años en el fondo marino. Es inerte, pero sus fragmentos cortan, y se recicla al 100%.",
   fish_trap_lost:
-    "Las nasas perdidas siguen pescando solas: es la «pesca fantasma», que atrapa cangrejos y peces durante años.",
+    "Las jaulas y trampas de pesca perdidas siguen pescando solas: es la «pesca fantasma», que atrapa cangrejos y peces durante años.",
   microplastic_cluster:
     "Se calcula que flotan en los océanos más de 170 billones de partículas de plástico.",
   marine_snow_light:
     "La nieve marina, restos orgánicos que caen hacia el fondo, alimenta la vida profunda; los microplásticos viajan con ella hacia abajo.",
   chemical_drum_corroded:
-    "Durante décadas se tiraron bidones de residuos químicos al mar; el Convenio de Londres (1972) empezó a prohibir esos vertidos.",
+    "Durante décadas se tiraron tambos de residuos químicos al mar; el Convenio de Londres (1972) empezó a prohibir esos vertimientos.",
   ship_hull_plate:
-    "Las pinturas antiincrustantes con TBT de los cascos alteraban el sexo de las caracolas marinas; se prohibieron en todo el mundo en 2008.",
+    "Las pinturas antiincrustantes con TBT de los cascos alteraban el sexo de los caracoles marinos; se prohibieron en todo el mundo en 2008.",
   nylon_rope_spool:
-    "El sedal y la cuerda de nailon pueden tardar unos 600 años en degradarse, y enredan aletas y picos mucho antes.",
+    "El hilo de pescar y la cuerda de nylon pueden tardar unos 600 años en degradarse, y enredan aletas y picos mucho antes.",
   drilling_mud_trace:
     "Los lodos de perforación de las plataformas petroleras pueden dejar bario y otros metales acumulados en el sedimento a su alrededor.",
   chitin_exuviae:
@@ -52,9 +52,9 @@ export const DEBRIS_FACTS: Record<string, string> = {
   lithium_battery:
     "Las pilas desechadas sueltan metales como el litio, el cobalto o el níquel, tóxicos para los organismos que filtran el agua.",
   heavy_petroleum_sludge:
-    "Las bolas de alquitrán son petróleo envejecido que puede viajar miles de kilómetros antes de hundirse o llegar a una playa.",
+    "Las bolas de chapopote son petróleo envejecido que puede viajar miles de kilómetros antes de hundirse o llegar a una playa.",
   cargo_crate_strap:
-    "Los flejes de embalaje de plástico forman lazos cerrados en los que focas y lobos marinos quedan atrapados por el cuello.",
+    "Las cintas de plástico para embalar forman lazos cerrados en los que focas y lobos marinos quedan atrapados por el cuello.",
   dense_marine_snow:
     "Se han encontrado microplásticos dentro de la nieve marina a miles de metros: es una de las vías por las que el plástico llega al abismo.",
   lead_battery_casing:
@@ -70,9 +70,9 @@ export const DEBRIS_FACTS: Record<string, string> = {
   whale_fall_vertebra:
     "Un esqueleto de ballena en el fondo puede alimentar a comunidades enteras de organismos durante décadas: es una «caída de ballena».",
   radioactive_drum_vintage:
-    "Entre 1946 y 1993 varios países hundieron residuos radiactivos en el mar; el Convenio de Londres prohibió esos vertidos en 1993.",
+    "Entre 1946 y 1993 varios países hundieron residuos radiactivos en el mar; el Convenio de Londres prohibió esos vertimientos en 1993.",
   ceramic_insulator_chunk:
-    "Los escombros de obras y estructuras tirados al mar entierran los hábitats del fondo y enturbian el agua al asentarse.",
+    "Los escombros de construcción tirados al mar entierran los hábitats del fondo y enturbian el agua al asentarse.",
   industrial_slag:
     "La escoria industrial vertida al mar puede liberar metales pesados como el cromo o el zinc al sedimento.",
   deep_microplastic_silt:
@@ -98,11 +98,11 @@ export const DEBRIS_FACTS: Record<string, string> = {
   heavy_radioactive_cask:
     "Algunos residuos radiactivos siguen siendo peligrosos durante miles de años, mucho más que cualquier contenedor que los guarde.",
   trench_microplastic_trap:
-    "En la fosa de las Marianas, a casi 11 000 metros, se encontró una bolsa de plástico: la basura llega al punto más hondo del océano.",
+    "En la fosa de las Marianas, a casi 11,000 metros, se encontró una bolsa de plástico: la basura llega al punto más hondo del océano.",
   volcanic_basalt_ash:
     "El basalto es la roca más común del fondo oceánico: casi todo el lecho del mar se formó con lava enfriada.",
   crushed_titanium_landings:
-    "A 11 000 metros la presión supera las 1000 atmósferas: una tonelada sobre cada centímetro cuadrado.",
+    "A 11,000 metros la presión supera las 1,000 atmósferas: una tonelada sobre cada centímetro cuadrado.",
   heavy_metal_silt:
     "Las fosas oceánicas funcionan como embudos: acumulan sedimentos y contaminantes que bajan por sus laderas.",
   amphipod_organic_mass:

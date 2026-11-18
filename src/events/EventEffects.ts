@@ -3,6 +3,7 @@ import type { Turtle } from "@entities/Turtle"
 import type { GameState } from "@core/types"
 import type { RunState } from "@cards/Card"
 import type { Rng } from "@core/rng"
+import { LOCALE } from "@core/locale"
 
 export interface EventContext {
   turtle: Turtle
@@ -53,12 +54,12 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function formatInt(value: number): string {
-  return Math.round(value).toLocaleString("es")
+  return Math.round(value).toLocaleString(LOCALE)
 }
 
 function signedInt(value: number): string {
   const rounded = Math.round(value)
-  return `${rounded > 0 ? "+" : ""}${rounded.toLocaleString("es")}`
+  return `${rounded > 0 ? "+" : ""}${rounded.toLocaleString(LOCALE)}`
 }
 
 function signedDecimal(value: number, digits = 1): string {

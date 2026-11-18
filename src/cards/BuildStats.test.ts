@@ -119,7 +119,7 @@ describe("previewCard", () => {
       },
       {
         key: "radius",
-        label: "Radio de recogida",
+        label: "Radio de recolección",
         before: "3.0",
         after: "3.3",
         tone: "positive",

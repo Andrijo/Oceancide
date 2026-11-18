@@ -3,6 +3,7 @@
 // barata) y el siguiente bioma sin descubrir.
 
 import type { MetaState } from "@core/MetaState"
+import { LOCALE } from "@core/locale"
 import { BIOME_ORDER, BIOMES, type RunSummary } from "@core/types"
 import { affordableUpgrades, nextUpgrades } from "@tycoon/UpgradeManager"
 
@@ -25,7 +26,7 @@ type GoalSummary = Pick<RunSummary, "outcome" | "biomeName" | "zoneProgress">
 type GoalMeta = Pick<MetaState, "ecoPoints" | "upgrades" | "bestBiomeIndex">
 
 function formatEco(value: number): string {
-  return Math.round(value).toLocaleString("es")
+  return Math.round(value).toLocaleString(LOCALE)
 }
 
 function zoneGoal(summary: GoalSummary): NextGoal | null {
@@ -33,11 +34,11 @@ function zoneGoal(summary: GoalSummary): NextGoal | null {
   const progress = Math.max(0, Math.min(100, summary.zoneProgress))
   if (progress >= 100) return null
 
-  // Nunca "0 %": si quedaba algo por limpiar, se dice al menos un 1 %.
+  // Nunca "0%": si quedaba algo por limpiar, se dice al menos un 1%.
   const remaining = Math.max(1, Math.round(100 - progress))
   return {
     kind: "zone",
-    text: `Te quedó un ${remaining} % del ${summary.biomeName} por limpiar`,
+    text: `Te quedó un ${remaining}% del ${summary.biomeName} por limpiar`,
     progress: progress / 100,
   }
 }
@@ -70,7 +71,7 @@ function biomeGoal(meta: GoalMeta): NextGoal | null {
   const biome = BIOMES[nextKey]
   return {
     kind: "biome",
-    text: `Siguiente bioma por descubrir: ${biome.name} · ${biome.depth.toLocaleString("es")} m`,
+    text: `Siguiente bioma por descubrir: ${biome.name} · ${biome.depth.toLocaleString(LOCALE)} m`,
   }
 }
 

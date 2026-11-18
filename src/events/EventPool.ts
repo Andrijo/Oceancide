@@ -104,7 +104,7 @@ export const ACT_EVENTS: GameEvent[] = [
     options: [
       {
         id: "take_core",
-        label: "Sumergirte a por el núcleo",
+        label: "Sumergirte por el núcleo",
         description:
           "Ganas +1 filtro, pero te intoxicas mucho (+45 toxicidad).",
         effects: { toxicity: 45, filterCapacity: 1 },
@@ -194,7 +194,7 @@ export const ACT_EVENTS: GameEvent[] = [
   },
   {
     id: "oil_spill",
-    title: "Vertido del Petrolero",
+    title: "Derrame del Petrolero",
     description:
       "Un petrolero encallado sangra crudo hacia el fondo. La mancha negra avanza y asfixia todo lo que toca.",
     options: [
@@ -229,7 +229,7 @@ export const ACT_EVENTS: GameEvent[] = [
     id: "bleached_reef",
     title: "Arrecife Blanqueado",
     description:
-      "El agua demasiado caliente ha dejado el coral blanco como el hueso. Aún quedan pólipos vivos entre las ramas muertas.",
+      "El agua demasiado caliente dejó el coral blanco como el hueso. Aún quedan pólipos vivos entre las ramas muertas.",
     condition: (ctx) => ctx.depth <= 500,
     weight: 1.5,
     options: [
@@ -265,12 +265,12 @@ export const ACT_EVENTS: GameEvent[] = [
     id: "poachers",
     title: "Pescadores Furtivos",
     description:
-      "Un arrastrero sin bandera barre el fondo con redes prohibidas. Nadie más lo ha visto.",
+      "Un arrastrero sin bandera barre el fondo con redes prohibidas. Nadie más lo vio.",
     options: [
       {
         id: "sabotage_nets",
         label: "Sabotear sus redes",
-        description: "Muerdes los cabos sin que te vean... o eso esperas.",
+        description: "Muerdes las cuerdas sin que te vean... o eso esperas.",
         effects: {},
         risk: {
           chance: 0.6,
@@ -302,7 +302,7 @@ export const ACT_EVENTS: GameEvent[] = [
     id: "entangled_whale",
     title: "Ballena Enredada",
     description:
-      "Una ballena joven arrastra una maraña de cabos y boyas. Cada vez sale menos a respirar.",
+      "Una ballena joven arrastra una maraña de cuerdas y boyas. Cada vez sale menos a respirar.",
     options: [
       {
         id: "free_whale",
@@ -330,13 +330,13 @@ export const ACT_EVENTS: GameEvent[] = [
     id: "trapped_turtle",
     title: "Tortuga Atrapada",
     description:
-      "Una tortuga como tú tiene el cuello atrapado en una anilla de plástico. Te mira, agotada.",
+      "Una tortuga como tú tiene el cuello atrapado en un anillo de plástico. Te mira, agotada.",
     options: [
       {
         id: "free_turtle",
         label: "Liberarla",
         description:
-          "Romper la anilla te deja rozaduras (+10 toxicidad). Dice que te buscará más adelante.",
+          "Romper el anillo te deja raspones (+10 toxicidad). Dice que te buscará más adelante.",
         effects: { toxicity: 10 },
         later: {
           afterBiomes: 2,
@@ -348,7 +348,7 @@ export const ACT_EVENTS: GameEvent[] = [
       },
       {
         id: "take_ring",
-        label: "Quedarte la anilla",
+        label: "Quedarte con el anillo",
         description: "La reciclas: +60 Eco.",
         effects: { eco: 60 },
       },
@@ -522,7 +522,7 @@ export const ACT_EVENTS: GameEvent[] = [
         id: "swim_through_storm",
         label: "Nadar a través",
         description:
-          "Lo normal es salir con algo de Eco; a veces, con la tripa llena de plástico.",
+          "Lo normal es salir con algo de Eco; a veces, con la panza llena de plástico.",
         effects: {},
         risk: {
           chance: 0.7,
@@ -577,15 +577,14 @@ export const ACT_EVENTS: GameEvent[] = [
         later: {
           afterBiomes: 1,
           title: "El buzo cuenta tu historia",
-          message:
-            "El buzo que salvaste ha publicado tu hazaña: llegan donaciones.",
+          message: "El buzo que salvaste publicó tu hazaña: llegan donaciones.",
           effects: { eco: 400 },
         },
       },
       {
         id: "take_lantern",
-        label: "Quedarte su linterna",
-        description: "+40% de brillo, pero te sientes fatal (-50 Eco).",
+        label: "Quedarte con su linterna",
+        description: "+40% de brillo, pero te sientes muy mal (-50 Eco).",
         effects: { glow: 0.4, eco: -50 },
       },
     ],
@@ -599,7 +598,7 @@ export const ACT_EVENTS: GameEvent[] = [
       {
         id: "explore_hold",
         label: "Explorar la bodega",
-        description: "Puede haber un corazón de medusa... o bidones abiertos.",
+        description: "Puede haber un corazón de medusa... o tambos abiertos.",
         effects: {},
         risk: {
           chance: 0.35,
@@ -619,19 +618,19 @@ export const ACT_EVENTS: GameEvent[] = [
     id: "coral_nursery",
     title: "Vivero de Coral",
     description:
-      "Unos biólogos han dejado estructuras con esquejes de coral. Muchas se han soltado con la corriente.",
+      "Unos biólogos dejaron estructuras con esquejes de coral. Muchas se soltaron con la corriente.",
     condition: (ctx) => ctx.depth <= 1000,
     options: [
       {
         id: "fix_nursery",
-        label: "Recolocar las estructuras",
+        label: "Reacomodar las estructuras",
         description:
           "Tardas un rato (-15s en el siguiente bioma). El coral crecerá.",
         effects: { nextBiomeTimeDelta: -15 },
         later: {
           afterBiomes: 2,
           title: "El vivero florece",
-          message: "El coral que recolocaste ya filtra el agua.",
+          message: "El coral que reacomodaste ya filtra el agua.",
           effects: { toxicity: -30, ecoMultiplier: 1.1 },
         },
       },

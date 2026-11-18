@@ -52,6 +52,7 @@ import {
   setReduceMotionChoice,
 } from "@ui/animations"
 import { RenderPipeline } from "@core/RenderPipeline"
+import { LOCALE } from "@core/locale"
 import { AudioManager } from "@core/audio/AudioManager"
 import { BIOME_MOODS, HUB_MOOD, musicIntensity } from "@core/audio/music"
 import { CollectStreak } from "@core/audio/sfxRecipes"
@@ -1486,7 +1487,7 @@ export class Game {
       this.loadBiome(next)
       // La transición ya rotula el bioma y su profundidad: no hace falta
       // repetirlo con un mensaje al retirarse.
-      const banked = Math.round(this.endlessBankedEco).toLocaleString("es")
+      const banked = Math.round(this.endlessBankedEco).toLocaleString(LOCALE)
       this.transition.setLabel(
         closesLoop
           ? `Vuelta completada · ${banked} Eco asegurado\n${this.biomeBanner()}`
@@ -1510,7 +1511,7 @@ export class Game {
 
   private biomeBanner(): string {
     const depth = this.biomeGenerator.getBiome().depth
-    const title = `${this.biomeGenerator.getBiomeName()} · ${depth} m`
+    const title = `${this.biomeGenerator.getBiomeName()} · ${depth.toLocaleString(LOCALE)} m`
     // Objetivo y modificador de la zona, si no son los de siempre.
     const { objective, modifier } = this.currentNode
     const extras: string[] = []
@@ -2179,7 +2180,7 @@ ${extras.join(" · ")}`
     const event: GameEvent = {
       id: "shop",
       title: "Refugio del arrecife",
-      description: `Unos voluntarios cambian material por Eco. Tienes ${Math.floor(eco).toLocaleString("es")} Eco.`,
+      description: `Unos voluntarios cambian material por Eco. Tienes ${Math.floor(eco).toLocaleString(LOCALE)} Eco.`,
       options: [
         ...items.map((item) => ({
           id: item.id,
@@ -2217,7 +2218,7 @@ ${extras.join(" · ")}`
 
   private buyShopItem(item: ShopItem): void {
     if (this.state.ecoAwareness < item.cost) {
-      this.uiManager.showMessage("No te llega el Eco", 1400)
+      this.uiManager.showMessage("No te alcanza el Eco", 1400)
       return
     }
     this.state.ecoAwareness -= item.cost
@@ -2349,7 +2350,7 @@ ${extras.join(" · ")}`
     this.audio.setMood(null)
     if (this.settings.vibration) navigator.vibrate?.([60, 40, 160])
     this.uiManager.updateUI(this.state, 0)
-    this.uiManager.announce("La toxicidad ha llegado al máximo")
+    this.uiManager.announce("La toxicidad llegó al máximo")
   }
 
   private updateDeath(deltaTime: number): void {

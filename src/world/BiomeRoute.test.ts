@@ -185,6 +185,6 @@ describe("textos", () => {
     expect(text).toContain("Cierra las fugas")
     expect(text).toContain("Apagón")
     expect(text).toContain("Tienda al terminar")
-    expect(nodeTitle(node)).toBe("Hadopelágico · 8000 m")
+    expect(nodeTitle(node)).toBe("Hadopelágico · 8,000 m")
   })
 })

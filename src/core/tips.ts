@@ -107,7 +107,7 @@ export function tipText(id: TipId, ctx: TipTextContext): string {
     case "barracuda_chase":
       return "Una barracuda te persigue. Es algo más lenta que tú: usa el impulso para dejarla atrás."
     case "angler_ambush":
-      return "El rape espera quieto en el fondo con su luz encendida y se lanza si pasas cerca. Mantén la distancia."
+      return "El pez pescador espera quieto en el fondo con su luz encendida y se lanza si pasas cerca. Mantén la distancia."
     case "octopus_steal":
       return "El pulpo roba los desechos que atraen tus esferas. Coloca las esferas lejos de él."
     case "squid_ink":
@@ -127,7 +127,7 @@ export function tipText(id: TipId, ctx: TipTextContext): string {
     case "filter_affordable":
       return ctx.buildControl === null
         ? `Tienes ${ctx.filterCost} de Eco: toca el botón «Filtro» (el embudo) para colocar una esfera filtradora que recoge desechos por ti.`
-        : `Tienes ${ctx.filterCost} de Eco: pulsa ${ctx.buildControl} para colocar una esfera filtradora que recoge desechos por ti.`
+        : `Tienes ${ctx.filterCost} de Eco: presiona ${ctx.buildControl} para colocar una esfera filtradora que recoge desechos por ti.`
   }
 }
 

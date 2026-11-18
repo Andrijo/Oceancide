@@ -9,6 +9,11 @@ Juego 3D roguelite (Three.js + TypeScript + Vite) sobre una tortuga que limpia e
 - No hagas push ni abras PRs salvo que se pida explícitamente.
 - Responde en español.
 
+## Textos del juego
+
+- **Español de México** en todo texto visible (#113): popote, llanta, unicel, chapopote, tambo, pila, hule; «control» (no «mando»), «Configuración» (no «Ajustes»), «presiona» (no «pulsa»). Trato de tú y pretérito simple para lo ya terminado («presionaste», no «has pulsado»).
+- Números con `LOCALE` de `@core/locale` (`"es-MX"`): coma de miles y punto decimal («20,000», «1.5»). Porcentajes sin espacio («60%»).
+
 ## Comandos
 
 - `bun install` · `bun run dev` · `bun run build`

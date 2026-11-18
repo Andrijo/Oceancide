@@ -30,9 +30,9 @@ export const RELICS: Relic[] = [
   },
   {
     id: "rubber_duck",
-    name: "Patito de Goma",
+    name: "Patito de Hule",
     description:
-      "Uno de los casi 29.000 que cayeron al Pacífico en 1992. Sigue de viaje.",
+      "Uno de los casi 29,000 que cayeron al Pacífico en 1992. Sigue de viaje.",
     effects: { speedMultiplier: 1.05 },
   },
   {
@@ -50,9 +50,9 @@ export const RELICS: Relic[] = [
   },
   {
     id: "sand_glass",
-    name: "Ampolleta de Arena",
+    name: "Reloj de Arena",
     description:
-      "El reloj de un barco que nunca llegó a puerto. Aún le queda arena.",
+      "Marcaba las guardias de un barco que nunca llegó a puerto. Aún le queda arena.",
     effects: { nextBiomeTimeDelta: 20 },
   },
   {
@@ -69,7 +69,7 @@ export const RELICS: Relic[] = [
   },
   {
     id: "whispering_conch",
-    name: "Caracola Susurrante",
+    name: "Caracol Susurrante",
     description:
       "Si escuchas con calma, dentro todavía suena un océano limpio.",
     effects: { toxicity: -15, eco: 100 },

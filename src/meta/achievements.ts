@@ -61,7 +61,7 @@ export const ACHIEVEMENTS: readonly Achievement[] = [
   },
   {
     id: "commons_only",
-    name: "Con lo puesto",
+    name: "Con lo básico",
     description:
       "Completa una inmersión eligiendo solo cartas comunes (al menos 3).",
     check: ({ summary }) =>
@@ -72,7 +72,7 @@ export const ACHIEVEMENTS: readonly Achievement[] = [
   },
   {
     id: "leaks_50",
-    name: "Fontanera del océano",
+    name: "Plomera del océano",
     description: "Cierra 50 fugas en total.",
     check: ({ meta }) => meta.leaksClosed >= 50,
     unlocksCards: ["leak_hunter"],
@@ -80,7 +80,7 @@ export const ACHIEVEMENTS: readonly Achievement[] = [
   {
     id: "debris_1000",
     name: "Mil desechos",
-    description: "Recoge 1000 desechos en total.",
+    description: "Recoge 1,000 desechos en total.",
     check: ({ meta }) => meta.totalDebris >= 1000,
     unlocksCards: ["whirlwind"],
   },
@@ -120,7 +120,7 @@ export const ACHIEVEMENTS: readonly Achievement[] = [
   {
     id: "eco_20000",
     name: "Conciencia ecológica",
-    description: "Acumula 20 000 de Eco a lo largo de todas tus inmersiones.",
+    description: "Acumula 20,000 de Eco a lo largo de todas tus inmersiones.",
     check: ({ meta }) => meta.lifetimeEco >= 20000,
     unlocksCards: ["amplifier"],
   },
