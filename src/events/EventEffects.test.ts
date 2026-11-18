@@ -5,6 +5,8 @@ import { Rng } from "@core/rng"
 import type { GameState } from "@core/types"
 import {
   applyEventEffects,
+  describeEffects,
+  mergeEffects,
   previewEventEffects,
   type EventContext,
 } from "@/events/EventEffects"
@@ -275,5 +277,69 @@ describe("previewEventEffects", () => {
 
     expect(preview.lines).toEqual([])
     expect(preview.warning).toBeUndefined()
+  })
+})
+
+describe("efectos nuevos de los eventos", () => {
+  it("revives suma y nunca baja de 0", () => {
+    const ctx = makeContext()
+    expect(applyEventEffects({ revives: 1 }, ctx).summary).toBe("+1 revive")
+    expect(ctx.run.reviveCharges).toBe(1)
+    expect(applyEventEffects({ revives: -3 }, ctx).summary).toBe("-1 revive")
+    expect(ctx.run.reviveCharges).toBe(0)
+    expect(applyEventEffects({ revives: -1 }, ctx).summary).toBe("Sin efecto")
+  })
+
+  it("ecoMultiplier multiplica el Eco ganado", () => {
+    const ctx = makeContext()
+    expect(applyEventEffects({ ecoMultiplier: 1.25 }, ctx).summary).toBe(
+      "+25% Eco ganado",
+    )
+    expect(ctx.run.ecoMultiplier).toBeCloseTo(1.25)
+  })
+
+  it("la vista previa enseña revives y Eco ganado", () => {
+    const ctx = makeContext()
+    const preview = previewEventEffects({ revives: 1, ecoMultiplier: 1.1 }, ctx)
+    expect(preview.lines.map((l) => `${l.label}: ${l.value}`)).toEqual([
+      "Revives: 0 → 1",
+      "Eco ganado: +10%",
+    ])
+  })
+})
+
+describe("describeEffects", () => {
+  it("resume los efectos sin mirar el estado", () => {
+    expect(describeEffects({ eco: 300, toxicity: 30 })).toBe(
+      "+300 Eco · +30 toxicidad",
+    )
+    expect(describeEffects({ toxicitySet: 10 })).toBe("toxicidad a 10%")
+    expect(
+      describeEffects({
+        filterCapacity: 1,
+        collectionRadius: 0.5,
+        speedMultiplier: 0.9,
+        glow: 0.4,
+        revives: 1,
+        ecoMultiplier: 1.25,
+        nextBiomeTimeDelta: -10,
+        nextBiomeToxicityFloor: 0,
+      }),
+    ).toBe(
+      "+1 filtro · +0.5 radio · -10% velocidad · +40% brillo · +1 revive · +25% Eco ganado · -10s siguiente bioma · entrada limpia",
+    )
+    expect(describeEffects({})).toBe("Sin efecto")
+  })
+})
+
+describe("mergeEffects", () => {
+  it("suma lo aditivo, multiplica lo multiplicativo y omite lo vacío", () => {
+    expect(
+      mergeEffects(
+        { eco: 100, speedMultiplier: 0.9 },
+        { eco: 50, toxicity: 10, speedMultiplier: 0.5 },
+      ),
+    ).toEqual({ eco: 150, toxicity: 10, speedMultiplier: 0.45 })
+    expect(mergeEffects({}, {})).toEqual({})
   })
 })

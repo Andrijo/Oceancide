@@ -32,6 +32,16 @@ export interface RunSummary {
   deathCause?: DeathCause
   /** Biomas recorridos, en orden, con lo que se hizo en cada uno. */
   timeline?: BiomeSegment[]
+  /** Revives gastados en la run. */
+  revivesUsed?: number
+  /** Fugas cerradas en la run. */
+  leaksClosed?: number
+  /** Día del desafío diario ("AAAA-MM-DD"), si la run lo era. */
+  daily?: string
+  /** Desechos registrados por primera vez en el códice durante la run. */
+  newDiscoveries?: number
+  /** Logros conseguidos al terminar la run (ids). */
+  newAchievements?: string[]
 }
 
 export interface TurtleStats {

@@ -18,6 +18,10 @@ import {
   tagLabel,
 } from "@cards/CardEffects"
 import { CARD_POOL } from "@cards/CardPool"
+import { CODEX_ENTRIES, codexProgress } from "@/meta/codex"
+import type { DebrisHazard } from "@entities/debrisCatalog"
+import { ACHIEVEMENTS, achievementById, rewardText } from "@/meta/achievements"
+import { dailyKey } from "@/meta/daily"
 import {
   previewLineText,
   type BuildStatLine,
@@ -69,8 +73,17 @@ function toneMarkClass(tone: "positive" | "negative"): string {
   return tone === "positive" ? "tone-mark-good" : "tone-mark-bad"
 }
 
+/** Etiqueta del peligro de un desecho en el códice. */
+const HAZARD_LABELS: Record<DebrisHazard, string> = {
+  fragil: "Frágil",
+  trampa: "Trampa",
+  lixivia: "Fuga",
+}
+
 export interface ScreenCallbacks {
   onStartRun(): void
+  /** Empieza el desafío diario (semilla del día). */
+  onStartDaily(): void
   onStartEndless(): void
   /** Empieza una run con la semilla indicada (botón "Repetir semilla"). */
   onReplaySeed(seed: number, endless: boolean): void
@@ -434,7 +447,8 @@ export class ScreenManager {
    */
   public showHub(
     meta: MetaState,
-    focus?: "upgrades" | "help" | "settings",
+    focus?:
+      "upgrades" | "help" | "settings" | "daily" | "codex" | "achievements",
   ): void {
     const bestIndex = meta.bestBiomeIndex
     const bestKey = BIOME_ORDER[bestIndex]
@@ -537,12 +551,36 @@ export class ScreenManager {
 
     secondaryRow.append(upgradesBtn, helpBtn, settingsBtn)
 
+    // Tercera fila: metas a largo plazo (desafío diario, códice y logros).
+    const metaRow = el("div", "action-row action-row--spaced")
+    const today = dailyKey(new Date())
+    const daily = meta.daily?.date === today ? meta.daily : null
+    const dailyBtn = makeButton(
+      daily
+        ? `Desafío diario · récord ${daily.bestEco.toLocaleString("es")} Eco`
+        : "Desafío diario",
+      () => this.callbacks.onStartDaily(),
+    )
+    dailyBtn.title =
+      "La misma semilla para todos durante el día de hoy. Supera tu récord."
+    const codex = codexProgress(meta.discoveredDebris)
+    const codexBtn = makeButton(`Códice ${codex.found}/${codex.total}`, () =>
+      this.showCodex(meta, () => this.showHub(meta, "codex")),
+    )
+    const achievementsBtn = makeButton(
+      `Logros ${meta.achievements.length}/${ACHIEVEMENTS.length}`,
+      () =>
+        this.showAchievements(meta, () => this.showHub(meta, "achievements")),
+    )
+    metaRow.append(dailyBtn, codexBtn, achievementsBtn)
+
     content.append(
       enter(title, 0),
       enter(stats, 180),
       enter(this.makeZoneProgress(bestIndex), 280),
       enter(actionsRow, 380),
       enter(secondaryRow, 440),
+      enter(metaRow, 500),
     )
 
     // Flechas entre los botones (dos filas). "Eliminar progreso" queda fuera
@@ -556,6 +594,9 @@ export class ScreenManager {
       upgrades: upgradesBtn,
       help: helpBtn,
       settings: settingsBtn,
+      daily: dailyBtn,
+      codex: codexBtn,
+      achievements: achievementsBtn,
     }
     const focusTarget = focus ? focusTargets[focus] : primary
     focusTarget.focus()
@@ -565,6 +606,7 @@ export class ScreenManager {
     event: GameEvent,
     onChoose: (opt: EventOption) => void,
     getPreview?: (opt: EventOption) => EventPreview,
+    getLock?: (opt: EventOption) => string | null,
   ): void {
     const { root, content } = this.makeWindowFrame()
 
@@ -581,7 +623,7 @@ export class ScreenManager {
     const choose = (index: number): void => {
       if (!this.eventActive || !this.canActivateChoice()) return
       const opt = event.options[index]
-      if (!opt) return
+      if (!opt || getLock?.(opt)) return
       this.hide()
       onChoose(opt)
     }
@@ -598,6 +640,14 @@ export class ScreenManager {
 
       header.append(keyHint, el("span", "event-option-title", opt.label))
       btn.append(header, el("span", "event-option-desc", opt.description))
+
+      // Bloqueada: sigue siendo enfocable para que se lea el requisito.
+      const lock = getLock?.(opt) ?? null
+      if (lock) {
+        btn.classList.add("is-locked")
+        btn.setAttribute("aria-disabled", "true")
+        btn.append(el("span", "event-lock", `🔒 ${lock}`))
+      }
 
       const preview = getPreview?.(opt)
       if (preview && preview.lines.length > 0) {
@@ -639,7 +689,124 @@ export class ScreenManager {
     this.showChoiceLock(optionButtons, content)
     this.overlay.setAttribute("aria-labelledby", title.id)
     this.overlay.setAttribute("aria-describedby", desc.id)
-    optionButtons[0]?.focus()
+    const firstOpen = event.options.findIndex((opt) => !getLock?.(opt))
+    optionButtons[Math.max(0, firstOpen)]?.focus()
+  }
+
+  /** Líneas del resumen sobre logros, códice y desafío diario. */
+  private summaryMetaLines(summary: RunSummary, meta: MetaState): string[] {
+    const lines: string[] = []
+    for (const id of summary.newAchievements ?? []) {
+      const achievement = achievementById(id)
+      if (!achievement) continue
+      const reward = rewardText(achievement)
+      lines.push(`¡Logro: ${achievement.name}!${reward ? ` ${reward}.` : ""}`)
+    }
+    const found = summary.newDiscoveries ?? 0
+    if (found > 0) {
+      lines.push(
+        found === 1
+          ? "1 desecho nuevo en el códice"
+          : `${found} desechos nuevos en el códice`,
+      )
+    }
+    if (summary.daily && meta.daily?.date === summary.daily) {
+      lines.push(
+        `Desafío diario · récord de hoy: ${meta.daily.bestEco.toLocaleString("es")} Eco (${meta.daily.attempts} ${meta.daily.attempts === 1 ? "intento" : "intentos"})`,
+      )
+    }
+    return lines
+  }
+
+  /**
+   * Códice de desechos: los tipos recogidos alguna vez, con su descripción y
+   * un dato real; los demás, ocultos. Agrupados por el bioma donde aparecen.
+   */
+  public showCodex(meta: MetaState, onClose: () => void): void {
+    const { root, content } = this.makeWindowFrame()
+    const title = this.makeScreenTitle("Códice de desechos")
+    const { found, total } = codexProgress(meta.discoveredDebris)
+    const subtitle = el(
+      "p",
+      "upgrade-subtitle",
+      `${found} de ${total} registrados. Recoge un desecho para apuntarlo.`,
+    )
+
+    const list = el("div", "codex-list")
+    let currentBiome: string | null = null
+    let grid: HTMLElement | null = null
+    for (const entry of CODEX_ENTRIES) {
+      if (entry.biome !== currentBiome || !grid) {
+        currentBiome = entry.biome
+        list.append(el("h2", "codex-biome", BIOMES[entry.biome].name))
+        grid = el("div", "upgrade-grid codex-grid")
+        list.append(grid)
+      }
+      const known = meta.discoveredDebris.includes(entry.id)
+      const card = el(
+        "article",
+        known
+          ? "upgrade-card codex-card"
+          : "upgrade-card codex-card is-unknown",
+      )
+      if (known) {
+        const header = el("div", "upgrade-header")
+        header.append(el("h3", "upgrade-name", entry.name))
+        if (entry.hazard) {
+          header.append(
+            el("span", "upgrade-level", HAZARD_LABELS[entry.hazard]),
+          )
+        }
+        card.append(
+          header,
+          el("p", "upgrade-desc", entry.description),
+          el("p", "codex-fact", entry.fact),
+        )
+      } else {
+        card.append(
+          el("h3", "upgrade-name", "???"),
+          el("p", "upgrade-desc", "Aún no lo has recogido."),
+        )
+      }
+      grid.append(card)
+    }
+
+    const backBtn = makeButton("Volver al inicio", onClose)
+    backBtn.classList.add("btn--narrow")
+    content.append(title, subtitle, list, backBtn)
+    this.open(root, onClose, onClose)
+    backBtn.focus()
+  }
+
+  /** Logros conseguidos y pendientes, con lo que desbloquea cada uno. */
+  public showAchievements(meta: MetaState, onClose: () => void): void {
+    const { root, content } = this.makeWindowFrame()
+    const title = this.makeScreenTitle("Logros")
+    const subtitle = el(
+      "p",
+      "upgrade-subtitle",
+      `${meta.achievements.length} de ${ACHIEVEMENTS.length} conseguidos.`,
+    )
+    const grid = el("div", "upgrade-grid")
+    for (const achievement of ACHIEVEMENTS) {
+      const done = meta.achievements.includes(achievement.id)
+      const card = el("article", done ? "upgrade-card is-max" : "upgrade-card")
+      const header = el("div", "upgrade-header")
+      header.append(
+        el("h2", "upgrade-name", achievement.name),
+        el("span", "upgrade-level", done ? "Conseguido" : "Pendiente"),
+      )
+      card.append(header, el("p", "upgrade-desc", achievement.description))
+      const reward = rewardText(achievement)
+      if (reward) card.append(el("p", "upgrade-status", reward))
+      grid.append(card)
+    }
+
+    const backBtn = makeButton("Volver al inicio", onClose)
+    backBtn.classList.add("btn--narrow")
+    content.append(title, subtitle, grid, backBtn)
+    this.open(root, onClose, onClose)
+    backBtn.focus()
   }
 
   /**
@@ -914,6 +1081,10 @@ export class ScreenManager {
             : `¡${newRecords.length} nuevos récords! ${names}`,
         ),
       )
+    }
+
+    for (const line of this.summaryMetaLines(summary, meta)) {
+      content.append(el("p", "summary-records", line))
     }
 
     const buttons = el("div", "action-row action-row--top")

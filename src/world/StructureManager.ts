@@ -10,6 +10,8 @@ import { STRUCTURES, type StructureKey } from "./StructureConfig"
 export interface StructureAbsorption {
   position: THREE.Vector3
   eco: number
+  /** Desecho absorbido (para el códice y las fugas cerradas). */
+  debris: Debris
   /** Reliquia que escondía el desecho absorbido, si llevaba una. */
   relic: Relic | null
 }
@@ -109,6 +111,7 @@ export class StructureManager {
           credit.absorptions.push({
             position: s.position.clone(),
             eco,
+            debris,
             relic: debris.relic,
           })
         }

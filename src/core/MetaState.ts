@@ -12,6 +12,13 @@ import {
 import { UPGRADES } from "@tycoon/Upgrades"
 import { isTipId, type TipId } from "@core/tips"
 import { isHintAction, type HintAction } from "@core/controlsHint"
+import { isCodexId } from "@/meta/codex"
+import { isAchievementId } from "@/meta/achievements"
+import {
+  applyDailyResult,
+  sanitizeDailyRecord,
+  type DailyRecord,
+} from "@/meta/daily"
 
 export const META_VERSION = 1
 const STORAGE_KEY = "oceancide.meta"
@@ -51,6 +58,16 @@ export interface MetaState {
   learnedControls: HintAction[]
   /** Récords personales (zona más profunda aparte: `bestBiomeIndex`). */
   records: RunRecords
+  /** Tipos de desecho registrados en el códice (ids del catálogo). */
+  discoveredDebris: string[]
+  /** Logros conseguidos (ids). */
+  achievements: string[]
+  /** Fugas cerradas en todas las inmersiones. */
+  leaksClosed: number
+  /** Récord del desafío diario del último día jugado. */
+  daily: DailyRecord | null
+  /** Desafíos diarios completados. */
+  dailyCompletions: number
 }
 
 export function createDefaultMeta(): MetaState {
@@ -66,6 +83,11 @@ export function createDefaultMeta(): MetaState {
     seenTips: [],
     learnedControls: [],
     records: createDefaultRecords(),
+    discoveredDebris: [],
+    achievements: [],
+    leaksClosed: 0,
+    daily: null,
+    dailyCompletions: 0,
   }
 }
 
@@ -131,6 +153,13 @@ export function applyRunToMeta(meta: MetaState, summary: RunSummary): void {
     )
   }
   applyRunToRecords(meta.records, summary)
+  meta.leaksClosed += summary.leaksClosed ?? 0
+  if (summary.daily) {
+    const wasCompleted =
+      meta.daily?.date === summary.daily && meta.daily.completed
+    meta.daily = applyDailyResult(meta.daily, summary.daily, summary).record
+    if (meta.daily.completed && !wasCompleted) meta.dailyCompletions += 1
+  }
 }
 
 function finiteNumber(value: unknown, fallback: number, min = 0): number {
@@ -160,6 +189,12 @@ export function sanitizeMeta(raw: Record<string, unknown>): MetaState {
   const learnedControls = Array.isArray(raw.learnedControls)
     ? [...new Set(raw.learnedControls.filter(isHintAction))]
     : defaults.learnedControls
+  const discoveredDebris = Array.isArray(raw.discoveredDebris)
+    ? [...new Set(raw.discoveredDebris.filter(isCodexId))]
+    : defaults.discoveredDebris
+  const achievements = Array.isArray(raw.achievements)
+    ? [...new Set(raw.achievements.filter(isAchievementId))]
+    : defaults.achievements
 
   return {
     version: META_VERSION,
@@ -178,6 +213,14 @@ export function sanitizeMeta(raw: Record<string, unknown>): MetaState {
     seenTips,
     learnedControls,
     records: sanitizeRecords(raw.records),
+    discoveredDebris,
+    achievements,
+    leaksClosed: finiteNumber(raw.leaksClosed, defaults.leaksClosed),
+    daily: sanitizeDailyRecord(raw.daily),
+    dailyCompletions: finiteNumber(
+      raw.dailyCompletions,
+      defaults.dailyCompletions,
+    ),
   }
 }
 

@@ -66,9 +66,9 @@ export interface Settings {
   padBindings: PadBindings
   /** Avisos contextuales durante la inmersión. */
   tipsEnabled: boolean
-  /** Volumen de la música (0..1). Reservado para cuando haya audio. */
+  /** Volumen de la música (0..1). */
   musicVolume: number
-  /** Volumen de los efectos (0..1). Reservado para cuando haya audio. */
+  /** Volumen de los efectos de sonido (0..1). */
   sfxVolume: number
 }
 

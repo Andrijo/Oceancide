@@ -22,6 +22,10 @@ export interface EventEffects {
   collectionRadius?: number
   speedMultiplier?: number
   glow?: number
+  /** Revives que se ganan (o se pierden, si es negativo; nunca bajan de 0). */
+  revives?: number
+  /** Multiplica el Eco que se gana el resto de la run. */
+  ecoMultiplier?: number
 }
 
 export type EventTone = "positive" | "negative" | "neutral"
@@ -171,6 +175,29 @@ export function previewEventEffects(
     })
   }
 
+  if (effects.revives !== undefined && effects.revives !== 0) {
+    const before = ctx.run.reviveCharges
+    const after = Math.max(0, before + effects.revives)
+    const noEffect = after === before
+
+    lines.push({
+      label: "Revives",
+      value: noEffect ? "Sin efecto" : `${before} → ${after}`,
+      tone: noEffect ? "neutral" : after > before ? "positive" : "negative",
+      noEffect,
+    })
+  }
+
+  if (effects.ecoMultiplier !== undefined && effects.ecoMultiplier !== 1) {
+    const percent = Math.round((effects.ecoMultiplier - 1) * 100)
+
+    lines.push({
+      label: "Eco ganado",
+      value: `${signedInt(percent)}%`,
+      tone: percent > 0 ? "positive" : "negative",
+    })
+  }
+
   if (effects.nextBiomeTimeDelta) {
     lines.push({
       label: "Tiempo siguiente bioma",
@@ -258,6 +285,24 @@ export function applyEventEffects(
     }
   }
 
+  if (effects.revives !== undefined && effects.revives !== 0) {
+    const before = ctx.run.reviveCharges
+    ctx.run.reviveCharges = Math.max(0, before + effects.revives)
+    const delta = ctx.run.reviveCharges - before
+
+    if (delta !== 0) {
+      parts.push(
+        `${signedInt(delta)} revive${Math.abs(delta) === 1 ? "" : "s"}`,
+      )
+    }
+  }
+
+  if (effects.ecoMultiplier !== undefined && effects.ecoMultiplier !== 1) {
+    ctx.run.ecoMultiplier *= effects.ecoMultiplier
+    const percent = Math.round((effects.ecoMultiplier - 1) * 100)
+    parts.push(`${signedInt(percent)}% Eco ganado`)
+  }
+
   if (effects.nextBiomeTimeDelta) {
     parts.push(`${signedInt(effects.nextBiomeTimeDelta)}s siguiente bioma`)
   }
@@ -275,4 +320,82 @@ export function applyEventEffects(
     nextBiomeToxicityFloor: effects.nextBiomeToxicityFloor,
     summary: parts.length > 0 ? parts.join(" · ") : "Sin efecto",
   }
+}
+
+/**
+ * Texto corto de unos efectos sin aplicarlos ni mirar el estado actual: lo que
+ * se enseña en cada resultado de una opción de riesgo ("+300 Eco · +30
+ * toxicidad").
+ */
+export function describeEffects(effects: EventEffects): string {
+  const parts: string[] = []
+  if (effects.eco) parts.push(`${signedInt(effects.eco)} Eco`)
+  if (effects.toxicitySet !== undefined) {
+    parts.push(`toxicidad a ${formatToxicity(effects.toxicitySet)}`)
+  } else if (effects.toxicity) {
+    parts.push(`${signedInt(effects.toxicity)} toxicidad`)
+  }
+  if (effects.filterCapacity) {
+    parts.push(
+      `${signedInt(effects.filterCapacity)} filtro${
+        Math.abs(effects.filterCapacity) === 1 ? "" : "s"
+      }`,
+    )
+  }
+  if (effects.collectionRadius) {
+    parts.push(`${signedDecimal(effects.collectionRadius)} radio`)
+  }
+  if (effects.speedMultiplier !== undefined && effects.speedMultiplier !== 1) {
+    const percent = Math.round((effects.speedMultiplier - 1) * 100)
+    parts.push(`${signedInt(percent)}% velocidad`)
+  }
+  if (effects.glow) parts.push(`${signedInt(effects.glow * 100)}% brillo`)
+  if (effects.revives) {
+    parts.push(
+      `${signedInt(effects.revives)} revive${
+        Math.abs(effects.revives) === 1 ? "" : "s"
+      }`,
+    )
+  }
+  if (effects.ecoMultiplier !== undefined && effects.ecoMultiplier !== 1) {
+    const percent = Math.round((effects.ecoMultiplier - 1) * 100)
+    parts.push(`${signedInt(percent)}% Eco ganado`)
+  }
+  if (effects.nextBiomeTimeDelta) {
+    parts.push(`${signedInt(effects.nextBiomeTimeDelta)}s siguiente bioma`)
+  }
+  if (effects.nextBiomeToxicityFloor !== undefined) {
+    parts.push(
+      effects.nextBiomeToxicityFloor === 0
+        ? "entrada limpia"
+        : `${formatToxicity(effects.nextBiomeToxicityFloor)} toxicidad inicial`,
+    )
+  }
+  return parts.length > 0 ? parts.join(" · ") : "Sin efecto"
+}
+
+/** Suma dos conjuntos de efectos (la base de una opción y su resultado). */
+export function mergeEffects(a: EventEffects, b: EventEffects): EventEffects {
+  const sum = (x?: number, y?: number): number | undefined =>
+    x === undefined && y === undefined ? undefined : (x ?? 0) + (y ?? 0)
+  const product = (x?: number, y?: number): number | undefined =>
+    x === undefined && y === undefined ? undefined : (x ?? 1) * (y ?? 1)
+  const merged: EventEffects = {
+    eco: sum(a.eco, b.eco),
+    toxicity: sum(a.toxicity, b.toxicity),
+    toxicitySet: b.toxicitySet ?? a.toxicitySet,
+    nextBiomeTimeDelta: sum(a.nextBiomeTimeDelta, b.nextBiomeTimeDelta),
+    nextBiomeToxicityFloor:
+      b.nextBiomeToxicityFloor ?? a.nextBiomeToxicityFloor,
+    filterCapacity: sum(a.filterCapacity, b.filterCapacity),
+    collectionRadius: sum(a.collectionRadius, b.collectionRadius),
+    speedMultiplier: product(a.speedMultiplier, b.speedMultiplier),
+    glow: sum(a.glow, b.glow),
+    revives: sum(a.revives, b.revives),
+    ecoMultiplier: product(a.ecoMultiplier, b.ecoMultiplier),
+  }
+  for (const key of Object.keys(merged) as (keyof EventEffects)[]) {
+    if (merged[key] === undefined) delete merged[key]
+  }
+  return merged
 }
