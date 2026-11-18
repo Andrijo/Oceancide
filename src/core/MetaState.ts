@@ -12,7 +12,8 @@ import {
 import { UPGRADES } from "@tycoon/Upgrades"
 import { isTipId, type TipId } from "@core/tips"
 import { isHintAction, type HintAction } from "@core/controlsHint"
-import { isCodexId } from "@/meta/codex"
+import { isBiomeId, isCodexId, isFaunaId, isRelicId } from "@/meta/codex"
+import { layerOf, ROUTE_LAYERS } from "@world/BiomeRoute"
 import { isAchievementId } from "@/meta/achievements"
 import {
   applyDailyResult,
@@ -20,7 +21,7 @@ import {
   type DailyRecord,
 } from "@/meta/daily"
 
-export const META_VERSION = 1
+export const META_VERSION = 2
 const STORAGE_KEY = "oceancide.meta"
 const BACKUP_KEY = "oceancide.meta.backup"
 
@@ -32,7 +33,23 @@ const BACKUP_KEY = "oceancide.meta.backup"
 export type MetaMigration = (
   old: Record<string, unknown>,
 ) => Record<string, unknown>
-export const MIGRATIONS: Record<number, MetaMigration> = {}
+export const MIGRATIONS: Record<number, MetaMigration> = {
+  // v2: el códice registra también los biomas. Se dan por conocidos los de
+  // todas las capas hasta la zona más profunda alcanzada (en cada capa no se
+  // guardó cuál de los dos biomas se eligió).
+  1: (old) => {
+    const best =
+      typeof old.bestBiomeIndex === "number" &&
+      Number.isFinite(old.bestBiomeIndex)
+        ? Math.min(BIOME_ORDER.length - 1, Math.floor(old.bestBiomeIndex))
+        : -1
+    const biomes = new Set<string>()
+    for (let index = 0; index <= best; index++) {
+      for (const biome of ROUTE_LAYERS[layerOf(index)]) biomes.add(biome)
+    }
+    return { ...old, discoveredBiomes: [...biomes] }
+  },
+}
 
 /** Bono de Conciencia Ecológica al completar todos los biomas. */
 export const COMPLETION_BONUS = 0.25
@@ -60,6 +77,12 @@ export interface MetaState {
   records: RunRecords
   /** Tipos de desecho registrados en el códice (ids del catálogo). */
   discoveredDebris: string[]
+  /** Especies de fauna vistas de cerca (sección Fauna del códice). */
+  discoveredCreatures: string[]
+  /** Reliquias encontradas alguna vez (sección Reliquias del códice). */
+  discoveredRelics: string[]
+  /** Biomas alcanzados alguna vez (sección Biomas del códice). */
+  discoveredBiomes: string[]
   /** Logros conseguidos (ids). */
   achievements: string[]
   /** Fugas cerradas en todas las inmersiones. */
@@ -84,6 +107,9 @@ export function createDefaultMeta(): MetaState {
     learnedControls: [],
     records: createDefaultRecords(),
     discoveredDebris: [],
+    discoveredCreatures: [],
+    discoveredRelics: [],
+    discoveredBiomes: [],
     achievements: [],
     leaksClosed: 0,
     daily: null,
@@ -189,9 +215,9 @@ export function sanitizeMeta(raw: Record<string, unknown>): MetaState {
   const learnedControls = Array.isArray(raw.learnedControls)
     ? [...new Set(raw.learnedControls.filter(isHintAction))]
     : defaults.learnedControls
-  const discoveredDebris = Array.isArray(raw.discoveredDebris)
-    ? [...new Set(raw.discoveredDebris.filter(isCodexId))]
-    : defaults.discoveredDebris
+  const ids = (value: unknown, isValid: (id: unknown) => id is string) =>
+    Array.isArray(value) ? [...new Set(value.filter(isValid))] : []
+  const discoveredDebris = ids(raw.discoveredDebris, isCodexId)
   const achievements = Array.isArray(raw.achievements)
     ? [...new Set(raw.achievements.filter(isAchievementId))]
     : defaults.achievements
@@ -214,6 +240,9 @@ export function sanitizeMeta(raw: Record<string, unknown>): MetaState {
     learnedControls,
     records: sanitizeRecords(raw.records),
     discoveredDebris,
+    discoveredCreatures: ids(raw.discoveredCreatures, isFaunaId),
+    discoveredRelics: ids(raw.discoveredRelics, isRelicId),
+    discoveredBiomes: ids(raw.discoveredBiomes, isBiomeId),
     achievements,
     leaksClosed: finiteNumber(raw.leaksClosed, defaults.leaksClosed),
     daily: sanitizeDailyRecord(raw.daily),

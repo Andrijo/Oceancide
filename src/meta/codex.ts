@@ -1,14 +1,23 @@
 // src/meta/codex.ts
-// Códice de desechos: cada tipo de desecho que se recoge por primera vez queda
-// registrado con su descripción y un dato real sobre ese residuo (degradación,
-// impacto en la fauna). El progreso se guarda en MetaState.discoveredDebris.
+// Códice: lo que la tortuga ha ido conociendo, con un dato real en cada ficha.
+// Cuatro secciones: desechos (al recogerlos), fauna (al verla de cerca),
+// reliquias (al encontrarlas) y biomas (al llegar a ellos). El progreso se
+// guarda en MetaState (`discoveredDebris`, `discoveredCreatures`...).
 
-import { BIOMES, type BiomeKey } from "@core/types"
+import { BIOME_ORDER, BIOMES, type BiomeKey } from "@core/types"
 import {
   BIOME_DEBRIS,
   MICROFRAGMENT,
   type DebrisHazard,
 } from "@entities/debrisCatalog"
+import {
+  BOSS_KINDS,
+  CREATURE_NAMES,
+  FRIENDLY_KINDS,
+  HOSTILE_KINDS,
+  type CreatureKind,
+} from "@entities/Creature"
+import { RELICS } from "@/relics/RelicPool"
 
 /**
  * Un dato real por cada tipo de desecho. Los nombres del juego son coloquiales;
@@ -166,9 +175,7 @@ export function isCodexId(id: unknown): id is string {
  * (modifica `discovered`).
  */
 export function discoverDebris(discovered: string[], id: string): boolean {
-  if (!isCodexId(id) || discovered.includes(id)) return false
-  discovered.push(id)
-  return true
+  return discover(discovered, id, isCodexId)
 }
 
 export function codexProgress(discovered: readonly string[]): {
@@ -177,4 +184,311 @@ export function codexProgress(discovered: readonly string[]): {
 } {
   const found = discovered.filter((id) => CODEX_IDS.has(id)).length
   return { found, total: CODEX_ENTRIES.length }
+}
+
+/** Marca un id como descubierto. Devuelve `true` si es nuevo (modifica `list`). */
+function discover(
+  list: string[],
+  id: string,
+  isValid: (id: unknown) => boolean,
+): boolean {
+  if (!isValid(id) || list.includes(id)) return false
+  list.push(id)
+  return true
+}
+
+// --- Fauna ---------------------------------------------------------------
+
+export type FaunaRole = "hostile" | "friendly" | "boss"
+
+export const FAUNA_ROLE_LABELS: Record<FaunaRole, string> = {
+  hostile: "Peligrosa",
+  friendly: "Aliada",
+  boss: "Megajefe",
+}
+
+/**
+ * Un dato real por especie y, en las que el juego exagera o inventa, un dato
+ * del animal o del problema real en el que se inspiran.
+ */
+export const CREATURE_FACTS: Record<CreatureKind, string> = {
+  jellyfish:
+    "La tortuga laúd se alimenta sobre todo de medusas, y una bolsa de plástico flotando se les parece tanto que muchas se la tragan.",
+  lanternfish:
+    "Los peces linterna están entre los vertebrados más abundantes del planeta: cada noche suben cientos de metros a comer y al amanecer vuelven a bajar.",
+  eel: "Las anguilas americana y europea cruzan el Atlántico para reproducirse en el mar de los Sargazos, aunque nadie ha visto todavía su desove en libertad.",
+  pufferfish:
+    "El pez globo se infla tragando agua. Muchas especies tienen tetrodotoxina, un veneno cientos de veces más potente que el cianuro.",
+  barracuda:
+    "La barracuda caza sobre todo con la vista y, en arrancadas cortas, puede nadar a unos 40 km/h.",
+  anglerfish:
+    "La luz del señuelo del pez pescador abisal no la produce él: la generan bacterias bioluminiscentes que viven dentro de ese apéndice.",
+  octopus:
+    "El pulpo tiene tres corazones y cerca de dos tercios de sus neuronas están en los brazos, que pueden actuar casi por su cuenta.",
+  squid:
+    "Algunos calamares sueltan nubes de tinta con su misma forma y tamaño: el depredador ataca a la nube mientras el calamar escapa.",
+  scrapCrab:
+    "A falta de conchas vacías, se han visto cangrejos ermitaños usando tapas de botella y otros plásticos como casa.",
+  anemone:
+    "Las anémonas son parientes de corales y medusas y pican con células llamadas cnidocitos. El pez payaso vive entre sus tentáculos sin que le piquen.",
+  fishSchool:
+    "Los peces de un banco nadan coordinados gracias a la línea lateral, un órgano que siente los cambios de presión del agua a su alrededor.",
+  dolphin:
+    "Los delfines duermen con medio cerebro a la vez: la otra mitad sigue despierta para nadar y salir a respirar.",
+  seahorse:
+    "En los caballitos de mar es el macho quien se embaraza: la hembra deja los huevos en su bolsa y él da a luz a las crías.",
+  remora:
+    "La rémora se pega a tiburones, mantas y tortugas con un disco de succión en la cabeza, que en realidad es una aleta dorsal modificada.",
+  manta:
+    "La manta gigante puede superar los 7 metros de ancho y tiene, en proporción a su cuerpo, uno de los cerebros más grandes entre los peces.",
+  whale:
+    "Los machos de ballena jorobada de una misma población cantan la misma canción, que va cambiando poco a poco de un año a otro.",
+  cleanerFish:
+    "En los arrecifes hay «estaciones de limpieza»: peces mucho más grandes hacen fila para que los peces limpiadores les quiten parásitos, y no se los comen.",
+  nettedTurtle:
+    "Los excluidores de tortugas, obligatorios en las redes camaroneras de México y Estados Unidos, son una rejilla que deja escapar a las tortugas atrapadas.",
+  netKraken:
+    "La leyenda del kraken probablemente nació del calamar gigante, que puede pasar de 12 metros. No se filmó vivo en su hábitat hasta 2012.",
+  scrapShark:
+    "Los tiburones llevan más de 400 millones de años en el mar, pero hoy más de un tercio de las especies de tiburones y rayas está amenazado, sobre todo por la sobrepesca.",
+  leviathan:
+    "La gran mancha de basura del Pacífico ocupa alrededor de 1.6 millones de km², más del doble que Texas, y casi la mitad de su masa son redes de pesca.",
+}
+
+function faunaRole(kind: CreatureKind): FaunaRole {
+  if ((BOSS_KINDS as readonly string[]).includes(kind)) return "boss"
+  if ((FRIENDLY_KINDS as readonly string[]).includes(kind)) return "friendly"
+  return "hostile"
+}
+
+export interface CodexFaunaEntry {
+  id: CreatureKind
+  name: string
+  role: FaunaRole
+  fact: string
+}
+
+/** Fauna del códice: primero la peligrosa, luego la aliada y los megajefes. */
+export const FAUNA_ENTRIES: readonly CodexFaunaEntry[] = [
+  ...HOSTILE_KINDS,
+  ...FRIENDLY_KINDS,
+  ...BOSS_KINDS,
+].map((kind) => ({
+  id: kind,
+  name: CREATURE_NAMES[kind],
+  role: faunaRole(kind),
+  fact: CREATURE_FACTS[kind],
+}))
+
+const FAUNA_IDS = new Set<string>(FAUNA_ENTRIES.map((entry) => entry.id))
+
+export function isFaunaId(id: unknown): id is CreatureKind {
+  return typeof id === "string" && FAUNA_IDS.has(id)
+}
+
+/** Registra una especie vista. Devuelve `true` si es la primera vez. */
+export function discoverCreature(discovered: string[], kind: string): boolean {
+  return discover(discovered, kind, isFaunaId)
+}
+
+// --- Reliquias -----------------------------------------------------------
+
+/** Las reliquias son ficción; su dato real habla de lo que las inspira. */
+export const RELIC_FACTS: Record<string, string> = {
+  castaway_compass:
+    "Las tortugas marinas se orientan con el campo magnético de la Tierra: las crías memorizan la «firma» magnética de su playa y vuelven a ella para anidar.",
+  bottle_message:
+    "El mensaje en una botella más antiguo que se conoce apareció en 2018 en una playa de Australia: lo habían lanzado desde un barco alemán en 1886.",
+  rubber_duck:
+    "En 1992 un contenedor con casi 29,000 juguetes de baño cayó al Pacífico. Siguiendo dónde aparecían, los oceanógrafos estudiaron las corrientes.",
+  galleon_coin:
+    "Durante 250 años, de 1565 a 1815, el Galeón de Manila cruzó el Pacífico entre Acapulco y Filipinas cargado de plata mexicana.",
+  ancient_pearl:
+    "Una perla se forma cuando el molusco recubre algo que lo irrita con capas de nácar, el mismo material que brilla dentro de su concha.",
+  sand_glass:
+    "En los barcos se medían las guardias con relojes de arena de media hora: cada vez que se volteaban, sonaba la campana de a bordo.",
+  diver_lantern:
+    "En un estudio en la bahía de Monterey, cerca de tres de cada cuatro animales observados entre la superficie y 4,000 metros producían su propia luz.",
+  megalodon_tooth:
+    "El megalodón se extinguió hace unos 3.6 millones de años. Sus dientes fósiles pueden medir más de 17 cm.",
+  whispering_conch:
+    "El «sonido del mar» que se oye en un caracol es el ruido de alrededor, que resuena dentro de su cavidad.",
+  empty_shell:
+    "Se estima que solo una de cada mil crías de tortuga marina llega a la edad adulta.",
+}
+
+export interface CodexRelicEntry {
+  id: string
+  name: string
+  description: string
+  fact: string
+}
+
+export const RELIC_ENTRIES: readonly CodexRelicEntry[] = RELICS.map(
+  (relic) => ({
+    id: relic.id,
+    name: relic.name,
+    description: relic.description,
+    fact: RELIC_FACTS[relic.id] ?? "",
+  }),
+)
+
+const RELIC_IDS = new Set(RELIC_ENTRIES.map((entry) => entry.id))
+
+export function isRelicId(id: unknown): id is string {
+  return typeof id === "string" && RELIC_IDS.has(id)
+}
+
+/** Registra una reliquia encontrada. Devuelve `true` si es la primera vez. */
+export function discoverRelic(discovered: string[], id: string): boolean {
+  return discover(discovered, id, isRelicId)
+}
+
+// --- Biomas --------------------------------------------------------------
+
+/** Zona oceánica real a la que corresponde cada bioma. */
+export const BIOME_ZONES: Record<BiomeKey, string> = {
+  epipelagic_upper: "Zona fótica",
+  pelagic_mid: "Zona fótica",
+  subphotic: "Zona crepuscular",
+  mesopelagic_upper: "Zona crepuscular",
+  mesopelagic_deep: "Zona crepuscular",
+  bathypelagic_upper: "Zona de medianoche",
+  bathypelagic_deep: "Zona de medianoche",
+  abyssopelagic: "Zona abisal",
+  hadopelagic: "Zona hadal",
+  deepSea: "Zona hadal",
+}
+
+/** Qué significa el nombre de cada bioma y un dato real de esa profundidad. */
+export const BIOME_FACTS: Record<BiomeKey, string> = {
+  epipelagic_upper:
+    "Epipelágico significa «sobre el mar abierto». En sus primeros 200 metros llega casi toda la luz del sol, y el fitoplancton produce cerca de la mitad del oxígeno del planeta.",
+  pelagic_mid:
+    "El agua absorbe primero el color rojo: a unos pocos metros casi desaparece, y por eso el mar se ve cada vez más azul conforme bajas.",
+  subphotic:
+    "Subfótico significa «debajo de la luz». A partir de unos 200 metros aún llega algo de claridad, pero ya no la suficiente para la fotosíntesis.",
+  mesopelagic_upper:
+    "Mesopelágico significa «mar abierto intermedio». Cada noche, miles de millones de animales de esta zona suben a comer cerca de la superficie: es la migración más grande del planeta.",
+  mesopelagic_deep:
+    "Hacia los 1,000 metros termina la zona crepuscular: más abajo no llega nada de luz del sol y la única luz es la que producen los propios animales.",
+  bathypelagic_upper:
+    "Batipelágico significa «mar abierto profundo». Aquí el agua está a unos 4 °C y, a 2,000 metros, la presión es unas 200 veces la de la superficie.",
+  bathypelagic_deep:
+    "La profundidad media del océano es de unos 3,700 metros: la mayor parte del mar está tan oscura y fría como este bioma.",
+  abyssopelagic:
+    "Abisal viene del griego ábyssos, «sin fondo». Las llanuras abisales, entre 4,000 y 6,000 metros, cubren alrededor de la mitad de la superficie de la Tierra.",
+  hadopelagic:
+    "La zona hadal, por debajo de 6,000 metros, debe su nombre a Hades, el dios griego del inframundo. Casi toda está dentro de las fosas oceánicas.",
+  deepSea:
+    "El abismo Challenger, en la fosa de las Marianas, es el punto más hondo conocido, a casi 11,000 metros. Han bajado hasta él menos personas que las que han ido al espacio.",
+}
+
+export interface CodexBiomeEntry {
+  id: BiomeKey
+  name: string
+  depth: number
+  zone: string
+  fact: string
+}
+
+/** Biomas de la superficie al fondo. */
+export const BIOME_ENTRIES: readonly CodexBiomeEntry[] = BIOME_ORDER.map(
+  (key) => ({
+    id: key,
+    name: BIOMES[key].name,
+    depth: BIOMES[key].depth,
+    zone: BIOME_ZONES[key],
+    fact: BIOME_FACTS[key],
+  }),
+)
+
+export function isBiomeId(id: unknown): id is BiomeKey {
+  return typeof id === "string" && Object.hasOwn(BIOME_FACTS, id)
+}
+
+/** Registra un bioma alcanzado. Devuelve `true` si es la primera vez. */
+export function discoverBiome(discovered: string[], key: string): boolean {
+  return discover(discovered, key, isBiomeId)
+}
+
+// --- Progreso total ------------------------------------------------------
+
+export type CodexSection = "debris" | "fauna" | "relics" | "biomes"
+
+export const CODEX_SECTIONS: readonly CodexSection[] = [
+  "debris",
+  "fauna",
+  "relics",
+  "biomes",
+]
+
+export const CODEX_SECTION_LABELS: Record<CodexSection, string> = {
+  debris: "Desechos",
+  fauna: "Fauna",
+  relics: "Reliquias",
+  biomes: "Biomas",
+}
+
+/** Lo descubierto en cada sección (los campos de MetaState). */
+export interface CodexDiscoveries {
+  discoveredDebris: readonly string[]
+  discoveredCreatures: readonly string[]
+  discoveredRelics: readonly string[]
+  discoveredBiomes: readonly string[]
+}
+
+const SECTIONS: Record<
+  CodexSection,
+  {
+    key: keyof CodexDiscoveries
+    isValid: (id: unknown) => boolean
+    total: number
+  }
+> = {
+  debris: {
+    key: "discoveredDebris",
+    isValid: isCodexId,
+    total: CODEX_ENTRIES.length,
+  },
+  fauna: {
+    key: "discoveredCreatures",
+    isValid: isFaunaId,
+    total: FAUNA_ENTRIES.length,
+  },
+  relics: {
+    key: "discoveredRelics",
+    isValid: isRelicId,
+    total: RELIC_ENTRIES.length,
+  },
+  biomes: {
+    key: "discoveredBiomes",
+    isValid: isBiomeId,
+    total: BIOME_ENTRIES.length,
+  },
+}
+
+/** Progreso de una sección del códice. */
+export function sectionProgress(
+  discoveries: CodexDiscoveries,
+  section: CodexSection,
+): { found: number; total: number } {
+  const { key, isValid, total } = SECTIONS[section]
+  const found = new Set(discoveries[key].filter(isValid)).size
+  return { found, total }
+}
+
+/** Progreso del códice completo, sumando todas las secciones. */
+export function totalCodexProgress(discoveries: CodexDiscoveries): {
+  found: number
+  total: number
+} {
+  let found = 0
+  let total = 0
+  for (const section of CODEX_SECTIONS) {
+    const progress = sectionProgress(discoveries, section)
+    found += progress.found
+    total += progress.total
+  }
+  return { found, total }
 }

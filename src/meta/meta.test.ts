@@ -11,12 +11,24 @@ import {
 } from "@core/MetaState"
 import type { RunSummary } from "@core/types"
 import {
+  BIOME_ENTRIES,
   CODEX_ENTRIES,
+  CODEX_SECTIONS,
   DEBRIS_FACTS,
+  FAUNA_ENTRIES,
+  RELIC_ENTRIES,
   codexProgress,
+  discoverBiome,
+  discoverCreature,
   discoverDebris,
+  discoverRelic,
   isCodexId,
+  sectionProgress,
+  totalCodexProgress,
 } from "@/meta/codex"
+import { RELICS } from "@/relics/RelicPool"
+import { BIOME_ORDER } from "@core/types"
+import { BOSS_KINDS, FRIENDLY_KINDS, HOSTILE_KINDS } from "@entities/Creature"
 import {
   ACHIEVEMENTS,
   evaluateAchievements,
@@ -89,6 +101,72 @@ describe("códice", () => {
       found: 1,
       total: CODEX_ENTRIES.length,
     })
+  })
+})
+
+describe("códice ampliado", () => {
+  const empty = {
+    discoveredDebris: [],
+    discoveredCreatures: [],
+    discoveredRelics: [],
+    discoveredBiomes: [],
+  }
+
+  it("cada especie, reliquia y bioma tiene su ficha con un dato real", () => {
+    const kinds = [...HOSTILE_KINDS, ...FRIENDLY_KINDS, ...BOSS_KINDS]
+    expect(FAUNA_ENTRIES.map((entry) => entry.id)).toEqual(kinds)
+    expect(RELIC_ENTRIES.map((entry) => entry.id)).toEqual(
+      RELICS.map((relic) => relic.id),
+    )
+    expect(BIOME_ENTRIES.map((entry) => entry.id)).toEqual(BIOME_ORDER)
+    for (const entry of [
+      ...FAUNA_ENTRIES,
+      ...RELIC_ENTRIES,
+      ...BIOME_ENTRIES,
+    ]) {
+      expect(entry.fact.length, entry.id).toBeGreaterThan(40)
+    }
+  })
+
+  it("registra cada entrada solo la primera vez y rechaza ids falsos", () => {
+    const creatures: string[] = []
+    expect(discoverCreature(creatures, "whale")).toBe(true)
+    expect(discoverCreature(creatures, "whale")).toBe(false)
+    expect(discoverCreature(creatures, "unicornio")).toBe(false)
+
+    const relics: string[] = []
+    expect(discoverRelic(relics, "rubber_duck")).toBe(true)
+    expect(discoverRelic(relics, "rubber_duck")).toBe(false)
+    expect(discoverRelic(relics, "toString")).toBe(false)
+
+    const biomes: string[] = []
+    expect(discoverBiome(biomes, "subphotic")).toBe(true)
+    expect(discoverBiome(biomes, "subphotic")).toBe(false)
+    expect(discoverBiome(biomes, "toString")).toBe(false)
+  })
+
+  it("suma el progreso de todas las secciones", () => {
+    const discoveries = {
+      discoveredDebris: ["plastic_bottle"],
+      discoveredCreatures: ["whale", "whale", "falso"],
+      discoveredRelics: ["rubber_duck"],
+      discoveredBiomes: ["subphotic", "deepSea"],
+    }
+    expect(sectionProgress(discoveries, "fauna")).toEqual({
+      found: 1,
+      total: FAUNA_ENTRIES.length,
+    })
+    expect(totalCodexProgress(discoveries)).toEqual({
+      found: 5,
+      total:
+        CODEX_ENTRIES.length +
+        FAUNA_ENTRIES.length +
+        RELIC_ENTRIES.length +
+        BIOME_ENTRIES.length,
+    })
+    expect(
+      CODEX_SECTIONS.map((section) => sectionProgress(empty, section).found),
+    ).toEqual([0, 0, 0, 0])
   })
 })
 
@@ -275,6 +353,38 @@ describe("MetaState con la meta-progresión", () => {
     expect(migrated.leaksClosed).toBe(0)
     expect(migrated.daily).toBeNull()
     expect(migrated.dailyCompletions).toBe(0)
+  })
+
+  it("sanea las secciones nuevas del códice", () => {
+    const migrated = migrateMeta({
+      version: META_VERSION,
+      discoveredCreatures: ["whale", "whale", "dragón"],
+      discoveredRelics: ["rubber_duck", 7],
+      discoveredBiomes: "subphotic",
+    })!
+    expect(migrated.discoveredCreatures).toEqual(["whale"])
+    expect(migrated.discoveredRelics).toEqual(["rubber_duck"])
+    expect(migrated.discoveredBiomes).toEqual([])
+  })
+
+  it("un guardado v1 conoce los biomas hasta su zona más profunda", () => {
+    const fresh = migrateMeta({ version: 1, bestBiomeIndex: -1 })!
+    expect(fresh.version).toBe(META_VERSION)
+    expect(fresh.discoveredBiomes).toEqual([])
+
+    // Zona 2 = tercera capa de la ruta: se dan por conocidas sus dos opciones.
+    const veteran = migrateMeta({ version: 1, bestBiomeIndex: 2 })!
+    expect([...veteran.discoveredBiomes].sort()).toEqual(
+      [
+        "epipelagic_upper",
+        "subphotic",
+        "pelagic_mid",
+        "mesopelagic_deep",
+        "mesopelagic_upper",
+      ].sort(),
+    )
+    expect(veteran.discoveredCreatures).toEqual([])
+    expect(veteran.discoveredRelics).toEqual([])
   })
 
   it("sanea ids desconocidos y duplicados", () => {

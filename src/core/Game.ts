@@ -163,7 +163,14 @@ import {
   type RouteNode,
   type ShopItem,
 } from "@world/BiomeRoute"
-import { CODEX_ENTRIES, discoverDebris } from "@/meta/codex"
+import {
+  BIOME_FACTS,
+  CODEX_ENTRIES,
+  discoverBiome,
+  discoverCreature,
+  discoverDebris,
+  discoverRelic,
+} from "@/meta/codex"
 import { evaluateAchievements, lockedCards } from "@/meta/achievements"
 import { dailyKey, dailySeed } from "@/meta/daily"
 import { RELICS, pickRelic, type Relic } from "@/relics/RelicPool"
@@ -271,7 +278,7 @@ export class Game {
   private endlessMode = false
   /** Día del desafío diario si la run en curso lo es. */
   private dailyRun: string | null = null
-  /** Desechos nuevos en el códice y fugas cerradas en esta run. */
+  /** Entradas nuevas en el códice y fugas cerradas en esta run. */
   private runDiscoveries = 0
   private runLeaksClosed = 0
   private lastCodexNoticeAt = Number.NEGATIVE_INFINITY
@@ -943,6 +950,13 @@ export class Game {
       node = { ...node, objective: "clean" }
     }
     this.currentNode = node
+    // El bioma entra en el códice sin aviso: la transición ya muestra su dato.
+    if (
+      this.screen === "run" &&
+      discoverBiome(this.meta.discoveredBiomes, biomeKey)
+    ) {
+      this.recordDiscovery()
+    }
     const modifier = this.modifier()
     if (modifier.currentSpeed > 0) {
       const angle =
@@ -1444,11 +1458,21 @@ export class Game {
     if (debris.hazard === "lixivia") this.runLeaksClosed++
     const id = debris.definition.id
     if (!discoverDebris(this.meta.discoveredDebris, id)) return
+    this.recordDiscovery(
+      CODEX_ENTRIES.find((entry) => entry.id === id)?.name ?? id,
+    )
+  }
+
+  /**
+   * Cuenta y guarda una entrada nueva del códice. Con `name`, la avisa en
+   * pantalla (sin encadenar avisos seguidos).
+   */
+  private recordDiscovery(name?: string): void {
     this.runDiscoveries++
     this.saveManager.save(this.meta)
+    if (name === undefined) return
     if (this.runTime - this.lastCodexNoticeAt < CODEX_NOTICE_INTERVAL) return
     this.lastCodexNoticeAt = this.runTime
-    const name = CODEX_ENTRIES.find((entry) => entry.id === id)?.name ?? id
     this.uiManager.showMessage(`Nuevo en el códice: ${name}`, 1400)
   }
 
@@ -1493,6 +1517,7 @@ export class Game {
           ? `Vuelta completada · ${banked} Eco asegurado\n${this.biomeBanner()}`
           : this.biomeBanner(),
       )
+      this.transition.setFact(BIOME_FACTS[this.currentNode.biome])
       // Compila los shaders del bioma nuevo con la pantalla aún en negro,
       // para que el tirón no se vea al retirarse la transición.
       try {
@@ -1606,6 +1631,11 @@ ${extras.join(" · ")}`
     )
 
     for (const notice of fauna.notices) this.tips.trigger(notice)
+    for (const kind of fauna.sighted) {
+      if (discoverCreature(this.meta.discoveredCreatures, kind)) {
+        this.recordDiscovery(CREATURE_NAMES[kind])
+      }
+    }
     for (const scatter of fauna.scatters) {
       this.biomeGenerator.scatterDebris(
         scatter.center,
@@ -1985,6 +2015,10 @@ ${extras.join(" · ")}`
     }
 
     this.runState.relics.push(relic.id)
+    // La reliquia ya tiene su propio aviso: en el códice entra sin otro mensaje.
+    if (discoverRelic(this.meta.discoveredRelics, relic.id)) {
+      this.recordDiscovery()
+    }
     this.audio.play("relic")
     this.uiManager.announce(
       `Reliquia encontrada: ${relic.name}. ${relic.description} ${result.summary}`,

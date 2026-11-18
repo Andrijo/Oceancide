@@ -24,6 +24,12 @@ const SPAWN_ATTEMPTS = 12
 const CENTER_CLEARANCE = 10
 /** Los jefes aparecen lejos de la tortuga para que dé tiempo a verlos llegar. */
 const BOSS_CLEARANCE = 30
+/**
+ * Distancia a la que la tortuga "ve" una criatura y la registra en el códice.
+ * Los megajefes, enormes, se ven desde más lejos.
+ */
+const SIGHT_RADIUS = 12
+const BOSS_SIGHT_RADIUS = 24
 
 function createCreature(
   kind: CreatureKind,
@@ -73,6 +79,8 @@ export interface FaunaFrame {
   radiusBoost: number
   /** Megajefe del bioma, si lo hay. */
   boss: BossStatus | null
+  /** Especies que la tortuga tiene cerca este frame (sin repetir). */
+  sighted: CreatureKind[]
 }
 
 /**
@@ -101,6 +109,7 @@ export class EnemyManager {
     haste: null,
     radiusBoost: 1,
     boss: null,
+    sighted: [],
   }
 
   constructor(scene: THREE.Scene) {
@@ -176,6 +185,7 @@ export class EnemyManager {
     frame.haste = null
     frame.radiusBoost = 1
     frame.boss = null
+    frame.sighted.length = 0
 
     const ctx = { deltaTime, time, bounds, target }
     // Las crías se añaden al acabar, para no recorrerlas en este frame.
@@ -196,6 +206,14 @@ export class EnemyManager {
         -bounds.halfSize,
         bounds.halfSize,
       )
+
+      const sight = isBossKind(creature.kind) ? BOSS_SIGHT_RADIUS : SIGHT_RADIUS
+      if (
+        !frame.sighted.includes(creature.kind) &&
+        position.distanceToSquared(target.position) <= sight * sight
+      ) {
+        frame.sighted.push(creature.kind)
+      }
 
       if (!effects) continue
       if (
