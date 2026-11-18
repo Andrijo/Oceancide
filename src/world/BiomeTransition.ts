@@ -2,16 +2,41 @@
 // Transición entre biomas: una masa negra de borde irregular (con zarcillos) barre la
 // pantalla, se mantiene un instante mientras se carga el bioma y se retira.
 
-import { TITLE_FONT } from "@ui/fonts"
+import { PARAGRAPH_FONT, TITLE_FONT } from "@ui/fonts"
 
 type Phase = "idle" | "covering" | "holding" | "revealing"
 
 const COVER_TIME = 0.75 // s que tarda en cubrir la pantalla
 const HOLD_TIME = 0.6 // s mínimos totalmente negro (se alarga hasta que termine la carga)
+const FACT_HOLD_TIME = 3.2 // s mínimos en negro si hay un dato que leer
+const FACT_MAX_WIDTH = 620 // px de ancho máximo del dato
+const TEXT_COLOR = "#f5eedd" // --color-cream
+const FACT_COLOR = "#84b3c3" // --color-mist
 const REVEAL_TIME = 0.95 // s que tarda en retirarse
 const SEGMENTS = 72 // puntos del borde (más = contorno más suave)
 const AMPLITUDE = 0.3 // irregularidad del borde, como fracción del ancho de pantalla
 const MARGIN = 20 // px extra fuera de pantalla
+
+/** Parte un texto en líneas que caben en `maxWidth` con la fuente actual. */
+function wrapText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+): string[] {
+  const lines: string[] = []
+  let line = ""
+  for (const word of text.split(" ")) {
+    const candidate = line ? `${line} ${word}` : word
+    if (line && ctx.measureText(candidate).width > maxWidth) {
+      lines.push(line)
+      line = word
+    } else {
+      line = candidate
+    }
+  }
+  if (line) lines.push(line)
+  return lines
+}
 
 function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
@@ -60,6 +85,9 @@ export class BiomeTransition {
   private onCovered: (() => void | Promise<void>) | null = null
   private loading = false
   private label: string | null = null
+  private fact: string | null = null
+  /** Líneas del dato ya partidas, para no medirlas en cada frame. */
+  private factLines: { key: string; lines: string[] } | null = null
   private coverShape: Float32Array = new Float32Array(0)
   private revealShape: Float32Array = new Float32Array(0)
 
@@ -95,6 +123,7 @@ export class BiomeTransition {
     this.onCovered = onCovered
     this.loading = false
     this.label = null
+    this.fact = null
     this.coverShape = makeShape(1)
     this.revealShape = makeShape(-1)
 
@@ -108,12 +137,21 @@ export class BiomeTransition {
     this.label = label
   }
 
+  /**
+   * Dato real que se muestra bajo el rótulo. Alarga el negro (FACT_HOLD_TIME)
+   * para que dé tiempo a leerlo.
+   */
+  public setFact(fact: string | null): void {
+    this.fact = fact
+  }
+
   /** Aborta la transición al instante (p. ej. si termina la run). */
   public cancel(): void {
     this.phase = "idle"
     this.onCovered = null
     this.loading = false
     this.label = null
+    this.fact = null
     this.canvas.style.display = "none"
   }
 
@@ -148,7 +186,7 @@ export class BiomeTransition {
       }
     } else if (
       this.phase === "holding" &&
-      this.elapsed >= HOLD_TIME &&
+      this.elapsed >= (this.fact ? FACT_HOLD_TIME : HOLD_TIME) &&
       !this.loading
     ) {
       this.phase = "revealing"
@@ -211,19 +249,63 @@ export class BiomeTransition {
     }
     ctx.closePath()
     ctx.fill()
+
+    // Al retirarse, el texto sigue sobre la parte aún negra: se termina de
+    // leer mientras se descubre el bioma.
+    if (!covering && this.label) {
+      ctx.save()
+      ctx.clip()
+      this.drawLabel(w, h)
+      ctx.restore()
+    }
   }
 
   private drawLabel(w: number, h: number): void {
     const { ctx } = this
-    ctx.fillStyle = "#f5eedd"
     ctx.textAlign = "center"
     ctx.textBaseline = "middle"
-    const size = Math.max(20, Math.min(40, w * 0.04))
-    ctx.font = `900 ${size}px ${TITLE_FONT}`
-    // Admite varias líneas separadas por "\n", centradas en vertical.
-    const lines = (this.label ?? "").split("\n")
-    const lineHeight = size * 1.3
-    const top = h / 2 - ((lines.length - 1) * lineHeight) / 2
-    lines.forEach((line, i) => ctx.fillText(line, w / 2, top + i * lineHeight))
+
+    // Rótulo: admite varias líneas separadas por "\n".
+    const titleSize = Math.max(20, Math.min(40, w * 0.04))
+    const titleLines = (this.label ?? "").split("\n")
+    const titleHeight = titleSize * 1.3
+
+    // Dato: más pequeño y partido al ancho de la pantalla.
+    const factSize = Math.max(15, Math.min(20, w * 0.022))
+    const factHeight = factSize * 1.45
+    const factFont = `500 ${factSize}px ${PARAGRAPH_FONT}`
+    const factLines = this.fact ? this.wrapFact(factFont, w) : []
+    const gap = factLines.length > 0 ? titleSize : 0
+
+    // Todo el bloque, centrado en vertical.
+    const total =
+      titleLines.length * titleHeight + gap + factLines.length * factHeight
+    let y = h / 2 - total / 2
+
+    ctx.fillStyle = TEXT_COLOR
+    ctx.font = `900 ${titleSize}px ${TITLE_FONT}`
+    for (const line of titleLines) {
+      ctx.fillText(line, w / 2, y + titleHeight / 2)
+      y += titleHeight
+    }
+    y += gap
+    ctx.fillStyle = FACT_COLOR
+    ctx.font = factFont
+    for (const line of factLines) {
+      ctx.fillText(line, w / 2, y + factHeight / 2)
+      y += factHeight
+    }
+  }
+
+  /** Líneas del dato, partidas solo cuando cambia el dato o el ancho. */
+  private wrapFact(font: string, w: number): string[] {
+    const maxWidth = Math.min(FACT_MAX_WIDTH, w - 48)
+    const key = `${font}|${maxWidth}|${this.fact}`
+    if (this.factLines?.key !== key) {
+      this.ctx.font = font
+      const lines = wrapText(this.ctx, `Dato real: ${this.fact}`, maxWidth)
+      this.factLines = { key, lines }
+    }
+    return this.factLines.lines
   }
 }

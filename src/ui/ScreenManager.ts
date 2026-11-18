@@ -18,8 +18,14 @@ import {
   tagLabel,
 } from "@cards/CardEffects"
 import { CARD_POOL } from "@cards/CardPool"
-import { CODEX_ENTRIES, codexProgress } from "@/meta/codex"
-import type { DebrisHazard } from "@entities/debrisCatalog"
+import {
+  CODEX_SECTION_LABELS,
+  CODEX_SECTIONS,
+  sectionProgress,
+  totalCodexProgress,
+  type CodexSection,
+} from "@/meta/codex"
+import { CODEX_SECTION_HINTS, codexSectionContent } from "@ui/codexView"
 import { ACHIEVEMENTS, achievementById, rewardText } from "@/meta/achievements"
 import { dailyKey } from "@/meta/daily"
 import {
@@ -72,13 +78,6 @@ import type { EventPreview } from "@/events/EventEffects"
 /** Clase que añade ▲ o ▼ con el modo para daltonismo (ver styles.css). */
 function toneMarkClass(tone: "positive" | "negative"): string {
   return tone === "positive" ? "tone-mark-good" : "tone-mark-bad"
-}
-
-/** Etiqueta del peligro de un desecho en el códice. */
-const HAZARD_LABELS: Record<DebrisHazard, string> = {
-  fragil: "Frágil",
-  trampa: "Trampa",
-  lixivia: "Fuga",
 }
 
 export interface ScreenCallbacks {
@@ -240,6 +239,8 @@ export class ScreenManager {
   private eventChoiceHandler: ((index: number) => void) | null = null
   /** Bloqueo breve al abrir cartas o eventos contra elecciones accidentales. */
   private choiceGuard = new ChoiceGuard()
+  /** Última pestaña vista del códice (se reabre en ella). */
+  private codexSection: CodexSection = "debris"
   /**
    * Durante el keyup de un Espacio/Enter "viejo" (pulsado antes de abrir la
    * elección o durante el bloqueo): el clic que genera el navegador no elige.
@@ -564,7 +565,7 @@ export class ScreenManager {
     )
     dailyBtn.title =
       "La misma semilla para todos durante el día de hoy. Supera tu récord."
-    const codex = codexProgress(meta.discoveredDebris)
+    const codex = totalCodexProgress(meta)
     const codexBtn = makeButton(`Códice ${codex.found}/${codex.total}`, () =>
       this.showCodex(meta, () => this.showHub(meta, "codex")),
     )
@@ -707,8 +708,8 @@ export class ScreenManager {
     if (found > 0) {
       lines.push(
         found === 1
-          ? "1 desecho nuevo en el códice"
-          : `${found} desechos nuevos en el códice`,
+          ? "1 entrada nueva en el códice"
+          : `${found} entradas nuevas en el códice`,
       )
     }
     if (summary.daily && meta.daily?.date === summary.daily) {
@@ -720,68 +721,65 @@ export class ScreenManager {
   }
 
   /**
-   * Códice de desechos: los tipos recogidos alguna vez, con su descripción y
-   * un dato real; los demás, ocultos. Agrupados por el bioma donde aparecen.
+   * Códice: una pestaña por sección (desechos, fauna, reliquias y biomas). Lo
+   * descubierto muestra su dato real; lo demás, oculto. Se abre en la última
+   * pestaña vista.
    */
   public showCodex(meta: MetaState, onClose: () => void): void {
     const { root, content } = this.makeWindowFrame()
-    const title = this.makeScreenTitle("Códice de desechos")
-    const { found, total } = codexProgress(meta.discoveredDebris)
-    const subtitle = el(
-      "p",
-      "upgrade-subtitle",
-      `${found} de ${total} registrados. Recoge un desecho para registrarlo.`,
-    )
+    // Contenido largo: si se centrara, el título y las pestañas quedarían
+    // por encima del área con scroll.
+    content.classList.add("screen-content--top")
+    const title = this.makeScreenTitle("Códice")
+    const subtitle = el("p", "upgrade-subtitle")
+    subtitle.id = "codex-subtitle"
 
-    const list = el("div", "codex-list")
-    let currentBiome: string | null = null
-    let grid: HTMLElement | null = null
-    for (const entry of CODEX_ENTRIES) {
-      if (entry.biome !== currentBiome || !grid) {
-        currentBiome = entry.biome
-        list.append(el("h2", "codex-biome", BIOMES[entry.biome].name))
-        grid = el("div", "upgrade-grid codex-grid")
-        list.append(grid)
+    const tabs = el("div", "codex-tabs")
+    tabs.setAttribute("role", "tablist")
+    tabs.setAttribute("aria-label", "Secciones del códice")
+    const panel = el("div", "codex-list")
+    panel.id = "codex-panel"
+    panel.setAttribute("role", "tabpanel")
+    panel.setAttribute("aria-describedby", subtitle.id)
+
+    const tabButtons = new Map<CodexSection, HTMLButtonElement>()
+    const select = (section: CodexSection): void => {
+      this.codexSection = section
+      const { found, total } = sectionProgress(meta, section)
+      subtitle.textContent = `${found} de ${total} registrados. ${CODEX_SECTION_HINTS[section]}`
+      for (const [id, button] of tabButtons) {
+        button.setAttribute("aria-selected", String(id === section))
+        button.tabIndex = id === section ? 0 : -1
       }
-      const known = meta.discoveredDebris.includes(entry.id)
-      const card = el(
-        "article",
-        known
-          ? "upgrade-card codex-card"
-          : "upgrade-card codex-card is-unknown",
-      )
-      if (known) {
-        const header = el("div", "upgrade-header")
-        header.append(el("h3", "upgrade-name", entry.name))
-        if (entry.hazard) {
-          header.append(
-            el("span", "upgrade-level", HAZARD_LABELS[entry.hazard]),
-          )
-        }
-        card.append(
-          header,
-          el("p", "upgrade-desc", entry.description),
-          el("p", "codex-fact", entry.fact),
-        )
-      } else {
-        card.append(
-          el("h3", "upgrade-name", "???"),
-          el("p", "upgrade-desc", "Aún no lo has recogido."),
-        )
-      }
-      grid.append(card)
+      panel.setAttribute("aria-labelledby", tabButtons.get(section)!.id)
+      panel.replaceChildren(...codexSectionContent(section, meta))
     }
+    for (const section of CODEX_SECTIONS) {
+      const { found, total } = sectionProgress(meta, section)
+      const button = makeButton(
+        `${CODEX_SECTION_LABELS[section]} ${found}/${total}`,
+        () => select(section),
+      )
+      button.classList.add("btn--compact", "codex-tab")
+      button.id = `codex-tab-${section}`
+      button.setAttribute("role", "tab")
+      button.setAttribute("aria-controls", panel.id)
+      tabButtons.set(section, button)
+      tabs.append(button)
+    }
+    select(this.codexSection)
 
     const backBtn = makeButton("Volver al inicio", onClose)
     backBtn.classList.add("btn--narrow")
-    content.append(title, subtitle, list, backBtn)
+    content.append(title, tabs, subtitle, panel, backBtn)
     this.open(root, onClose, onClose)
-    backBtn.focus()
+    tabButtons.get(this.codexSection)?.focus()
   }
 
   /** Logros conseguidos y pendientes, con lo que desbloquea cada uno. */
   public showAchievements(meta: MetaState, onClose: () => void): void {
     const { root, content } = this.makeWindowFrame()
+    content.classList.add("screen-content--top")
     const title = this.makeScreenTitle("Logros")
     const subtitle = el(
       "p",

@@ -1304,6 +1304,11 @@ button.build-chip:focus-visible,
     0 0 12px color-mix(in srgb, var(--title-color) 27%, transparent);
 }
 
+/* En las pantallas que empiezan arriba, el título se separa del borde. */
+.screen-content--top > .screen-title {
+  margin-top: clamp(20px, 5vh, 56px);
+}
+
 .screen-title--tight {
   margin-bottom: 4px;
 }
@@ -1878,6 +1883,30 @@ button.build-chip:focus-visible,
 }
 
 /* --- Códice --- */
+
+.codex-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 960px;
+}
+
+.codex-tab {
+  flex: 1 1 0;
+  min-width: 140px;
+  width: auto;
+  padding-inline: 14px;
+}
+
+/* Pestaña elegida: fondo y borde marcados y una línea inferior. */
+.codex-tab[aria-selected="true"] {
+  --btn-color: var(--color-cream);
+  --btn-bg: var(--surface-2);
+  --btn-border: var(--color-mist);
+  box-shadow: inset 0 -3px 0 var(--color-mist);
+}
 
 .codex-list {
   width: 100%;

@@ -29,6 +29,23 @@ function createManager(): {
 }
 
 describe("EnemyManager", () => {
+  it("avisa de las especies que la tortuga tiene cerca", () => {
+    const { scene, manager } = createManager()
+    manager.spawnKinds(jellies(2), BOUNDS, new Rng(3))
+
+    const far = manager.update(0, 0, at(new THREE.Vector3(999, 0, 999)), BOUNDS)
+    expect(far.sighted).toEqual([])
+
+    // Junto a una medusa: se ve una vez aunque haya dos de la misma especie.
+    const near = manager.update(
+      0,
+      0,
+      at(scene.children[0].position.clone()),
+      BOUNDS,
+    )
+    expect(near.sighted).toEqual(["jellyfish"])
+  })
+
   it("genera medusas dentro de los bounds y lejos del centro", () => {
     const { scene, manager } = createManager()
 

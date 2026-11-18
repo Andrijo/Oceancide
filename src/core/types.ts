@@ -38,7 +38,7 @@ export interface RunSummary {
   leaksClosed?: number
   /** Día del desafío diario ("AAAA-MM-DD"), si la run lo era. */
   daily?: string
-  /** Desechos registrados por primera vez en el códice durante la run. */
+  /** Entradas registradas por primera vez en el códice durante la run. */
   newDiscoveries?: number
   /** Logros conseguidos al terminar la run (ids). */
   newAchievements?: string[]
