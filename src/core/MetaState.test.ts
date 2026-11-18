@@ -85,6 +85,11 @@ describe("createDefaultMeta", () => {
         bestEndlessBiomes: 0,
         fastestCompletion: 0,
       },
+      discoveredDebris: [],
+      achievements: [],
+      leaksClosed: 0,
+      daily: null,
+      dailyCompletions: 0,
     })
   })
 })

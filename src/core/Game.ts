@@ -52,6 +52,9 @@ import {
   setReduceMotionChoice,
 } from "@ui/animations"
 import { RenderPipeline } from "@core/RenderPipeline"
+import { AudioManager } from "@core/audio/AudioManager"
+import { BIOME_MOODS, HUB_MOOD, musicIntensity } from "@core/audio/music"
+import { CollectStreak } from "@core/audio/sfxRecipes"
 import {
   SaveManager,
   applyRunToMeta,
@@ -88,6 +91,7 @@ import {
 } from "@core/tips"
 import { CameraRig } from "@core/CameraRig"
 import {
+  BIOMES,
   BIOME_ORDER,
   type GameState,
   type InputState,
@@ -126,12 +130,46 @@ import {
 } from "@core/systems/deathSequence"
 import { UpgradeManager } from "@/tycoon/UpgradeManager"
 import { CREATURE_NAMES, type CreatureKind } from "@entities/Creature"
-import { ACT_EVENTS } from "@/events/EventPool"
+import {
+  ACT_EVENTS,
+  type EventConditionContext,
+  type GameEvent,
+} from "@/events/EventPool"
+import {
+  DeferredQueue,
+  isEventBiome,
+  optionLockReason,
+  pickEvent,
+  previewOption,
+  resolveOption,
+} from "@/events/EventSelection"
+import {
+  BIOME_MODIFIERS,
+  BIOME_OBJECTIVES,
+  LAYER_COUNT,
+  MIN_LEAKS_FOR_OBJECTIVE,
+  START_NODE,
+  defaultNode,
+  describeNode,
+  generateRouteOptions,
+  layerOf,
+  leakProgress,
+  modifiedToxicityRate,
+  nodeTitle,
+  objectiveBonus,
+  shopItems,
+  type BiomeModifier,
+  type RouteNode,
+  type ShopItem,
+} from "@world/BiomeRoute"
+import { CODEX_ENTRIES, discoverDebris } from "@/meta/codex"
+import { evaluateAchievements, lockedCards } from "@/meta/achievements"
+import { dailyKey, dailySeed } from "@/meta/daily"
 import { RELICS, pickRelic, type Relic } from "@/relics/RelicPool"
 import {
   applyEventEffects,
-  previewEventEffects,
   type EventContext,
+  type EventPreview,
 } from "@/events/EventEffects"
 
 const MAX_DELTA = 0.1
@@ -146,10 +184,22 @@ const bubbleWater = new THREE.Color()
 const bubbleAccent = new THREE.Color()
 // Sal de la semilla de las reliquias (0 = bioma, 1000 = cartas, 2000 = eventos).
 const RELIC_SEED_SALT = 3000
+// Sales de la corriente del modificador y de la tienda (4000 = rutas).
+const CURRENT_SEED_SALT = 4500
+const SHOP_SEED_SALT = 5000
+
+/** Pasos que siguen a limpiar una zona, en orden. */
+type AfterZoneStage = "event" | "shop" | "card" | "route"
+
+/** Separación mínima entre dos avisos de "nuevo en el códice". */
+const CODEX_NOTICE_INTERVAL = 3
 
 const BUILD_DISTANCE = 4
 const DEEP_POINT_LIGHT_BOOST = 25
 const BLOOM_MAX_STRENGTH = 0.5
+
+/** Segundos restantes del bioma en los que suena el aviso de poco tiempo. */
+const TIME_LOW_SFX_SECONDS = 10
 
 // Avisos de proximidad: se comprueban cada cierto tiempo, no en cada frame.
 const TIP_CHECK_INTERVAL = 0.3
@@ -194,6 +244,16 @@ export class Game {
   private runState: RunState = createRunState()
   private biomeIndex = 0
   private collectedInZone = 0
+  /** Zonas elegidas en la ruta de esta run, por índice de bioma. */
+  private routeNodes = new Map<number, RouteNode>()
+  /** Zona en curso (bioma, modificador, objetivo y recompensa). */
+  private currentNode: RouteNode = START_NODE
+  /** Fugas que había al entrar (objetivo "cierra las fugas"). */
+  private initialLeaks = 0
+  /** Dirección y fuerza de la corriente del modificador (u/s). */
+  private readonly current = new THREE.Vector3()
+  /** La zona ya está limpia y se están resolviendo evento, tienda, carta y ruta. */
+  private zoneResolving = false
   /** Escudo de una rémora: absorbe el siguiente golpe de la fauna. */
   private faunaShield = false
   /** Radio de recogida extra de una manta cercana (este frame). */
@@ -208,6 +268,12 @@ export class Game {
   private pendingAdvance = false
 
   private endlessMode = false
+  /** Día del desafío diario si la run en curso lo es. */
+  private dailyRun: string | null = null
+  /** Desechos nuevos en el códice y fugas cerradas en esta run. */
+  private runDiscoveries = 0
+  private runLeaksClosed = 0
+  private lastCodexNoticeAt = Number.NEGATIVE_INFINITY
   /** Eco asegurado en la inmersión sin fin: el que había al cerrar la última vuelta. */
   private endlessBankedEco = 0
   private loop = 0
@@ -217,6 +283,12 @@ export class Game {
   private pendingTimeDelta = 0
   private pendingToxicityFloor: number | null = null
   private revivesUsed = 0
+  /** Eventos que ya han salido en esta run (no se repiten). */
+  private seenEvents: string[] = []
+  /** Consecuencias de eventos que llegan unos biomas después. */
+  private deferred = new DeferredQueue()
+  /** Consecuencias que ya han llegado y esperan a que acabe la transición. */
+  private arrivedConsequences: ReturnType<DeferredQueue["takeDue"]> = []
   /** Veces que se han vuelto a tirar las cartas en esta run (sube el coste). */
   private rerollsUsed = 0
   /** Momento (runTime) del último giro y cuántos lleva encadenados. */
@@ -242,6 +314,11 @@ export class Game {
 
   private settingsManager = new SettingsManager()
   private settings: Settings = this.settingsManager.load()
+  private audio = new AudioManager(this.settings)
+  /** Recogidas seguidas: cada una suena un poco más aguda. */
+  private collectStreak = new CollectStreak()
+  /** El aviso sonoro de poco tiempo ya sonó en este bioma. */
+  private timeLowPlayed = false
   private qualityChoice: QualityChoice =
     qualityChoiceFromUrl() ?? this.settings.quality
   private quality: QualitySettings = resolveQuality(this.qualityChoice)
@@ -316,6 +393,10 @@ export class Game {
 
     this.screens = new ScreenManager({
       onStartRun: () => this.startRun(false),
+      onStartDaily: () => {
+        const key = dailyKey(new Date())
+        this.startRun(false, dailySeed(key), key)
+      },
       onReplaySeed: (seed, endless) => {
         if (!endless || isEndlessUnlocked(this.meta)) {
           this.startRun(endless, seed)
@@ -419,7 +500,10 @@ export class Game {
           }
           return "none"
         },
-        onActivity: (style) => this.setControlDevice("gamepad", style),
+        onActivity: (style) => {
+          this.audio.unlock()
+          this.setControlDevice("gamepad", style)
+        },
         togglePause: () => this.togglePause(),
         dash: (direction) => this.tryDash(direction),
         backflip: () => this.turtle.triggerBackflip(),
@@ -427,7 +511,10 @@ export class Game {
         setLookBack: (active) => {
           this.cameraRig.setLookBack(active)
         },
-        navigate: (direction) => this.screens.navigateFocus(direction),
+        navigate: (direction) => {
+          this.audio.play("uiMove")
+          this.screens.navigateFocus(direction)
+        },
         activate: () => this.screens.activateFocus(),
         back: () => this.screens.goBack(),
         scroll: (pixels) => this.screens.scrollBy(pixels),
@@ -506,12 +593,37 @@ export class Game {
     }
   }
 
+  /** Lo que miran las condiciones de los eventos y los requisitos. */
+  private eventConditionContext(): EventConditionContext {
+    return {
+      toxicity: this.state.toxicity,
+      eco: this.state.ecoAwareness,
+      reviveCharges: this.runState.reviveCharges,
+      biomeKey: BIOME_ORDER[this.biomeIndex % BIOME_ORDER.length],
+      depth: this.biomeGenerator.getBiome().depth,
+      endless: this.endlessMode,
+      cardIds: this.runState.cards.map((card) => card.id),
+      cardRarities: this.runState.cards.map((card) => card.rarity),
+      upgrades: this.meta.upgrades,
+    }
+  }
+
   private openActEvent(): void {
     if (this.screen !== "run") return
-    this.inputController.clear()
 
     const rng = new Rng(deriveSeed(this.runSeed, this.biomeIndex + 2000))
-    const event = rng.pick(ACT_EVENTS)
+    const conditions = this.eventConditionContext()
+    const event = pickEvent(rng, ACT_EVENTS, conditions, this.seenEvents)
+    // Sin eventos disponibles (inmersión sin fin muy larga): se sigue con la
+    // tienda (si toca) y las cartas.
+    if (!event) {
+      this.continueAfterZone("shop")
+      return
+    }
+    this.inputController.clear()
+    this.seenEvents.push(event.id)
+    this.audio.play("eventOpen")
+    const eventBiome = this.biomeIndex
     const ctx: EventContext = {
       turtle: this.turtle,
       state: this.state,
@@ -522,7 +634,19 @@ export class Game {
     this.screens.showEvent(
       event,
       (opt) => {
-        const result = applyEventEffects(opt.effects, ctx)
+        const resolved = resolveOption(opt, rng)
+        const applied = applyEventEffects(resolved.effects, ctx)
+        if (opt.later) this.deferred.schedule(opt.later, eventBiome)
+        const rollText =
+          resolved.roll === "success"
+            ? "¡Sale bien! "
+            : resolved.roll === "failure"
+              ? "Sale mal. "
+              : ""
+        const result = {
+          ...applied,
+          summary: `${rollText}${applied.summary}`,
+        }
 
         if (result.nextBiomeTimeDelta) {
           this.pendingTimeDelta += result.nextBiomeTimeDelta
@@ -540,10 +664,42 @@ export class Game {
           return
         }
 
-        this.openCardChoice(result.summary)
+        this.continueAfterZone("shop", result.summary)
       },
-      (opt) => previewEventEffects(opt.effects, ctx),
+      (opt) => previewOption(opt, ctx),
+      (opt) => optionLockReason(opt, conditions),
     )
+  }
+
+  /**
+   * Entrega las consecuencias diferidas que han llegado al entrar en el bioma
+   * (se llama ya en juego, cuando la transición se ha retirado).
+   */
+  private deliverConsequences(): void {
+    if (this.arrivedConsequences.length === 0) return
+    const arrived = this.arrivedConsequences
+    this.arrivedConsequences = []
+    const biome = this.biomeGenerator.getBiome()
+    for (const consequence of arrived) {
+      const result = applyEventEffects(consequence.effects, {
+        turtle: this.turtle,
+        state: this.state,
+        run: this.runState,
+        rng: new Rng(deriveSeed(this.runSeed, this.biomeIndex + 2500)),
+      })
+      if (result.nextBiomeTimeDelta) {
+        this.pendingTimeDelta += result.nextBiomeTimeDelta
+      }
+      this.uiManager.announce(
+        `${consequence.title}. ${consequence.message} ${result.summary}`,
+      )
+      this.uiManager.showRelicToast(
+        consequence.title,
+        consequence.message,
+        result.summary,
+        { water: biome.waterColor, accent: biome.accentColor },
+      )
+    }
   }
 
   private setupEventListeners(): void {
@@ -572,7 +728,22 @@ export class Game {
     )
     window.addEventListener("resize", () => this.handleResize())
 
+    // El navegador no deja sonar nada hasta el primer gesto del jugador.
+    const unlockAudio = (): void => this.audio.unlock()
+    window.addEventListener("pointerdown", unlockAudio, true)
+    window.addEventListener("keydown", unlockAudio, true)
+    // Clic en cualquier botón de la interfaz.
+    document.addEventListener(
+      "click",
+      (e) => {
+        const target = e.target as Element | null
+        if (target?.closest?.("button")) this.audio.play("uiSelect")
+      },
+      true,
+    )
+
     document.addEventListener("visibilitychange", () => {
+      this.audio.setSuspended(document.hidden)
       if (
         document.hidden &&
         !this.transition.isActive() &&
@@ -608,6 +779,8 @@ export class Game {
     if (!next.tipsEnabled && previous.tipsEnabled) this.tips.clear()
 
     this.applySettings()
+    // Al mover el volumen de efectos, una muestra para oír cómo queda.
+    if (patch.sfxVolume !== undefined) this.audio.play("uiMove")
   }
 
   /** Aplica los ajustes que no dependen de la calidad gráfica. Idempotente. */
@@ -617,6 +790,7 @@ export class Game {
     setReduceMotionChoice(s.reduceMotion)
     setColorVisionMode(s.colorVision)
     this.touchControls.setAppearance(s.touchScale, s.touchOpacity)
+    this.audio.setVolumes(s.musicVolume, s.sfxVolume)
     this.refreshControlsHint()
   }
 
@@ -740,19 +914,48 @@ export class Game {
     this.faunaShield = false
     this.faunaGrazed.length = 0
 
+    this.zoneResolving = false
     this.loop = Math.floor(index / BIOME_ORDER.length)
-    const biomeKey = BIOME_ORDER[index % BIOME_ORDER.length]
+    let node =
+      this.screen === "run"
+        ? (this.routeNodes.get(index) ?? defaultNode(index))
+        : defaultNode(index)
+    const biomeKey = node.biome
 
-    this.biomeTimeLimit = computeBiomeTimeLimit(
-      index,
-      BIOME_ORDER.length,
-      this.pendingTimeDelta,
-    )
+    this.biomeTimeLimit =
+      computeBiomeTimeLimit(index, BIOME_ORDER.length, this.pendingTimeDelta) *
+      BIOME_OBJECTIVES[node.objective].timeMultiplier
     this.biomeTimeRemaining = this.biomeTimeLimit
     this.pendingTimeDelta = 0
+    this.timeLowPlayed = false
+    this.collectStreak.reset()
+    this.audio.setMood(this.screen === "run" ? BIOME_MOODS[biomeKey] : HUB_MOOD)
 
     const rng = new Rng(deriveSeed(this.runSeed, index))
     this.biomeGenerator.generateBiome(biomeKey, rng, this.loop)
+    this.initialLeaks = this.countLeaks()
+    // Sin fugas suficientes, el objetivo vuelve a ser limpiar.
+    if (
+      node.objective === "leaks" &&
+      this.initialLeaks < MIN_LEAKS_FOR_OBJECTIVE
+    ) {
+      node = { ...node, objective: "clean" }
+    }
+    this.currentNode = node
+    const modifier = this.modifier()
+    if (modifier.currentSpeed > 0) {
+      const angle =
+        (deriveSeed(this.runSeed, index + CURRENT_SEED_SALT) / 0xffffffff) *
+        Math.PI *
+        2
+      this.current.set(
+        Math.sin(angle) * modifier.currentSpeed,
+        0,
+        Math.cos(angle) * modifier.currentSpeed,
+      )
+    } else {
+      this.current.set(0, 0, 0)
+    }
     this.hideRelic(index)
     this.boundaryWalls.setBounds(
       this.biomeGenerator.getBounds(),
@@ -766,10 +969,11 @@ export class Game {
     // En modo sin fin `index` sigue creciendo; el módulo mantiene la fauna
     // base entre 2 y 7 medusas por vuelta. El pacto caótico puede añadir más,
     // con un tope para no castigar el rendimiento.
-    const enemyCount = Math.min(
-      12,
-      2 + (index % BIOME_ORDER.length) + this.runState.enemyCountBonus,
-    )
+    const enemyCount =
+      Math.min(
+        12,
+        2 + (index % BIOME_ORDER.length) + this.runState.enemyCountBonus,
+      ) + modifier.extraEnemies
     this.enemyManager.spawn(enemyCount, bounds, rng, biomeKey)
     this.applyBiomeLighting()
 
@@ -784,6 +988,7 @@ export class Game {
     this.pendingToxicityFloor = null
 
     if (this.screen === "run") {
+      this.arrivedConsequences.push(...this.deferred.takeDue(index))
       this.currentSegment = openSegment(
         index,
         this.biomeGenerator.getBiomeName(),
@@ -830,7 +1035,9 @@ export class Game {
 
   private applyBiomeLighting(): void {
     const sun = this.biomeGenerator.getSun()
-    this.directionalLight.intensity = sun.intensity
+    // Apagón: el sol casi se apaga (las luces puntuales, en animate).
+    const light = this.modifier().lightMultiplier
+    this.directionalLight.intensity = sun.intensity * (0.25 + 0.75 * light)
     this.directionalLight.color.setHex(sun.color)
     this.pointLightBoost = 1 + sun.darkness * DEEP_POINT_LIGHT_BOOST
   }
@@ -862,6 +1069,7 @@ export class Game {
     if (!this.turtle.trigger360Spin(direction, extra)) return
     this.dashChain = chain
     this.lastDashAt = this.runTime
+    this.audio.play("dash", { pitch: Math.min(chain, 6) })
     if (this.settings.vibration) navigator.vibrate?.(15)
     this.markControlUsed("dash")
   }
@@ -884,10 +1092,12 @@ export class Game {
     const cost = this.filterCost()
     if (this.structures.getActiveCount() >= this.turtle.stats.filterCapacity) {
       this.uiManager.showMessage("Máximo de filtros activos", 1200)
+      this.audio.play("denied")
       return
     }
     if (this.state.ecoAwareness < cost) {
       this.uiManager.showMessage(`Necesitas ${cost} de Eco`, 1200)
+      this.audio.play("denied")
       return
     }
 
@@ -909,6 +1119,7 @@ export class Game {
     position.y = THREE.MathUtils.clamp(position.y, bounds.minY, bounds.maxY)
 
     this.state.ecoAwareness -= cost
+    this.audio.play("build")
     const phase = this.computeStructurePhase()
     this.structures.build(
       key,
@@ -1082,6 +1293,7 @@ export class Game {
     }
 
     setAnimationsPaused(paused)
+    this.audio.setDucked(paused)
   }
 
   private showHub(): void {
@@ -1096,17 +1308,28 @@ export class Game {
     this.runSeed = randomSeed()
     this.pendingTimeDelta = 0
     this.pendingToxicityFloor = null
+    this.routeNodes.clear()
     this.tips.clear()
     this.loadBiome(0)
     // El hub reutiliza el bioma 0 como fondo, pero no debe quedarse con fauna
     // hostil congelada detrás del menú.
     this.enemyManager.clear()
+    // Logros que ya se cumplían (guardados anteriores a los logros).
+    if (this.unlockAchievements().length > 0) this.saveManager.save(this.meta)
     this.screens.showHub(this.meta)
+    this.audio.setDucked(false)
   }
 
-  /** @param seed Semilla a repetir; si no, la de la URL o una al azar. */
-  private startRun(endless = false, seed?: number): void {
+  /**
+   * @param seed Semilla a repetir; si no, la de la URL o una al azar.
+   * @param daily Día del desafío diario, si la run lo es.
+   */
+  private startRun(endless = false, seed?: number, daily?: string): void {
     this.endlessMode = endless
+    this.dailyRun = daily ?? null
+    this.runDiscoveries = 0
+    this.runLeaksClosed = 0
+    this.lastCodexNoticeAt = Number.NEGATIVE_INFINITY
     this.endlessBankedEco = 0
     this.cancelDeath()
     this.transition.cancel()
@@ -1128,10 +1351,16 @@ export class Game {
     this.turtle.resetStats()
     this.runState = createRunState()
     this.cardManager.resetPity()
+    // Las cartas que desbloquean los logros no salen hasta conseguirlos.
+    this.cardManager.setLockedCards(lockedCards(this.meta.achievements))
     this.pendingTimeDelta = 0
     this.pendingToxicityFloor = null
     this.revivesUsed = 0
     this.rerollsUsed = 0
+    this.seenEvents = []
+    this.deferred.clear()
+    this.arrivedConsequences = []
+    this.routeNodes.clear()
     this.lastDashAt = Number.NEGATIVE_INFINITY
     this.dashChain = 0
     const bonuses = this.upgradeManager.applyAll(this.meta, this.turtle.stats)
@@ -1168,10 +1397,7 @@ export class Game {
       biomeIndex: this.biomeIndex,
       biomeName: this.biomeGenerator.getBiomeName(),
       // Recalculado: el estado puede ir un frame por detrás al morir.
-      zoneProgress: computeZoneProgress(
-        this.collectedInZone,
-        this.biomeGenerator.getInitialDebrisCount(),
-      ),
+      zoneProgress: this.currentZoneProgress(),
       debrisCollected: this.state.debrisCollected,
       ecoBase: base,
       ecoBonus: bonus,
@@ -1184,12 +1410,45 @@ export class Game {
       deathCause:
         outcome === "died" ? (this.deathCause ?? undefined) : undefined,
       timeline: this.timeline,
+      revivesUsed: this.revivesUsed,
+      leaksClosed: this.runLeaksClosed,
+      daily: this.dailyRun ?? undefined,
+      newDiscoveries: this.runDiscoveries,
     }
 
     const newRecords = computeNewRecords(this.meta, summary)
     applyRunToMeta(this.meta, summary)
+    summary.newAchievements = this.unlockAchievements(summary)
     this.saveManager.save(this.meta)
+    this.audio.setDucked(false)
+    this.audio.setMood(HUB_MOOD)
+    // La derrota ya sonó al empezar el momento de derrota.
+    if (outcome !== "died") this.audio.play("summary")
     this.screens.showSummary(summary, this.meta, newRecords)
+  }
+
+  /** Apunta los logros conseguidos y devuelve sus ids. */
+  private unlockAchievements(summary?: RunSummary): string[] {
+    const unlocked = evaluateAchievements(
+      { meta: this.meta, summary },
+      this.meta.achievements,
+    )
+    this.meta.achievements.push(...unlocked)
+    return unlocked
+  }
+
+  /** Registra un desecho recogido en el códice y cuenta las fugas cerradas. */
+  private recordCollected(debris: Debris): void {
+    if (debris.isFragment) return
+    if (debris.hazard === "lixivia") this.runLeaksClosed++
+    const id = debris.definition.id
+    if (!discoverDebris(this.meta.discoveredDebris, id)) return
+    this.runDiscoveries++
+    this.saveManager.save(this.meta)
+    if (this.runTime - this.lastCodexNoticeAt < CODEX_NOTICE_INTERVAL) return
+    this.lastCodexNoticeAt = this.runTime
+    const name = CODEX_ENTRIES.find((entry) => entry.id === id)?.name ?? id
+    this.uiManager.showMessage(`Nuevo en el códice: ${name}`, 1400)
   }
 
   private runCounters(): RunCounters {
@@ -1242,14 +1501,25 @@ export class Game {
       }
     })
 
-    if (!started) {
+    if (started) {
+      this.audio.play("transition")
+    } else {
       this.pendingAdvance = true
     }
   }
 
   private biomeBanner(): string {
     const depth = this.biomeGenerator.getBiome().depth
-    return `${this.biomeGenerator.getBiomeName()} · ${depth} m`
+    const title = `${this.biomeGenerator.getBiomeName()} · ${depth} m`
+    // Objetivo y modificador de la zona, si no son los de siempre.
+    const { objective, modifier } = this.currentNode
+    const extras: string[] = []
+    if (objective !== "clean") extras.push(BIOME_OBJECTIVES[objective].name)
+    if (modifier !== "none") extras.push(BIOME_MODIFIERS[modifier].name)
+    return extras.length > 0
+      ? `${title}
+${extras.join(" · ")}`
+      : title
   }
 
   private goToBiome(index: number): void {
@@ -1370,7 +1640,7 @@ export class Game {
     }
     if (fauna.shield) this.faunaShield = true
     if (fauna.eco > 0) {
-      const eco = Math.round(fauna.eco * this.runState.ecoMultiplier)
+      const eco = Math.round(fauna.eco * this.ecoMultiplier())
       this.state.ecoAwareness += eco
       this.showFloatingEcoAt(turtlePosition, eco)
     }
@@ -1427,6 +1697,7 @@ export class Game {
       this.faunaShield = false
       this.enemyManager.onShieldUsed()
       this.uiManager.showMessage("¡La rémora te protege!", 1200)
+      this.audio.play("shield")
       return true
     }
 
@@ -1436,6 +1707,7 @@ export class Game {
     }
     this.turtle.playHurt()
 
+    this.audio.play(hit.kind === "jellyfish" ? "sting" : "hurt")
     if (hit.kind === "jellyfish") {
       // Piel Urticante: cada picadura de medusa da Eco.
       const stingEco = Math.round(this.runState.rules.jellyfishEco)
@@ -1468,6 +1740,7 @@ export class Game {
     if (this.screens.isEventActive()) return
 
     this.runTime += deltaTime
+    this.deliverConsequences()
 
     // --- Timer por bioma ---
     // Marea Eterna: el tiempo del bioma no corre.
@@ -1480,9 +1753,18 @@ export class Game {
       this.biomeTimeRemaining,
       this.biomeTimeLimit,
     )
+    if (
+      !this.timeLowPlayed &&
+      !this.runState.rules.noTimeLimit &&
+      this.biomeTimeRemaining <= TIME_LOW_SFX_SECONDS
+    ) {
+      this.timeLowPlayed = true
+      this.audio.play("timeLow")
+    }
 
     const bounds = this.biomeGenerator.getBounds()
     this.turtle.update(deltaTime, this.input, bounds)
+    this.applyCurrent(deltaTime, bounds)
     this.trackHeldControls()
 
     if (!this.updateFauna(deltaTime, time, bounds)) return
@@ -1505,9 +1787,7 @@ export class Game {
         ? this.biomeTimeRemaining / this.biomeTimeLimit
         : 1,
     )
-    this.uiManager.updateLeaks(
-      debrisList.reduce((n, d) => n + (d.hazard === "lixivia" ? 1 : 0), 0),
-    )
+    this.uiManager.updateLeaks(this.countLeaks())
 
     // --- Recolección ---
     const rules = this.runState.rules
@@ -1528,7 +1808,10 @@ export class Game {
     this.biomeGenerator.updateVisuals(deltaTime)
     const pollution = this.biomeGenerator.getPollutionRatio()
     const passiveRate = computePassiveToxicityRate({
-      toxicityRate: this.biomeGenerator.getBiome().toxicityRate,
+      toxicityRate: modifiedToxicityRate(
+        this.biomeGenerator.getBiome().toxicityRate,
+        this.modifier(),
+      ),
       pollution,
       toxicityResistance: this.turtle.stats.toxicityResistance,
       toxicityScaleMult:
@@ -1554,10 +1837,11 @@ export class Game {
       const leak = debris.hazard === "lixivia" ? rules.leakEco : 1
       const eco = debris.shattered
         ? 0
-        : Math.round(debris.ecoValue * this.runState.ecoMultiplier * leak)
+        : Math.round(debris.ecoValue * this.ecoMultiplier() * leak)
       this.state.ecoAwareness += eco
 
       if (!debris.isFragment) this.collectedInZone++
+      this.recordCollected(debris)
 
       if (!this.godMode) {
         this.state.toxicity = applyToxicityDelta(
@@ -1567,6 +1851,15 @@ export class Game {
       }
 
       if (eco > 0) this.showFloatingEco(debris, eco)
+      if (debris.shattered) {
+        this.audio.play("shatter")
+      } else if (debris.hazard === "lixivia") {
+        this.audio.play("collectLeak")
+      } else {
+        this.audio.play("collect", {
+          pitch: this.collectStreak.next(this.runTime),
+        })
+      }
       if (debris.shattered) this.tips.trigger("fragile_broken")
       if (debris.relic) this.claimRelic(debris.relic)
     }
@@ -1595,7 +1888,7 @@ export class Game {
     this.state.debrisCollected += credit.count
     this.collectedInZone += credit.count
 
-    const filterEco = Math.round(credit.eco * this.runState.ecoMultiplier)
+    const filterEco = Math.round(credit.eco * this.ecoMultiplier())
     this.state.ecoAwareness += filterEco
 
     if (!this.godMode && credit.count > 0) {
@@ -1605,8 +1898,12 @@ export class Game {
       )
     }
 
+    if (credit.absorptions.length > 0) {
+      this.audio.play("collect", { pitch: -5, volume: 0.5 })
+    }
     for (const absorption of credit.absorptions) {
-      const value = Math.round(absorption.eco * this.runState.ecoMultiplier)
+      this.recordCollected(absorption.debris)
+      const value = Math.round(absorption.eco * this.ecoMultiplier())
       this.showFloatingEcoAt(absorption.position, value)
       if (absorption.relic) this.claimRelic(absorption.relic)
     }
@@ -1618,29 +1915,24 @@ export class Game {
       return
     }
 
-    this.state.zoneProgress = computeZoneProgress(
-      this.collectedInZone,
-      this.biomeGenerator.getInitialDebrisCount(),
-    )
+    this.state.zoneProgress = this.currentZoneProgress()
 
+    this.audio.setIntensity(
+      musicIntensity(
+        this.state.toxicity,
+        this.runState.rules.noTimeLimit || this.biomeTimeLimit <= 0
+          ? 1
+          : this.biomeTimeRemaining / this.biomeTimeLimit,
+      ),
+    )
     this.uiManager.updateUI(this.state, deltaTime)
     this.uiManager.updateRevives(this.runState.reviveCharges)
     this.updateBuildHud()
     this.updateTips(deltaTime)
 
-    if (this.state.zoneProgress >= 100) {
-      if (
-        !this.endlessMode &&
-        (this.biomeIndex === 1 || this.biomeIndex === 3)
-      ) {
-        this.openActEvent()
-        return
-      }
-      if (this.endlessMode || this.biomeIndex + 1 < BIOME_ORDER.length) {
-        this.openCardChoice()
-      } else {
-        this.endRun("completed")
-      }
+    if (this.state.zoneProgress >= 100 && !this.zoneResolving) {
+      this.audio.play("zoneClear")
+      this.completeZone()
       return
     }
 
@@ -1692,6 +1984,7 @@ export class Game {
     }
 
     this.runState.relics.push(relic.id)
+    this.audio.play("relic")
     this.uiManager.announce(
       `Reliquia encontrada: ${relic.name}. ${relic.description} ${result.summary}`,
     )
@@ -1702,6 +1995,247 @@ export class Game {
       result.summary,
       { water: biome.waterColor, accent: biome.accentColor },
     )
+  }
+
+  private modifier(): BiomeModifier {
+    return BIOME_MODIFIERS[this.currentNode.modifier]
+  }
+
+  /** Multiplicador del Eco: el de la run por el del modificador de la zona. */
+  private ecoMultiplier(): number {
+    return this.runState.ecoMultiplier * this.modifier().ecoMultiplier
+  }
+
+  private countLeaks(): number {
+    let leaks = 0
+    for (const debris of this.biomeGenerator.getDebrisList()) {
+      if (debris.hazard === "lixivia" && !debris.removed) leaks++
+    }
+    return leaks
+  }
+
+  /** Progreso del objetivo de la zona (0..100). */
+  private currentZoneProgress(): number {
+    if (this.currentNode.objective === "leaks") {
+      return leakProgress(this.initialLeaks, this.countLeaks())
+    }
+    return computeZoneProgress(
+      this.collectedInZone,
+      this.biomeGenerator.getInitialDebrisCount(),
+    )
+  }
+
+  /** Corriente fuerte: arrastra a la tortuga sin sacarla del bioma. */
+  private applyCurrent(deltaTime: number, bounds: WorldBounds): void {
+    if (this.current.lengthSq() === 0) return
+    const position = this.turtle.mesh.position
+    position.addScaledVector(this.current, deltaTime)
+    position.x = THREE.MathUtils.clamp(
+      position.x,
+      -bounds.halfSize,
+      bounds.halfSize,
+    )
+    position.z = THREE.MathUtils.clamp(
+      position.z,
+      -bounds.halfSize,
+      bounds.halfSize,
+    )
+  }
+
+  /**
+   * Zona limpia: bono del objetivo y, en orden, evento, tienda, carta y
+   * elección de ruta. En el último bioma del modo normal, fin de la run.
+   */
+  private completeZone(): void {
+    this.zoneResolving = true
+    const layer = layerOf(this.biomeIndex)
+    const bonus = objectiveBonus(
+      this.currentNode.objective,
+      layer,
+      this.biomeTimeRemaining,
+    )
+    if (bonus > 0) {
+      this.state.ecoAwareness += bonus
+      this.uiManager.showMessage(
+        `${BIOME_OBJECTIVES[this.currentNode.objective].name}: +${bonus} Eco`,
+        2000,
+      )
+    }
+
+    if (!this.endlessMode && this.biomeIndex + 1 >= BIOME_ORDER.length) {
+      this.endRun("completed")
+      return
+    }
+    this.continueAfterZone("event")
+  }
+
+  private continueAfterZone(stage: AfterZoneStage, notice?: string): void {
+    if (this.screen !== "run") return
+    switch (stage) {
+      case "event":
+        if (
+          isEventBiome(this.biomeIndex, this.endlessMode) ||
+          this.currentNode.perk === "event"
+        ) {
+          this.openActEvent()
+          return
+        }
+        this.continueAfterZone("shop", notice)
+        return
+      case "shop":
+        if (this.currentNode.perk === "shop") {
+          this.openShop(() => this.continueAfterZone("card", notice))
+          return
+        }
+        this.continueAfterZone("card", notice)
+        return
+      case "card":
+        this.openCardChoice(notice)
+        return
+      case "route":
+        this.openRouteChoice()
+        return
+    }
+  }
+
+  /** Elige la zona del siguiente bioma entre dos y avanza. */
+  private openRouteChoice(): void {
+    const next = this.biomeIndex + 1
+    const options = generateRouteOptions(
+      this.runSeed,
+      next,
+      isEventBiome(next, this.endlessMode),
+    )
+    const layer = layerOf(next)
+    const event: GameEvent = {
+      id: "route",
+      title: "Elige tu ruta",
+      description: `Capa ${layer + 1} de ${LAYER_COUNT}. Cada zona tiene su bioma, su objetivo y sus riesgos.`,
+      options: options.map((node, i) => ({
+        id: `route_${i}`,
+        label: nodeTitle(node),
+        description: describeNode(node),
+        effects: {},
+      })),
+    }
+
+    this.inputController.clear()
+    this.screens.showEvent(
+      event,
+      (opt) => {
+        const node = options[event.options.indexOf(opt)] ?? options[0]
+        this.routeNodes.set(next, node)
+        this.advanceBiome()
+      },
+      (opt) => this.routePreview(options[event.options.indexOf(opt)]),
+    )
+  }
+
+  /** Riesgo y recompensa de una zona, como chips de la vista previa. */
+  private routePreview(node: RouteNode | undefined): EventPreview {
+    if (!node) return { lines: [] }
+    const modifier = BIOME_MODIFIERS[node.modifier]
+    const biome = BIOMES[node.biome]
+    const rate = modifiedToxicityRate(biome.toxicityRate, modifier)
+    const toxicity =
+      rate < 0.05 ? "Nula" : rate < 0.3 ? "Baja" : rate < 0.7 ? "Media" : "Alta"
+    const lines: EventPreview["lines"] = [
+      {
+        label: "Toxicidad pasiva",
+        value: toxicity,
+        tone: rate >= 0.3 ? "negative" : "neutral",
+      },
+    ]
+    if (modifier.ecoMultiplier !== 1) {
+      lines.push({
+        label: "Eco",
+        value: `×${modifier.ecoMultiplier}`,
+        tone: "positive",
+      })
+    }
+    const objective = BIOME_OBJECTIVES[node.objective]
+    if (objective.timeMultiplier !== 1) {
+      lines.push({
+        label: "Tiempo",
+        value: `${Math.round((objective.timeMultiplier - 1) * 100)}%`,
+        tone: "negative",
+      })
+    }
+    return { lines }
+  }
+
+  /** Tienda entre zonas: se compra una cosa (o ninguna) con el Eco de la run. */
+  private openShop(onDone: () => void): void {
+    const layer = layerOf(this.biomeIndex)
+    const rng = new Rng(
+      deriveSeed(this.runSeed, this.biomeIndex + SHOP_SEED_SALT),
+    )
+    const pool = shopItems(layer)
+    // Dos artículos al azar y la opción de no comprar (teclas 1-3).
+    const first = pool.splice(rng.int(pool.length), 1)[0]
+    const second = pool[rng.int(pool.length)]
+    const items: ShopItem[] = [first, second]
+    const eco = this.state.ecoAwareness
+    const event: GameEvent = {
+      id: "shop",
+      title: "Refugio del arrecife",
+      description: `Unos voluntarios cambian material por Eco. Tienes ${Math.floor(eco).toLocaleString("es")} Eco.`,
+      options: [
+        ...items.map((item) => ({
+          id: item.id,
+          label: `${item.label} · ${item.cost} Eco`,
+          description: item.description,
+          effects: {},
+          // Sin Eco suficiente, la opción sale bloqueada.
+          requires: {
+            minEco: item.cost,
+            label: `Necesitas ${item.cost} Eco`,
+          },
+        })),
+        {
+          id: "leave_shop",
+          label: "Seguir sin comprar",
+          description: "Guardas el Eco para las esferas.",
+          effects: {},
+        },
+      ],
+    }
+
+    this.inputController.clear()
+    const conditions = this.eventConditionContext()
+    this.screens.showEvent(
+      event,
+      (opt) => {
+        const item = items.find((candidate) => candidate.id === opt.id)
+        if (item) this.buyShopItem(item)
+        onDone()
+      },
+      undefined,
+      (opt) => optionLockReason(opt, conditions),
+    )
+  }
+
+  private buyShopItem(item: ShopItem): void {
+    if (this.state.ecoAwareness < item.cost) {
+      this.uiManager.showMessage("No te llega el Eco", 1400)
+      return
+    }
+    this.state.ecoAwareness -= item.cost
+    switch (item.id) {
+      case "purify":
+        this.state.toxicity = applyToxicityDelta(this.state.toxicity, -35)
+        break
+      case "magnet":
+        this.turtle.stats.collectionRadius += 0.5
+        break
+      case "filter":
+        this.turtle.stats.filterCapacity += 1
+        break
+      case "revive":
+        this.runState.reviveCharges += 1
+        break
+    }
+    this.uiManager.showMessage(`${item.label} comprado`, 1500)
   }
 
   private openCardChoice(notice?: string): void {
@@ -1723,10 +2257,12 @@ export class Game {
     })
     const owned = [...this.runState.cards]
     const cost = rerollCost(this.rerollsUsed)
+    this.audio.play("cardOpen")
 
     this.screens.showCardChoice(
       choices,
       (card) => {
+        this.audio.play("cardPick")
         const outcome = this.cardManager.pick(card, {
           turtle: this.turtle,
           state: this.state,
@@ -1747,7 +2283,7 @@ export class Game {
           return
         }
 
-        this.advanceBiome()
+        this.continueAfterZone("route")
       },
       notice,
       (card) => previewCard(card, build, owned),
@@ -1765,7 +2301,7 @@ export class Game {
         },
         onSkip: () => {
           this.uiManager.showMessage("Sin carta en esta zona", 1500)
-          this.advanceBiome()
+          this.continueAfterZone("route")
         },
       },
     )
@@ -1783,6 +2319,7 @@ export class Game {
         this.biomeTimeRemaining,
       )
       this.uiManager.showMessage("¡Revives!", 1800)
+      this.audio.play("revive")
       return true
     }
 
@@ -1808,6 +2345,8 @@ export class Game {
     this.tips.clear()
 
     if (!prefersReducedMotion()) this.turtle.playHurt()
+    this.audio.play("death")
+    this.audio.setMood(null)
     if (this.settings.vibration) navigator.vibrate?.([60, 40, 160])
     this.uiManager.updateUI(this.state, 0)
     this.uiManager.announce("La toxicidad ha llegado al máximo")
@@ -1927,7 +2466,10 @@ export class Game {
         (light.userData.baseIntensity as number | undefined) ?? 1
 
       light.intensity =
-        (0.3 + Math.sin(time + i) * 0.2) * this.pointLightBoost * baseIntensity
+        (0.3 + Math.sin(time + i) * 0.2) *
+        this.pointLightBoost *
+        baseIntensity *
+        this.modifier().lightMultiplier
     })
 
     this.biomeGenerator.updateWater(simDelta, this.camera.position)

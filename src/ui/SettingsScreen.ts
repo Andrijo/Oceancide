@@ -496,6 +496,25 @@ export function createSettingsBody(
     ),
   )
 
+  const audio = section(
+    "Audio",
+    rangeField(
+      "Volumen de la música",
+      SETTING_LIMITS.volume,
+      settings.musicVolume,
+      percent,
+      (musicVolume) => onChange({ musicVolume }),
+      "Música ambiental que cambia con cada bioma y se tensa con la toxicidad.",
+    ),
+    rangeField(
+      "Volumen de los efectos",
+      SETTING_LIMITS.volume,
+      settings.sfxVolume,
+      percent,
+      (sfxVolume) => onChange({ sfxVolume }),
+    ),
+  )
+
   const motion = section(
     "Movimiento",
     choiceField(
@@ -583,6 +602,6 @@ export function createSettingsBody(
     ),
   )
 
-  body.append(graphics, motion, color, controls, notices)
+  body.append(graphics, audio, motion, color, controls, notices)
   return body
 }

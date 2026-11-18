@@ -1877,6 +1877,39 @@ button.build-chip:focus-visible,
   display: none;
 }
 
+/* --- Códice --- */
+
+.codex-list {
+  width: 100%;
+  max-width: 960px;
+  text-align: left;
+}
+
+.codex-biome {
+  margin: 8px 0 12px;
+  font: 700 16px var(--font-title);
+  color: var(--color-mist);
+}
+
+.codex-card.is-unknown {
+  opacity: 0.5;
+}
+
+.codex-fact {
+  margin: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--color-cream);
+}
+
+.codex-fact::before {
+  content: "Dato real: ";
+  font-weight: 700;
+  color: var(--color-mist);
+}
+
 /* --- Eventos --- */
 
 .event-desc {
@@ -2743,6 +2776,20 @@ button.build-chip:focus-visible,
 .reduce-motion .btn,
 .reduce-motion .btn-trash,
 .reduce-motion .card-choice,
+.event-option.is-locked {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.event-option.is-locked:hover {
+  background: rgba(245, 238, 221, 0.03);
+}
+
+.event-lock {
+  font-size: 0.85em;
+  color: var(--c-warn);
+}
+
 .reduce-motion .event-option {
   transition: none;
 }

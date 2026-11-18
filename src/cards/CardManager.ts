@@ -41,6 +41,14 @@ export class CardManager {
     this.pool = [...CARD_POOL]
   }
 
+  /**
+   * Cartas que no pueden salir (las desbloquean los logros). Llamar al empezar
+   * una run.
+   */
+  public setLockedCards(ids: readonly string[]): void {
+    this.pool = CARD_POOL.filter((card) => !ids.includes(card.id))
+  }
+
   // Resetea los contadores de pity. Llamar al empezar una run.
   public resetPity(): void {
     this.pityRare = 0
